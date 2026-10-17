@@ -1,0 +1,892 @@
+{
+ "now": "2026-10-17T09:34:46Z",
+ "s1": {
+  "493d1a8d-6430-4776-95f1-f6b085637edd": {
+   "file": "95593.json",
+   "status": "shell",
+   "pid": 95593,
+   "alive": true,
+   "updatedAt": 1792220755475
+  },
+  "2bee9170-9e95-4e4e-873d-8490f228ad20": {
+   "file": "85955.json",
+   "status": "busy",
+   "pid": 85955,
+   "alive": true,
+   "updatedAt": 1792220290153
+  },
+  "47aedf14-c5b7-4450-a193-6612b438b1f2": {
+   "file": "95787.json",
+   "status": "idle",
+   "pid": 95787,
+   "alive": true,
+   "updatedAt": 1792227157912
+  }
+ },
+ "results": [
+  {
+   "key": "S:dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "kind": "SESSION",
+   "last_at": "2026-10-14T17:55:19.326Z",
+   "age_s": 229167,
+   "last_kind": "assistant:tool_use",
+   "last_tools": [
+    "AskUserQuestion"
+   ],
+   "pending": [
+    "AskUserQuestion"
+   ],
+   "s1": null,
+   "wakeup": "2026-10-14T17:34:00",
+   "children": 64,
+   "open_children": 0,
+   "last_item_pending_tool_use": true,
+   "qa_state": "STALE",
+   "qa_rule": "R-06",
+   "why": "S1 없음/pid 소멸 · 마지막 항목 결과 없는 tool_use",
+   "spec_state": "STALE",
+   "spec_rule": "R-06",
+   "hyp_state": "STALE",
+   "hyp_rule": "R-06",
+   "last_tool": "AskUserQuestion",
+   "wake_future": false
+  },
+  {
+   "key": "A:a3b3e327f20477922",
+   "kind": "SUBAGENT",
+   "session": "09cc91b1-cd23-48d9-9fc8-ad621a59024a",
+   "last_at": "2026-09-18T20:23:12.304Z",
+   "age_s": 2466694,
+   "last_kind": "user:message",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-09-18T20:07:22.371Z",
+     "handback"
+    ],
+    [
+     "2026-09-18T18:34:34.655Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-09-18T20:23:12.304Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음",
+   "spec_state": "STALE",
+   "spec_rule": "R-11",
+   "hyp_state": "STALE",
+   "hyp_rule": "R-11"
+  },
+  {
+   "key": "A:adb2bacd2ac16c31f",
+   "kind": "SUBAGENT",
+   "session": "09cc91b1-cd23-48d9-9fc8-ad621a59024a",
+   "last_at": "2026-09-18T21:07:41.354Z",
+   "age_s": 2464025,
+   "last_kind": "user:message",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-09-18T21:07:41.354Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음",
+   "spec_state": "STALE",
+   "spec_rule": "R-11",
+   "hyp_state": "STALE",
+   "hyp_rule": "R-11"
+  },
+  {
+   "key": "A:a2a0029196a84aba3",
+   "kind": "SUBAGENT",
+   "session": "6a44e325-a62a-4cba-b626-be75dded0119",
+   "last_at": "2026-09-28T01:23:26.010Z",
+   "age_s": 1671080,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-09-28T01:13:14.606Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음",
+   "spec_state": "STALE",
+   "spec_rule": "R-11",
+   "hyp_state": "STALE",
+   "hyp_rule": "R-11"
+  },
+  {
+   "key": "A:abca160dd070f2db8",
+   "kind": "SUBAGENT",
+   "session": "67760b59-0903-467f-972f-2d6b5e5aedac",
+   "last_at": "2026-10-09T03:56:32.968Z",
+   "age_s": 711493,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-09T03:08:06.219Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음",
+   "spec_state": "STALE",
+   "spec_rule": "R-11",
+   "hyp_state": "STALE",
+   "hyp_rule": "R-11"
+  },
+  {
+   "key": "A:a39a8de156b8640a4",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-12T16:21:27.353Z",
+   "age_s": 407599,
+   "last_kind": "assistant:text",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-12T16:21:02.337Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-10-12T16:21:12.538Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음",
+   "spec_state": "STALE",
+   "spec_rule": "R-11",
+   "hyp_state": "STALE",
+   "hyp_rule": "R-11"
+  },
+  {
+   "key": "A:abe5c570d21c89b2a",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-12T17:27:21.841Z",
+   "age_s": 403644,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-12T17:26:36.374Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음",
+   "spec_state": "STALE",
+   "spec_rule": "R-11",
+   "hyp_state": "STALE",
+   "hyp_rule": "R-11"
+  },
+  {
+   "key": "A:acfbcbeabcb648847",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-12T17:27:26.766Z",
+   "age_s": 403639,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-12T17:26:57.667Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음",
+   "spec_state": "STALE",
+   "spec_rule": "R-11",
+   "hyp_state": "STALE",
+   "hyp_rule": "R-11"
+  },
+  {
+   "key": "A:a394ec40b66b451b3",
+   "kind": "SUBAGENT",
+   "session": "6a44e325-a62a-4cba-b626-be75dded0119",
+   "last_at": "2026-09-28T01:23:25.914Z",
+   "age_s": 1671080,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [
+    [
+     "2026-09-28T01:23:25.947Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-09-28T01:14:02.477Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "FAILED",
+   "qa_rule": "R-08",
+   "why": "반환 notification:failed 2026-09-28T01:23:25.947Z",
+   "spec_state": "FAILED",
+   "spec_rule": "R-08",
+   "hyp_state": "FAILED",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:a49e954498bc7e130",
+   "kind": "SUBAGENT",
+   "session": "6a44e325-a62a-4cba-b626-be75dded0119",
+   "last_at": "2026-09-28T18:41:09.066Z",
+   "age_s": 1608817,
+   "last_kind": "user:message",
+   "handbacks": 0,
+   "signals": [
+    [
+     "2026-09-28T18:41:09.078Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-09-28T18:41:09.066Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "FAILED",
+   "qa_rule": "R-08",
+   "why": "반환 notification:failed 2026-09-28T18:41:09.078Z",
+   "spec_state": "FAILED",
+   "spec_rule": "R-08",
+   "hyp_state": "FAILED",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:ac51018a75fb63658",
+   "kind": "SUBAGENT",
+   "session": "6a44e325-a62a-4cba-b626-be75dded0119",
+   "last_at": "2026-09-28T10:07:37.797Z",
+   "age_s": 1639628,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [
+    [
+     "2026-09-28T10:07:37.822Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-09-28T10:00:46.273Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "FAILED",
+   "qa_rule": "R-08",
+   "why": "반환 notification:failed 2026-09-28T10:07:37.822Z",
+   "spec_state": "FAILED",
+   "spec_rule": "R-08",
+   "hyp_state": "FAILED",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:a55f50d06b587ce87",
+   "kind": "SUBAGENT",
+   "session": "67760b59-0903-467f-972f-2d6b5e5aedac",
+   "last_at": "2026-10-08T22:31:29.067Z",
+   "age_s": 730997,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [
+    [
+     "2026-10-08T22:31:29.512Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-10-08T22:31:27.992Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "FAILED",
+   "qa_rule": "R-08",
+   "why": "반환 notification:failed 2026-10-08T22:31:29.512Z",
+   "spec_state": "FAILED",
+   "spec_rule": "R-08",
+   "hyp_state": "FAILED",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:aa4bc5654ebfe770f",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-12T16:08:23.904Z",
+   "age_s": 408382,
+   "last_kind": "user:tool_result",
+   "handbacks": 2,
+   "signals": [
+    [
+     "2026-10-12T15:56:25.521Z",
+     "handback"
+    ],
+    [
+     "2026-10-12T16:08:23.420Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-10-12T16:08:23.420Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 1,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-12T16:08:23.420Z",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:a1da87e59d81ad2e5",
+   "kind": "SUBAGENT",
+   "session": "4c204b8c-4689-4fbb-a9a6-5c9d9b3825c3",
+   "last_at": "2026-09-18T10:40:54.380Z",
+   "age_s": 2501632,
+   "last_kind": "assistant:text",
+   "handbacks": 4,
+   "signals": [
+    [
+     "2026-09-17T22:50:17.999Z",
+     "handback"
+    ],
+    [
+     "2026-09-18T00:43:40.811Z",
+     "handback"
+    ],
+    [
+     "2026-09-18T00:57:24.674Z",
+     "handback"
+    ],
+    [
+     "2026-09-18T10:40:38.075Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-09-18T10:40:38.075Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-09-18T10:40:38.075Z",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:a09caff3108c75039",
+   "kind": "SUBAGENT",
+   "session": "a82388db-0805-497d-b426-4250137da3b5",
+   "last_at": "2026-09-28T00:38:19.884Z",
+   "age_s": 1673786,
+   "last_kind": "assistant:text",
+   "handbacks": 3,
+   "signals": [
+    [
+     "2026-09-27T22:33:46.750Z",
+     "handback"
+    ],
+    [
+     "2026-09-28T00:23:03.320Z",
+     "handback"
+    ],
+    [
+     "2026-09-28T00:38:11.114Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-09-28T00:38:11.114Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-09-28T00:38:11.114Z",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:a9ee2a4747ed0b102",
+   "kind": "SUBAGENT",
+   "session": "09cc91b1-cd23-48d9-9fc8-ad621a59024a",
+   "last_at": "2026-09-18T23:45:33.039Z",
+   "age_s": 2454553,
+   "last_kind": "assistant:text",
+   "handbacks": 2,
+   "signals": [
+    [
+     "2026-09-18T20:23:43.778Z",
+     "handback"
+    ],
+    [
+     "2026-09-18T23:45:21.797Z",
+     "handback"
+    ],
+    [
+     "2026-09-18T19:05:51.554Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-09-18T23:45:21.797Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-09-18T23:45:21.797Z",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "S:2bee9170-9e95-4e4e-873d-8490f228ad20",
+   "kind": "SESSION",
+   "last_at": "2026-10-17T09:29:37.554Z",
+   "age_s": 309,
+   "last_kind": "assistant:text",
+   "last_tools": [],
+   "pending": [],
+   "s1": {
+    "file": "85955.json",
+    "status": "busy",
+    "pid": 85955,
+    "alive": true,
+    "updatedAt": 1792220290153
+   },
+   "wakeup": "2026-10-17T09:59:24",
+   "children": 16,
+   "open_children": 2,
+   "qa_state": "STALE",
+   "qa_rule": "R-02b",
+   "why": "S1 busy · 5 분 넘게 무기록 (D-14: 자식 있으면 WAITING_CHILD)",
+   "d14_alt": "WAITING_CHILD R-04",
+   "spec_state": "STALE",
+   "spec_rule": "R-02b",
+   "hyp_state": "SLEEPING",
+   "hyp_rule": "R-03 (D-18)",
+   "last_tool": "ScheduleWakeup",
+   "wake_future": true
+  },
+  {
+   "key": "A:a2384d3236592c914",
+   "kind": "SUBAGENT",
+   "session": "2bee9170-9e95-4e4e-873d-8490f228ad20",
+   "last_at": "2026-10-17T09:34:45.816Z",
+   "age_s": 0,
+   "last_kind": "user:tool_result",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-17T09:34:45.283Z",
+   "session_s1": "busy",
+   "session_alive": true,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "RUNNING",
+   "qa_rule": "R-09",
+   "why": "0초 전 기록",
+   "spec_state": "RUNNING",
+   "spec_rule": "R-09",
+   "hyp_state": "RUNNING",
+   "hyp_rule": "R-09"
+  },
+  {
+   "key": "A:a850fbc10924baf9b",
+   "kind": "SUBAGENT",
+   "session": "2bee9170-9e95-4e4e-873d-8490f228ad20",
+   "last_at": "2026-10-17T09:34:46.212Z",
+   "age_s": 0,
+   "last_kind": "assistant:tool_use",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-17T09:34:46.212Z",
+   "session_s1": "busy",
+   "session_alive": true,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "RUNNING",
+   "qa_rule": "R-09",
+   "why": "0초 전 기록",
+   "spec_state": "RUNNING",
+   "spec_rule": "R-09",
+   "hyp_state": "RUNNING",
+   "hyp_rule": "R-09"
+  },
+  {
+   "key": "S:493d1a8d-6430-4776-95f1-f6b085637edd",
+   "kind": "SESSION",
+   "last_at": "2026-10-17T07:05:55.472Z",
+   "age_s": 8931,
+   "last_kind": "assistant:text",
+   "last_tools": [],
+   "pending": [],
+   "s1": {
+    "file": "95593.json",
+    "status": "shell",
+    "pid": 95593,
+    "alive": true,
+    "updatedAt": 1792220755475
+   },
+   "wakeup": null,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "WAITING_INPUT",
+   "qa_rule": "R-05",
+   "why": "S1 status=shell",
+   "spec_state": "WAITING_INPUT",
+   "spec_rule": "R-05",
+   "hyp_state": "WAITING_INPUT",
+   "hyp_rule": "R-05",
+   "last_tool": "Bash",
+   "wake_future": false
+  },
+  {
+   "key": "S:47aedf14-c5b7-4450-a193-6612b438b1f2",
+   "kind": "SESSION",
+   "last_at": "2026-10-17T08:52:37.902Z",
+   "age_s": 2528,
+   "last_kind": "user:message",
+   "last_tools": [],
+   "pending": [],
+   "s1": {
+    "file": "95787.json",
+    "status": "idle",
+    "pid": 95787,
+    "alive": true,
+    "updatedAt": 1792227157912
+   },
+   "wakeup": null,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "WAITING_INPUT",
+   "qa_rule": "R-05",
+   "why": "S1 status=idle",
+   "spec_state": "WAITING_INPUT",
+   "spec_rule": "R-05",
+   "hyp_state": "WAITING_INPUT",
+   "hyp_rule": "R-05",
+   "last_tool": "Bash",
+   "wake_future": false
+  },
+  {
+   "key": "A:a3cafc358465dbe30",
+   "kind": "SUBAGENT",
+   "session": "a82388db-0805-497d-b426-4250137da3b5",
+   "last_at": "2026-09-28T00:28:13.136Z",
+   "age_s": 1674393,
+   "last_kind": "assistant:text",
+   "handbacks": 2,
+   "signals": [
+    [
+     "2026-09-27T22:22:51.027Z",
+     "handback"
+    ],
+    [
+     "2026-09-28T00:28:00.785Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-09-28T00:28:00.785Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-09-28T00:28:00.785Z",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:aed957feccd6819df",
+   "kind": "SUBAGENT",
+   "session": "4c204b8c-4689-4fbb-a9a6-5c9d9b3825c3",
+   "last_at": "2026-09-18T00:22:33.118Z",
+   "age_s": 2538733,
+   "last_kind": "assistant:text",
+   "handbacks": 2,
+   "signals": [
+    [
+     "2026-09-17T22:44:49.863Z",
+     "handback"
+    ],
+    [
+     "2026-09-18T00:22:23.175Z",
+     "handback"
+    ],
+    [
+     "2026-09-17T22:45:06.368Z",
+     "notification:completed"
+    ]
+   ],
+   "last_activity": "2026-09-18T00:22:23.175Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-09-18T00:22:23.175Z",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:af55b53c2e51eee81",
+   "kind": "SUBAGENT",
+   "session": "a82388db-0805-497d-b426-4250137da3b5",
+   "last_at": "2026-09-28T00:28:11.012Z",
+   "age_s": 1674395,
+   "last_kind": "assistant:text",
+   "handbacks": 2,
+   "signals": [
+    [
+     "2026-09-27T22:17:14.778Z",
+     "handback"
+    ],
+    [
+     "2026-09-28T00:28:00.735Z",
+     "handback"
+    ],
+    [
+     "2026-09-27T22:14:14.532Z",
+     "notification:completed"
+    ]
+   ],
+   "last_activity": "2026-09-28T00:28:00.735Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-09-28T00:28:00.735Z",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:abf0cfa4d45771600",
+   "kind": "SUBAGENT",
+   "session": "a82388db-0805-497d-b426-4250137da3b5",
+   "last_at": "2026-09-28T00:01:49.744Z",
+   "age_s": 1675976,
+   "last_kind": "assistant:text",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-09-28T00:01:41.032Z",
+     "handback"
+    ],
+    [
+     "2026-09-27T23:28:30.502Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-09-28T00:01:41.032Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-09-28T00:01:41.032Z",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:a0eea61708f893889",
+   "kind": "SUBAGENT",
+   "session": "a82388db-0805-497d-b426-4250137da3b5",
+   "last_at": "2026-09-28T00:12:20.709Z",
+   "age_s": 1675345,
+   "last_kind": "assistant:text",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-09-28T00:12:16.147Z",
+     "handback"
+    ],
+    [
+     "2026-09-27T23:28:30.503Z",
+     "notification:failed"
+    ],
+    [
+     "2026-09-28T00:05:42.037Z",
+     "notification:completed"
+    ],
+    [
+     "2026-09-28T00:07:12.326Z",
+     "notification:completed"
+    ]
+   ],
+   "last_activity": "2026-09-28T00:12:16.147Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-09-28T00:12:16.147Z",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:a5b119ea75c28d4c9",
+   "kind": "SUBAGENT",
+   "session": "2bee9170-9e95-4e4e-873d-8490f228ad20",
+   "last_at": "2026-10-17T09:27:58.628Z",
+   "age_s": 407,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-17T09:27:58.267Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-10-17T09:27:58.267Z",
+   "session_s1": "busy",
+   "session_alive": true,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-17T09:27:58.267Z",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:a6b4391e741b5db27",
+   "kind": "SUBAGENT",
+   "session": "2bee9170-9e95-4e4e-873d-8490f228ad20",
+   "last_at": "2026-10-17T09:19:02.223Z",
+   "age_s": 944,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-17T09:19:01.859Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-10-17T09:19:01.859Z",
+   "session_s1": "busy",
+   "session_alive": true,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-17T09:19:01.859Z",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "A:a5de9442449dd9e3f",
+   "kind": "WORKFLOW_AGENT",
+   "session": "8f3a6abd-0740-4164-9188-e5ac6af4cd37",
+   "last_at": "2026-10-10T02:49:37.181Z",
+   "age_s": 629109,
+   "last_kind": "user:tool_result",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-10T02:49:37.131Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": false,
+   "children": 0,
+   "wf_status": "completed",
+   "wf_keys": [
+    "agentCount",
+    "defaultModel",
+    "durationMs",
+    "logs",
+    "phases",
+    "result",
+    "runId",
+    "script",
+    "scriptPath",
+    "startTime",
+    "status",
+    "summary"
+   ],
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "워크플로 S6 status=completed",
+   "spec_state": "DONE",
+   "spec_rule": "R-08",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-08"
+  },
+  {
+   "key": "S:ae4ea40d-8f2c-47cd-ac22-b9c562f8ce86",
+   "kind": "SESSION",
+   "last_at": "2026-10-16T09:04:39.734Z",
+   "age_s": 88206,
+   "last_kind": "assistant:text",
+   "last_tools": [],
+   "pending": [],
+   "s1": null,
+   "wakeup": null,
+   "children": 1,
+   "open_children": 0,
+   "last_item_pending_tool_use": false,
+   "qa_state": "DONE",
+   "qa_rule": "R-07",
+   "why": "S1 없음/pid 소멸",
+   "spec_state": "DONE",
+   "spec_rule": "R-07",
+   "hyp_state": "DONE",
+   "hyp_rule": "R-07",
+   "last_tool": "Bash",
+   "wake_future": false
+  }
+ ]
+}
