@@ -4,7 +4,8 @@
 #   · 항상 exit 0 · 표준출력 0 바이트 · 표준에러도 버린다 (Claude Code 동작에 영향 0)
 #   · curl -m 1 — 1 초 안에 못 보내면 버린다. 서버가 꺼져 있으면 연결 거부로 바로 끝난다.
 #   · 127.0.0.1 만. 본문 걸러내기는 수신기(hooks_rx)가 한다 — 여기서는 저장하지 않는다.
-# 식별 표시: 이 파일 이름(hook_send.sh)이 settings.json 명령 문자열에 들어 있어야 hooks_install.py 가 알아본다.
+# 식별 표시: settings.json 명령 문자열이 이 파일의 절대 경로를 품은 `bash '<저장소>/scripts/hook_send.sh'` 와 정확히 같아야
+#   hooks_install.py 가 내 것으로 본다 (같은 이름의 남의 스크립트는 아니다 — DEF-QA1-005).
 port="${AGENTDASH_PORT:-8095}"
 case "$port" in (*[!0-9]*|'') port=8095 ;; esac
 if command -v curl >/dev/null 2>&1; then

@@ -22,6 +22,10 @@ from agentdash.core import model as M
 
 KST = timezone(timedelta(hours=9))
 ACTIVE_GAP_SEC = 300
+#: D-17 (차단 — 사람 결정 대기): 서브에이전트 · 워크플로 기록의 output_tokens 는 스트리밍 시작값인 경우가 많다.
+#: 결정 전 임시 ① — 숫자는 원천 그대로 두고 이 표기만 붙인다 (지어내지 않는다).
+UNDERCOUNT_KINDS = ("SUBAGENT", "WORKFLOW_AGENT")
+UNDERCOUNT_NOTE = "기록상 과소 (D-17)"
 
 
 @dataclass
@@ -156,11 +160,29 @@ def descendants(con: sqlite3.Connection, agent_key: str) -> list[str]:
 _descendants = descendants
 
 
+def _undercount_keys(con: sqlite3.Connection, keys: list[str]) -> list[str]:
+    out: list[str] = []
+    for i in range(0, len(keys), 500):
+        part = keys[i:i + 500]
+        out += [r[0] for r in con.execute(
+            f"SELECT agent_key FROM agent WHERE agent_key IN ({','.join('?' * len(part))}) "
+            f"AND kind IN ({','.join('?' * len(UNDERCOUNT_KINDS))})", [*part, *UNDERCOUNT_KINDS])]
+    return out
+
+
 def totals(con: sqlite3.Connection, agent_key: str, *, descendants: bool = False) -> dict:
+    """합계 + D-17 표기: 서브에이전트 · 워크플로 에이전트 몫이 들어 있으면 undercount=True ·
+    undercount_note=「기록상 과소 (D-17)」 · undercount_output = 그 몫의 출력 토큰 (숫자는 원천 그대로)."""
     keys = [agent_key]
     if descendants:
         keys += _descendants(con, agent_key)
-    return _sum(con, keys)
+    out = _sum(con, keys)
+    flagged = _undercount_keys(con, keys)
+    sub = _sum(con, flagged) if flagged else None
+    out["undercount"] = bool(sub and sub["requests"])
+    out["undercount_note"] = UNDERCOUNT_NOTE if out["undercount"] else None
+    out["undercount_output"] = sub["output_tokens"] if sub else 0
+    return out
 
 
 # ── 일별 집계 ─────────────────────────────────────────────────────────
@@ -302,6 +324,35 @@ def _group_key(group: str, day: str, model: str | None, a: dict) -> tuple[str, s
     return day, day
 
 
+def _unique_files(con: sqlite3.Connection, group: str, agents: dict, rows: dict, tot: dict, ua: str, ub: str,
+                  top_model: dict) -> None:
+    """「작성 파일」 = 기간 안 고유 (agent, path) 수 (DEF-QA1-006 — spec §6 「서로 다른 file_path 수」). 일별 합을 더하지 않는다.
+
+    묶음이 일자면 그날 고유 수. 그 밖 묶음은 (agent, path) 하나를 기간 안 첫 기록 일자의 묶음 하나에만 센다
+    (모델 묶음은 그날 그 에이전트의 파일이 붙은 모델 행 — rebuild_daily 와 같은 자리).
+    """
+    first: dict[tuple[str, str], str] = {}
+    per_day: dict[str, set] = defaultdict(set)
+    for k, path, at in con.execute("SELECT agent_key, path, at FROM file_touch WHERE at >= ? AND at < ?", (ua, ub)):
+        day = kst_day(at)
+        per_day[day].add((k, path))
+        if (k, path) not in first or day < first[(k, path)]:
+            first[(k, path)] = day
+    for r in rows.values():
+        r["files_written"] = 0
+    tot["files_written"] = len(first)
+    if group == "day":
+        for day, s in per_day.items():
+            if day in rows:
+                rows[day]["files_written"] = len(s)
+        return
+    for (k, _path), day in first.items():
+        a = agents.get(k) or {"agent_key": k}
+        gk, _ = _group_key(group, day, top_model.get((day, k), ""), a)
+        if gk in rows:
+            rows[gk]["files_written"] += 1
+
+
 def table(con: sqlite3.Connection, frm: str | None = None, to: str | None = None, group: str | None = None) -> dict:
     """usage_daily(KST 일자) 를 묶음 기준으로 합친 순위 표 + 일별 추이 + 단가 없음 건수.
 
@@ -318,15 +369,23 @@ def table(con: sqlite3.Connection, frm: str | None = None, to: str | None = None
     rows: dict[str, dict] = {}
     days: dict[str, dict] = {}
     tot = dict(input_tokens=0, cache_read=0, cache_write=0, output_tokens=0, tool_calls=0, files_written=0,
-               active_seconds=0, cost_usd=None, unpriced=0, requests=0)
+               active_seconds=0, cost_usd=None, unpriced=0, requests=0, undercount=False, undercount_output=0)
+    top_model: dict[tuple[str, str], str] = {}      # (일자, agent) → 그날 파일 · 도구가 붙은 모델 행 (rebuild_daily)
     for day, k, mdl, i, cr, cw, o, tc, fw, act, c in con.execute(
             "SELECT day, agent_key, model, input_tokens, cache_read, cache_write, output_tokens, tool_calls, "
             "files_written, active_seconds, cost_usd FROM usage_daily WHERE day BETWEEN ? AND ?", (frm, to)):
         a = agents.get(k) or {"agent_key": k}
+        if fw:
+            top_model[(day, k)] = mdl or ""
         gk, label = _group_key(group, day, mdl, a)
         r = rows.setdefault(gk, dict(key=gk, label=label, input_tokens=0, cache_read=0, cache_write=0, output_tokens=0,
                                      tool_calls=0, files_written=0, active_seconds=0, cost_usd=None, unpriced=0,
-                                     requests=0, kind=a.get("kind") if group == "agent" else None))
+                                     requests=0, kind=a.get("kind") if group == "agent" else None,
+                                     undercount=False, undercount_output=0))
+        if a.get("kind") in UNDERCOUNT_KINDS and (o or i or cr or cw):     # D-17 — 서브 · 워크플로 몫이 섞인 행
+            r["undercount"] = tot["undercount"] = True
+            r["undercount_output"] += o or 0
+            tot["undercount_output"] += o or 0
         dd = days.setdefault(day, dict(day=day, output_tokens=0, cost_usd=None, input_tokens=0, cache_read=0,
                                        cache_write=0))
         for tgt in (r, tot):
@@ -347,6 +406,7 @@ def table(con: sqlite3.Connection, frm: str | None = None, to: str | None = None
             dd["cost_usd"] = (dd["cost_usd"] or 0.0) + c
     # 요청 수 · 단가 없음 건수 — usage_event 에서 (KST 일자 경계)
     ua, ub = _utc_bounds(frm, to)
+    _unique_files(con, group, agents, rows, tot, ua, ub, top_model)
     unpriced_models: dict[str, int] = {}
     for k, at, mdl, c in con.execute("SELECT agent_key, at, model, cost_usd FROM usage_event WHERE at >= ? AND at < ?",
                                      (ua, ub)):
@@ -373,11 +433,11 @@ def table(con: sqlite3.Connection, frm: str | None = None, to: str | None = None
     return {"from": frm, "to": to, "group": group, "groups": list(GROUPS), "rows": ranked, "total": tot,
             "trend": trend, "unpriced": tot["unpriced"], "unpriced_models": sorted(unpriced_models.items()),
             "pricing_ver": ver[0][0] if ver else None, "pricing_versions": [v[0] for v in ver],
-            "estimate_label": ESTIMATE_LABEL}
+            "estimate_label": ESTIMATE_LABEL, "undercount_note": UNDERCOUNT_NOTE}
 
 
 CSV_COLS = ("key", "label", "requests", "input_tokens", "cache_read", "cache_write", "output_tokens", "cache_hit",
-            "tool_calls", "files_written", "active_seconds", "cost_usd", "unpriced")
+            "tool_calls", "files_written", "active_seconds", "cost_usd", "unpriced", "undercount")
 
 
 def to_csv(t: dict) -> str:
@@ -389,13 +449,19 @@ def to_csv(t: dict) -> str:
     w = csv.writer(buf)
     head = list(CSV_COLS)
     head[head.index("cost_usd")] = f"cost_usd {ESTIMATE_LABEL} (단가표 {t.get('pricing_ver')})"
+    head[head.index("undercount")] = f"output {UNDERCOUNT_NOTE}"
     w.writerow(head)
+    def cell(r: dict, c: str):
+        v = r.get(c)
+        if c == "undercount":
+            return f"과소 의심 출력 {r.get('undercount_output', 0)}" if v else ""
+        return "" if v is None else (round(v, 6) if isinstance(v, float) else v)
+
     for r in t["rows"]:
-        w.writerow([("" if r.get(c) is None else (round(r[c], 6) if isinstance(r[c], float) else r[c])) for c in CSV_COLS])
+        w.writerow([cell(r, c) for c in CSV_COLS])
     tt = t["total"]
     w.writerow(["합계", f"{t['from']}~{t['to']} · group={t['group']} · 단가 없음 {t['unpriced']} 건"]
-               + [("" if tt.get(c) is None else (round(tt[c], 6) if isinstance(tt[c], float) else tt[c]))
-                  for c in CSV_COLS[2:]])
+               + [cell(tt, c) for c in CSV_COLS[2:]])
     return buf.getvalue()
 
 

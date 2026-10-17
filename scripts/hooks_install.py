@@ -4,12 +4,15 @@
     uv run python scripts/hooks_install.py --settings <경로>              # 덧붙이기 (diff 보여 주고 y 확인)
     uv run python scripts/hooks_install.py --settings <경로> --uninstall  # 식별 표시 붙은 항목만 제거
     uv run python scripts/hooks_install.py --settings <경로> --check      # 설치 여부 · 최근 수신 · 이벤트별 건수
-    --yes  확인 없이 진행 (가짜 설정 파일 검증용 — 실제 claude_home 의 settings.json 에는 거부한다)
+    --yes  확인 없이 진행 (가짜 설정 파일 검증용 — 실제 settings.json 에는 거부한다)
+실제 파일 (DEF-QA1-004): 설정과 무관하게 실제 홈의 `.claude/settings.json` 과 설정된 claude_home 의 것 둘 다
+(resolve 후 비교 · 심볼릭 링크 포함). `--yes` 거부, pytest 실행 중(PYTEST_CURRENT_TEST)이면 확인 프롬프트 없이 거부.
 
 하는 일 (설치)
   1. `<settings>.bak-agentdash-<YYYYmmdd-HHMMSS>` 로 백업 (바이트 그대로).
   2. 이벤트 9 종마다 matcher 없는 항목 하나를 배열 **끝에 덧붙인다**. 기존 항목의 순서 · 내용은 건드리지 않는다.
-     이미 식별 표시(`hook_send.sh`)가 있는 이벤트는 건너뛴다(두 번 돌려도 하나).
+     이미 식별 표시가 있는 이벤트는 건너뛴다(두 번 돌려도 하나). 식별 표시 = 이 저장소 `scripts/hook_send.sh` 의
+     **절대 경로 전체를 품은 명령 문자열** `command()` 와 정확히 같은 훅 (DEF-QA1-005 — 남의 `…/hook_send.sh` 는 내 것이 아니다).
   3. 바뀐 내용의 diff 를 표준출력에 보여 주고 `y` 를 받아야 저장한다.
   4. 저장 뒤 다시 읽어 JSON 문법 · 기존 항목 동일 · 덧붙인 수를 검사하고, 하나라도 틀리면 백업으로 되돌린다.
 제거
@@ -50,7 +53,11 @@ def entry() -> dict:
 
 
 def marked(e) -> bool:
-    return MARK in json.dumps(e, ensure_ascii=False)
+    """이 저장소가 덧붙인 항목인가 — 명령 문자열 정확 일치만 (같은 이름의 남의 스크립트는 아니다)."""
+    if not isinstance(e, dict) or not isinstance(e.get("hooks"), list):
+        return False
+    mine = command()
+    return any(isinstance(h, dict) and h.get("command") == mine for h in e["hooks"])
 
 
 def detect_indent(text: str):
@@ -67,14 +74,37 @@ def dump(data: dict, indent) -> str:
     return json.dumps(data, ensure_ascii=False, indent=indent) + "\n"
 
 
-def is_real_target(target: Path) -> bool:
-    """실제 claude_home 의 settings.json 인가 (--yes 금지 판정용 — 비교만)."""
+def _protected_settings() -> list[Path] | None:
+    """실제 파일로 볼 settings.json 후보 — 비교 전용 (열거나 쓰지 않는다). 설정을 못 읽으면 None."""
+    out = [Path.home() / ".claude" / "settings.json"]      # 설정과 무관한 실제 홈 (DEF-QA1-004)
     from agentdash import settings as _s
     try:
-        real = _s.get().claude_home / "settings.json"
-    except Exception:                  # noqa: BLE001 — 설정을 못 읽으면 실제 파일일 수 있다고 보고 막는다
+        out.append(_s.get().claude_home / "settings.json")
+    except Exception:                  # noqa: BLE001 — 설정을 못 읽으면 None → 호출자가 막는다
+        return None
+    return out
+
+
+def is_real_target(target: Path) -> bool:
+    """실제 settings.json 인가 (--yes · pytest 금지 판정용 — 비교만). 실제 홈 · 설정된 claude_home 둘 다,
+    resolve(심볼릭 링크 따라감) 후 경로 비교 + 둘 다 있으면 같은 파일(inode) 비교."""
+    cands = _protected_settings()
+    if cands is None:
+        return True                    # 판정 불가 → 실제 파일일 수 있다고 보고 막는다
+    t = Path(os.path.expanduser(str(target)))
+    try:
+        tr = t.resolve()
+    except (OSError, RuntimeError):
         return True
-    return target.resolve() == real.resolve()
+    for c in cands:
+        try:
+            if tr == c.resolve():
+                return True
+            if t.exists() and c.exists() and os.path.samefile(t, c):
+                return True
+        except (OSError, RuntimeError):
+            return True
+    return False
 
 
 def confirm(yes: bool, prompt: str) -> bool:
@@ -286,11 +316,12 @@ def main(argv=None) -> int:
     target = a.settings.expanduser()
     if a.check:
         return check(target)
-    if a.yes and is_real_target(target):
-        print("실제 claude_home 의 settings.json 에는 --yes 를 쓸 수 없다 — diff 를 보고 y 를 직접 입력한다")
+    real = is_real_target(target)
+    if real and os.environ.get("PYTEST_CURRENT_TEST"):
+        print("테스트 중 실제 settings.json 거부 — 확인 없이 종료, 아무것도 바꾸지 않았다")
         return 2
-    if os.environ.get("PYTEST_CURRENT_TEST") and is_real_target(target):
-        print("테스트 중 실제 settings.json 거부")
+    if real and a.yes:
+        print("실제 settings.json 에는 --yes 를 쓸 수 없다(거부) — diff 를 보고 y 를 직접 입력한다")
         return 2
     return uninstall(target, a.yes) if a.uninstall else install(target, a.yes)
 

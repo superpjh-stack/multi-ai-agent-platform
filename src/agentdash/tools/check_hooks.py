@@ -16,12 +16,26 @@
   3. 제거 → 파일이 설치 전과 바이트 단위로 같다.
   4. 서버가 꺼진 상태(127.0.0.1:8095 듣는 프로세스 없음)에서 hook_send.sh: exit 0 · ≤ 1 초 · 표준출력 0 바이트.
      8095 에 누가 듣고 있으면 이 항목은 `미검증`(서버 꺼짐 조건을 만들 수 없다 — 다른 프로세스를 죽이지 않는다).
+  5. (DEF-QA1-004) 실제 파일 가드 — 가짜 claude_home 을 켠 채 실제 홈의 settings.json(직접 · tmp 의 심볼릭 링크)에
+     `--yes` 설치 · 제거, pytest 흉내(PYTEST_CURRENT_TEST)로 `--yes` 없이 설치 → 전부 종료코드 2. 이 시험은
+     hooks_install 을 이 프로세스로 불러 쓰기 함수(install · uninstall · atomic_write · restore)와 input() 을 함정으로
+     바꾼 뒤에만 부른다 — 가드가 틀려도 쓰지 못하고, 함정이 불리면 FAIL. 실제 파일은 전후 stat · sha1 을 읽기로만 비교.
+  6. (DEF-QA1-005) 남의 같은 이름 훅 — 가짜 settings 의 Stop 에 `bash /other/project/hook_send.sh` 를 두고 설치 →
+     이 저장소 명령 문자열 정확 일치 항목 9 · 남의 항목 그대로 · 제거 → 원본 바이트 동일.
+  덧붙인 항목은 `bash '<이 저장소>/scripts/hook_send.sh'` 명령 문자열 **정확 일치**로만 센다.
 출력: `G-15  훅 설치 안전  PASS|FAIL|미검증  실측`
 """
 
 from __future__ import annotations
 
+import builtins
+import contextlib
+import io
+import hashlib
+import importlib.util
 import json
+import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -39,6 +53,115 @@ SEND = ROOT / "scripts" / "hook_send.sh"
 EVENTS = ["SessionStart", "SessionEnd", "SubagentStart", "SubagentStop", "Stop", "Notification", "PreToolUse",
           "PostToolUse", "UserPromptSubmit"]
 MARK = "hook_send.sh"
+MINE = f"bash {shlex.quote(str(SEND))}"          # 이 저장소 송신 스크립트의 명령 문자열 (정확 일치로 식별)
+OTHER = {"hooks": [{"type": "command", "command": "bash /other/project/hook_send.sh"}]}
+
+
+def count_mine(data: dict) -> int:
+    return sum(1 for ev in EVENTS for e in (data.get("hooks") or {}).get(ev, []) if isinstance(e, dict)
+               for h in e.get("hooks", []) if isinstance(h, dict) and h.get("command") == MINE)
+
+
+def _snap(p: Path):
+    """읽기만 — stat · sha1."""
+    if not p.exists():
+        return None
+    with p.open("rb") as fh:
+        return p.stat().st_mtime_ns, hashlib.sha1(fh.read()).hexdigest()
+
+
+def guard_real(tmp: Path) -> tuple[list[str], str]:
+    """DEF-QA1-004 — 실제 홈 settings.json 거부. 쓰기 함수는 함정으로 막은 뒤에만 main 을 부른다."""
+    bad: list[str] = []
+    real_home_settings = Path.home() / ".claude" / "settings.json"     # 비교 · 읽기 전용
+    spec = importlib.util.spec_from_file_location("agentdash_hooks_install_chk", INSTALL)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    calls: list[str] = []
+
+    def trap(name):
+        def f(*a, **k):
+            calls.append(name)
+            raise RuntimeError(f"함정: {name}")
+        return f
+
+    for n in ("install", "uninstall", "atomic_write", "restore"):
+        setattr(mod, n, trap(n))
+    saved_input = builtins.input
+    builtins.input = trap("input")
+    fake_home = tmp / "fake_claude_home"
+    fake_home.mkdir()
+    link = tmp / "link-settings.json"
+    link.symlink_to(real_home_settings)                      # tmp 안에 링크만
+    env_keys = ("AGENTDASH_CLAUDE_HOME", "PYTEST_CURRENT_TEST")
+    saved_env = {k: os.environ.get(k) for k in env_keys}
+    before = _snap(real_home_settings)
+    cases = [("실제 --yes", [str(real_home_settings), "--yes"], None),
+             ("실제 --uninstall --yes", [str(real_home_settings), "--uninstall", "--yes"], None),
+             ("링크 --yes", [str(link), "--yes"], None),
+             ("pytest 중 확인 없이", [str(real_home_settings)], "check_hooks"),
+             ("pytest 중 링크 제거", [str(link), "--uninstall"], "check_hooks")]
+    ok = 0
+    try:
+        os.environ["AGENTDASH_CLAUDE_HOME"] = str(fake_home)
+        for name, args, pyt in cases:
+            if pyt:
+                os.environ["PYTEST_CURRENT_TEST"] = pyt
+            else:
+                os.environ.pop("PYTEST_CURRENT_TEST", None)
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    rc = mod.main(["--settings", *args])
+            except RuntimeError as e:
+                rc = f"예외 {e}"
+            if rc == 2:
+                ok += 1
+            else:
+                bad.append(f"실제 파일 가드 {name}: 종료코드 {rc} ≠ 2")
+    finally:
+        builtins.input = saved_input
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    if calls:
+        bad.append(f"실제 파일 가드: 쓰기 · 확인 함수가 불림 {calls}")
+    if _snap(real_home_settings) != before:
+        bad.append("실제 settings.json stat · sha1 이 바뀜")
+    return bad, f"실제 파일 가드 {ok}/{len(cases)} 거부 · 함정 {len(calls)}"
+
+
+def other_same_name(tmp: Path) -> tuple[list[str], str]:
+    """DEF-QA1-005 — 남의 `…/hook_send.sh` 가 있어도 내 것 9 를 덧붙이고, 제거는 내 것만."""
+    bad: list[str] = []
+    d = tmp / "other"
+    d.mkdir()
+    target = d / "settings.json"
+    model = {"theme": "fixture", "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo fixture-x"}]},
+                                                    OTHER]}}
+    original = (json.dumps(model, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    target.write_bytes(original)
+    p = subprocess.run(["uv", "run", "python", str(INSTALL), "--settings", str(target), "--yes"], cwd=ROOT,
+                       capture_output=True, text=True, timeout=60)
+    after = json.loads(target.read_text(encoding="utf-8"))
+    mine = count_mine(after)
+    if p.returncode != 0:
+        bad.append(f"남의 훅: 설치 종료코드 {p.returncode}")
+    if mine != len(EVENTS):
+        bad.append(f"남의 훅: 덧붙임 {mine} ≠ {len(EVENTS)}")
+    if after.get("hooks", {}).get("Stop", [])[:2] != model["hooks"]["Stop"]:
+        bad.append("남의 훅: 기존 Stop 항목이 바뀜")
+    p = subprocess.run(["uv", "run", "python", str(INSTALL), "--settings", str(target), "--uninstall", "--yes"],
+                       cwd=ROOT, capture_output=True, text=True, timeout=60)
+    kept = target.read_text(encoding="utf-8").count("/other/project/hook_send.sh")
+    if p.returncode != 0:
+        bad.append(f"남의 훅: 제거 종료코드 {p.returncode}")
+    if kept != 1:
+        bad.append(f"남의 훅: 제거 뒤 남은 남의 항목 {kept} ≠ 1")
+    if target.read_bytes() != original:
+        bad.append("남의 훅: 제거 뒤 원본과 바이트 다름")
+    return bad, f"남의 같은 이름 훅 덧붙임 {mine} · 남음 {kept}"
 
 
 def fake_settings_from_real(s: _settings.Settings) -> dict:
@@ -100,10 +223,7 @@ def check() -> tuple[str, str, list[str]]:
             cur = after.get("hooks", {}).get(ev, [])
             if json.dumps(cur[:len(entries)], sort_keys=False) != json.dumps(entries, sort_keys=False):
                 bad.append(f"{ev}: 기존 항목이 바뀜")
-        for ev in EVENTS:
-            for e in after.get("hooks", {}).get(ev, []):
-                if MARK in json.dumps(e):
-                    added += 1
+        added = count_mine(after)
         if added != len(EVENTS):
             bad.append(f"덧붙인 항목 {added} ≠ {len(EVENTS)}")
         p = subprocess.run(["uv", "run", "python", str(INSTALL), "--settings", str(target), "--uninstall", "--yes"],
@@ -112,6 +232,9 @@ def check() -> tuple[str, str, list[str]]:
             bad.append(f"제거 종료코드 {p.returncode}")
         if target.read_bytes() != original:
             bad.append("제거 뒤 원본과 바이트 다름")
+        b4, note4 = guard_real(tmp)
+        b5, note5 = other_same_name(tmp)
+        bad += b4 + b5
         send_note = ""
         if port_busy(s.port):
             send_note = f" · 송신 미검증 ({s.port} 사용 중)"
@@ -127,7 +250,8 @@ def check() -> tuple[str, str, list[str]]:
             if q.stdout:
                 bad.append(f"송신 표준출력 {len(q.stdout)} 바이트")
             send_note = f" · 송신 {dt:.2f}s exit {q.returncode} stdout {len(q.stdout)}B"
-        detail = f"가짜 settings (기존 이벤트 {len(before_hooks)}) · 덧붙임 {added}{send_note} · 위반 {len(bad)}"
+        detail = (f"가짜 settings (기존 이벤트 {len(before_hooks)}) · 덧붙임 {added} · {note4} · {note5}{send_note}"
+                  f" · 위반 {len(bad)}")
         if bad:
             return "FAIL", detail, bad
         return ("미검증" if "미검증" in send_note else "PASS"), detail, bad

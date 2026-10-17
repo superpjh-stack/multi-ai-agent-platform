@@ -287,6 +287,28 @@ def add_usage(con: sqlite3.Connection, ev: UsageEvent) -> bool:
     return False
 
 
+
+def upgrade_owner_usage(con: sqlite3.Connection, session_id: str, ev: UsageEvent) -> str | bool | None:
+    """포크 사본 줄의 usage 를 그 requestId 의 소유 행(같은 세션에서 이미 센 행)에 반영한다 (DEF-QA1-001).
+
+    소유 행 = 같은 세션 에이전트 중 이 requestId 를 가진 행(세션 안에서 한 행 — D-02). 사본의 output 이 더 크면
+    usage 칸만 바꾼다 — agent_key · request_id · at(소유 기록의 시각) 은 그대로. 돌려줌: 바뀜 → 소유 agent_key · 그대로 False ·
+    소유 행 아직 없음 None (부모 기록을 아직 못 읽음 — 호출한 쪽이 나중에 다시 부른다).
+    """
+    cur = con.execute("SELECT u.agent_key, u.output_tokens FROM usage_event u JOIN agent g ON g.agent_key=u.agent_key "
+                      "WHERE g.session_id=? AND u.request_id=? ORDER BY u.at, u.agent_key LIMIT 1",
+                      (session_id, ev.request_id)).fetchone()
+    if cur is None:
+        return None
+    if (ev.output_tokens or 0) <= (cur[1] or 0):
+        return False
+    cols = [c for c in _USAGE_COLS if c not in ("agent_key", "request_id", "at")]
+    con.execute(f"UPDATE usage_event SET {','.join(f'{c}=?' for c in cols)} WHERE agent_key=? AND request_id=?",
+                [*(clip(getattr(ev, c)) if isinstance(getattr(ev, c), str) else getattr(ev, c) for c in cols),
+                 cur[0], ev.request_id])
+    _emit("agent.usage", {"agent_key": cur[0]})
+    return cur[0]
+
 def add_tool_call(con: sqlite3.Connection, tc: ToolCall) -> bool:
     cur = con.execute(
         "INSERT OR IGNORE INTO tool_call (agent_key, tool_use_id, at, tool, target, ok, result_at) VALUES (?,?,?,?,?,?,?)",

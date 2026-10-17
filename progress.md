@@ -15,6 +15,20 @@
 
 | 5 | 2026-10-17 17:25 | 개발1 웨이브 B (+R3) 보고 재검증 · 개발2 웨이브 B 계속 | 기본 DB `make gate`: PASS 18 · FAIL 0 · 미검증 4 (G-12 · G-18 · G-21 · G-22) · G-06 243/243 (R3 해결) · G-17 placeholder 0 · G-19 칸 88/88 근거 · 표본 10/10 · G-20 7 passed ‖ `sqlite3 data/agentdash.db pipeline_cell`: DONE 53 · NEEDS_DECISION 2 · UNKNOWN 33 · 고려솔더 01 DONE v1.0 `20261016-151506-all` · 02 DONE v1.0 `20261016-154028-all` · 05 · 08 UNKNOWN ‖ settings.json mtime 1792131308 (변경 없음) ‖ 미처리: R4(선택, 개발1 미처리) · D-15 · D-16 가설 |
 
+| 6 | 2026-10-17 17:50 | 개발2 웨이브 B 보고 재검증 → 웨이브 B 커밋 `10cbd18` → 웨이브 C QA1 · QA2 병렬 기동 | `uv run pytest -q` 198 passed ‖ 기본 DB `make gate` PASS 18 · FAIL 0 · 미검증 4 · G-13 행 62,010 위반 0 · G-14 트리 변경 0 · G-17 16/16 placeholder 0 · G-18 test_graph 6 passed (QA 대기) ‖ 실제 settings.json mtime 1792131308 · hooks 키 PostToolUse · PreToolUse · Stop (3, 그대로) ‖ 포트 8095~8097 LISTEN 0 ‖ 커밋에 DB 파일 0 |
+
+| 7 | 2026-10-17 18:15 | QA1 리포트 확인 → 웨이브 D 수정 2 기동 (개발1+아키텍트: DEF-QA1-001 · 002 · 003 · 006 · 008 / 개발2: DEF-QA1-004 · 005 · 007) · QA2 계속 | `outputs/qa1-데이터안전.md` 결함 8 (치명 0 · 중대 5 · 경미 3) · G-07 · G-14 · G-15 QA 판정 FAIL ‖ 실제 settings.json mtime 1792131308 (변경 없음) ‖ `find ~/.claude ~/Desktop/AI\ Coding -maxdepth 4 -name '*agentdash*'` 이 폴더 밖 0 |
+
+| 8 | 2026-10-17 18:35 | QA2 리포트 확인 → 웨이브 D 상태 수정(개발2: DEF-QA2-001~007) 기동 · DEF-QA2-008(gate.py) 은 G-14/G-15 수정 끝난 뒤 | `outputs/qa2-상태대조.md`: G-12 FAIL (30 중 오판 3, 전수 불일치 14) · G-09~G-11 · G-17 · G-18 · G-21 · G-22 PASS · 결함 8 (중대 3 · 경미 5) ‖ 자기 관찰: QA1 handback 08:29:23Z → 같은 초 DONE R-08 (`outputs/e2e/self-observe.md`) ‖ settings.json mtime 1792131308 |
+
+| 9 | 2026-10-17 18:45 | 개발2 훅 수정(DEF-QA1-004 · 005 · 007) 보고 재검증 · 나머지 수정 2 계속 | `tests/test_hooks_install.py` 18 passed ‖ `check_hooks.py` G-15 PASS (실제 파일 가드 5/5 거부 · 함정 0 · 남의 같은 이름 훅 남음 1 · 덧붙임 9) ‖ 실제 settings.json sha1 `8641eb22…10a7a` · mtime 1792131308 (변경 없음) · `hook_send` 0 회 · `~/.claude` 에 agentdash 백업 파일 0 |
+
+| 10 | 2026-10-17 18:55 | 개발2 상태 수정(DEF-QA2-001~007) 보고 재검증 · 개발1+아키텍트 수정 계속 | `tests/test_state.py` + `test_linker.py` 79 passed ‖ `sqlite3 data/agentdash-dev2.db` 상태: DONE 301 · FAILED 12 · STALE 8 · RUNNING 2 · WAITING_INPUT 2 · SLEEPING 1 (= 이 오케스트레이터, D-18) ‖ 보고: judge.py 표본 30 오판 3 → 1 · 전수 325 불일치 14 → 1 (남은 1 = D-18 해석 차이) — QA 재검증 대상 ‖ 미처리 요청: R8 · R9 (개발1) · DEF-QA2-008 (gate.py) |
+
+**사람 확인 대기 (추가):** D-18(busy + ScheduleWakeup 예약 → SLEEPING, DEF-QA2-004 — 이 루프 자신이 그 모양) · D-19(S1 있음 + pid 소멸 → S1 없음으로 판정, DEF-QA2-005).
+
+**사람 확인 대기 (추가):** DEF-QA1-002 → D-17 서브에이전트 출력 토큰이 기록상 과소(스트리밍 시작값, 하한 ≈ 4.1M) — 원천으로 바로잡을 수 없어 표기 방식 결정 필요.
+
 **사람 확인 대기 (추가):** D-13 세션 이름을 첫 사용자 메시지(본문) 대신 `agent-name` 줄로 — spec §3.1 과 다름.
 
 ## 지금 해야 할 것

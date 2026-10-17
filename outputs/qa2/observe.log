@@ -1,0 +1,98 @@
+17:07:13  A:aa798b51a24f94adf  - -> RUNNING (R-09)
+17:07:13  A:a85b98ff6f908df54  - -> RUNNING (R-09)
+17:07:13  S:2bee9170-9e95-4e4e-873d-8490f228ad20  - -> RUNNING (R-02a)
+17:07:13  A:aa9a3c3d9bf2a1977  - -> DONE (R-08)
+17:07:13  A:aec649669ff2dc3df  - -> DONE (R-08)
+17:07:13  A:a84175080a1a0ee6e  - -> DONE (R-08)
+17:07:13  A:aa5e5b87a9c66359f  - -> DONE (R-08)
+17:07:13  A:ae52277140e6732bc  - -> DONE (R-08)
+17:07:13  tick n=8
+17:07:33  tick n=8
+17:07:53  tick n=8
+17:08:13  tick n=8
+17:08:33  tick n=8
+17:08:53  tick n=8
+17:09:13  tick n=8
+17:09:33  tick n=8
+17:09:53  tick n=8
+17:10:13  tick n=8
+17:10:33  tick n=8
+17:10:53  S:2bee9170-9e95-4e4e-873d-8490f228ad20  RUNNING -> WAITING_CHILD (R-04)
+17:10:53  tick n=8
+17:11:13  tick n=8
+17:11:33  tick n=8
+17:11:53  tick n=8
+17:12:13  tick n=8
+17:12:33  tick n=8
+17:12:53  tick n=8
+17:13:13  tick n=8
+17:13:33  tick n=8
+17:13:53  tick n=8
+17:14:13  tick n=8
+17:14:32  tick n=8
+17:14:52  tick n=8
+17:15:12  tick n=8
+17:15:32  tick n=8
+17:15:52  tick n=8
+17:16:12  tick n=8
+17:16:32  tick n=8
+17:16:52  tick n=8
+17:17:12  tick n=8
+17:17:32  A:aa798b51a24f94adf  RUNNING -> RUNNING (R-12)
+17:17:32  tick n=8
+17:17:52  A:aa798b51a24f94adf  RUNNING -> RUNNING (R-09)
+17:17:52  tick n=8
+17:18:12  tick n=8
+17:18:32  tick n=8
+17:18:52  tick n=8
+17:19:12  tick n=8
+17:19:32  A:aa798b51a24f94adf  RUNNING -> RUNNING (R-12)
+17:19:32  tick n=8
+17:19:52  tick n=8
+17:20:12  tick n=8
+17:20:32  tick n=8
+17:20:52  tick n=8
+17:21:12  tick n=8
+17:21:32  tick n=8
+17:21:52  tick n=8
+17:22:12  tick n=8
+17:22:32  tick n=8
+17:22:52  A:aa798b51a24f94adf  RUNNING -> STALE (R-11)
+17:22:52  tick n=8
+17:23:12  tick n=8
+17:23:32  tick n=8
+17:23:52  tick n=8
+17:24:12  tick n=8
+17:24:32  tick n=8
+17:24:52  tick n=8
+17:25:12  tick n=8
+17:25:32  tick n=8
+17:25:52  tick n=8
+17:26:12  tick n=8
+17:26:32  tick n=8
+17:26:52  A:aa798b51a24f94adf  STALE -> RUNNING (R-09)
+17:26:52  tick n=8
+17:27:12  tick n=8
+17:27:32  tick n=8
+17:27:52  A:a85b98ff6f908df54  RUNNING -> RUNNING (R-12)
+17:27:52  tick n=8
+17:28:12  tick n=8
+17:28:32  tick n=8
+17:28:52  tick n=8
+17:29:12  A:a85b98ff6f908df54  RUNNING -> RUNNING (R-09)
+17:29:12  A:aa798b51a24f94adf  RUNNING -> RUNNING (R-12)
+17:29:12  tick n=8
+17:29:32  A:a85b98ff6f908df54  RUNNING -> DONE (R-08)
+17:29:32  S:2bee9170-9e95-4e4e-873d-8490f228ad20  WAITING_CHILD -> RUNNING (R-02a)
+17:29:32  tick n=8
+17:29:52  A:aa798b51a24f94adf  RUNNING -> RUNNING (R-09)
+17:29:52  tick n=8
+17:30:12  tick n=8
+17:30:32  tick n=8
+17:30:52  A:a432cc0dcfa4e2460  - -> RUNNING (R-09)
+17:30:52  A:a88b2c99045a4996d  - -> RUNNING (R-09)
+17:30:52  tick n=10
+17:31:12  tick n=10
+17:31:32  tick n=10
+17:31:52  tick n=10
+17:32:12  tick n=10

@@ -49,16 +49,32 @@ class Settings:
         """쓰기 금지 루트 두 개 (check_readonly 가 쓴다)."""
         return (self.claude_home, self.agents_root)
 
+    @property
+    def guard_roots(self) -> tuple[tuple[Path, ...], tuple[Path, ...]]:
+        """쓰기 거부 판정에 쓰는 루트 — (claude_home 류, agents_root 류).
+
+        설정된 루트에 더해 **항상** 실제 홈의 `.claude` 와 config/settings.yaml 의 기본 agents_root 를 넣는다
+        (DEF-QA1-008 — 환경변수 두 개를 함께 잘못 줘도 실제 원천 아래는 거부). 비교에만 쓴다 — 이 값으로 열지 않는다.
+        """
+        homes = [self.claude_home, (Path.home() / ".claude").resolve()]
+        agents = [self.agents_root]
+        try:
+            agents.append(_path(_need(load_yaml("settings.yaml"), "sources.agents_root")).resolve())
+        except SettingsError:
+            pass     # get() 이 이미 같은 키를 요구했다 — 여기서 빠질 일은 없다
+        return tuple(dict.fromkeys(homes)), tuple(dict.fromkeys(agents))
+
     def is_source_path(self, path: str | Path) -> bool:
-        """원천(쓰기 금지)인가. claude_home 아래 전부 + agents_root 아래 중 이 저장소(ROOT) 밖.
+        """원천(쓰기 금지)인가. claude_home 류 아래 전부 + agents_root 류 아래 중 이 저장소(ROOT) 밖.
 
         이 저장소 자체가 agents_root 아래에 있으므로(`~/Desktop/AI Coding/Multi-agent Dashboard`)
-        저장소 안(data/ · outputs/ · tests/fixtures/)만 예외다.
+        저장소 안(data/ · outputs/ · tests/fixtures/)만 예외다. 루트는 `guard_roots` (설정값 + 실제 기본값).
         """
         p = Path(path).expanduser().resolve()
-        if _under(p, self.claude_home):
+        homes, agents = self.guard_roots
+        if any(_under(p, h) for h in homes):
             return True
-        return _under(p, self.agents_root) and not _under(p, ROOT)
+        return any(_under(p, a) for a in agents) and not _under(p, ROOT)
 
 
 def _under(p: Path, root: Path) -> bool:

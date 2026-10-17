@@ -1,0 +1,236 @@
+{
+ "sample": [
+  {
+   "session": "bb4c0b68-d7d9-4602-95db-7f9814100ae1",
+   "tag": "F",
+   "src": {
+    "input": 3652,
+    "cache_read": 30731649,
+    "cache_write": 571458,
+    "output": 242142,
+    "tools": 114,
+    "agents": 4
+   },
+   "db": {
+    "input": 3652,
+    "cache_read": 30731649,
+    "cache_write": 571458,
+    "output": 242142
+   },
+   "db_tools": 114,
+   "src_files": 15,
+   "db_files": 15,
+   "ok": true
+  },
+  {
+   "session": "8e810453-7e4a-49dd-ad2b-7224dd81d7b2",
+   "tag": "F",
+   "src": {
+    "input": 2058,
+    "cache_read": 20322028,
+    "cache_write": 867367,
+    "output": 161843,
+    "tools": 112,
+    "agents": 4
+   },
+   "db": {
+    "input": 2058,
+    "cache_read": 20322028,
+    "cache_write": 867367,
+    "output": 161843
+   },
+   "db_tools": 112,
+   "src_files": 3,
+   "db_files": 3,
+   "ok": true
+  },
+  {
+   "session": "8f3a6abd-0740-4164-9188-e5ac6af4cd37",
+   "tag": "FW",
+   "src": {
+    "input": 3012,
+    "cache_read": 398527253,
+    "cache_write": 5383760,
+    "output": 1352668,
+    "tools": 1557,
+    "agents": 15
+   },
+   "db": {
+    "input": 3012,
+    "cache_read": 398527253,
+    "cache_write": 5383760,
+    "output": 1352668
+   },
+   "db_tools": 1557,
+   "src_files": 76,
+   "db_files": 76,
+   "ok": true
+  },
+  {
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "tag": "F",
+   "src": {
+    "input": 11598,
+    "cache_read": 1237354145,
+    "cache_write": 20468291,
+    "output": 1553522,
+    "tools": 5740,
+    "agents": 65
+   },
+   "db": {
+    "input": 11598,
+    "cache_read": 1237354145,
+    "cache_write": 20468291,
+    "output": 1553522
+   },
+   "db_tools": 5740,
+   "src_files": 287,
+   "db_files": 287,
+   "ok": true
+  },
+  {
+   "session": "ca14d7e7-c698-4849-ada6-7896959c7155",
+   "tag": "",
+   "src": {
+    "input": 32,
+    "cache_read": 984254,
+    "cache_write": 86661,
+    "output": 12449,
+    "tools": 22,
+    "agents": 1
+   },
+   "db": {
+    "input": 32,
+    "cache_read": 984254,
+    "cache_write": 86661,
+    "output": 12449
+   },
+   "db_tools": 22,
+   "src_files": 1,
+   "db_files": 1,
+   "ok": true
+  },
+  {
+   "session": "2bee9170-9e95-4e4e-873d-8490f228ad20",
+   "tag": "",
+   "src": {
+    "input": 894,
+    "cache_read": 81695325,
+    "cache_write": 2095491,
+    "output": 353934,
+    "tools": 544,
+    "agents": 8
+   },
+   "db": {
+    "input": 894,
+    "cache_read": 81695325,
+    "cache_write": 2095491,
+    "output": 353934
+   },
+   "db_tools": 544,
+   "src_files": 63,
+   "db_files": 63,
+   "ok": true
+  },
+  {
+   "session": "30773d87-d293-43b0-944b-8cfd85a2dcd1",
+   "tag": "",
+   "src": {
+    "input": 87,
+    "cache_read": 6107733,
+    "cache_write": 160390,
+    "output": 69317,
+    "tools": 55,
+    "agents": 1
+   },
+   "db": {
+    "input": 87,
+    "cache_read": 6107733,
+    "cache_write": 160390,
+    "output": 69317
+   },
+   "db_tools": 55,
+   "src_files": 11,
+   "db_files": 11,
+   "ok": true
+  },
+  {
+   "session": "f6123745-046f-45d1-b5ee-988a56c97c7d",
+   "tag": "",
+   "src": {
+    "input": 93,
+    "cache_read": 10008234,
+    "cache_write": 362501,
+    "output": 56067,
+    "tools": 56,
+    "agents": 1
+   },
+   "db": {
+    "input": 93,
+    "cache_read": 10008234,
+    "cache_write": 362501,
+    "output": 56067
+   },
+   "db_tools": 56,
+   "src_files": 0,
+   "db_files": 0,
+   "ok": true
+  },
+  {
+   "session": "43a5ddd8-4515-48e3-ab0a-e70a3df2a704",
+   "tag": "",
+   "src": {
+    "input": 92,
+    "cache_read": 5201514,
+    "cache_write": 294366,
+    "output": 74048,
+    "tools": 44,
+    "agents": 1
+   },
+   "db": {
+    "input": 92,
+    "cache_read": 5201514,
+    "cache_write": 294366,
+    "output": 74048
+   },
+   "db_tools": 44,
+   "src_files": 6,
+   "db_files": 6,
+   "ok": true
+  },
+  {
+   "session": "b6d22220-37a4-4434-acf7-536f3db5feb3",
+   "tag": "",
+   "src": {
+    "input": 2704,
+    "cache_read": 28589196,
+    "cache_write": 905573,
+    "output": 129129,
+    "tools": 104,
+    "agents": 1
+   },
+   "db": {
+    "input": 2704,
+    "cache_read": 28589196,
+    "cache_write": 905573,
+    "output": 129129
+   },
+   "db_tools": 104,
+   "src_files": 0,
+   "db_files": 0,
+   "ok": true
+  }
+ ],
+ "tot_src": {
+  "input": 174865,
+  "cache_read": 7377732517,
+  "cache_write": 185019222,
+  "output": 21013885
+ },
+ "tot_db": {
+  "input": 174865,
+  "cache_read": 7377732517,
+  "cache_write": 185019222,
+  "output": 21013885
+ }
+}

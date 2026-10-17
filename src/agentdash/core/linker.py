@@ -19,6 +19,10 @@
   L-07  자식 종료 = `SubagentHandback`(자식 기록) · `<task-notification>` 의 completed/failed/killed(부모 기록) ·
         Agent tool_result is_error 중 **가장 늦은 반환이 자식의 마지막 기록 이후**일 때. 반환 뒤에 자식 기록이 더 있으면
         (SendMessage 로 다시 깨움 — 실측 16 건이 반환 ≥ 2) 아직 안 끝났다. handback ↔ 종료 1:1 은 반박(D-04).
+        · 알림은 `<tool-use-id>` = 자식 spawn tool_use 로 잇고, 못 이으면 `<task-id>` = agentId 로 잇는다 — 다시 깨운 뒤 온
+          알림은 SendMessage 호출 id 를 달고 온다 (QA2 DEF-QA2-002).
+        · "마지막 활동" = `is_activity` 줄(tool_use 를 낸 assistant · 들어온 메시지 user, isMeta 제외)의 마지막 시각. DB 경로는
+          tool_call 과 자식 기록 파일의 반환 뒤 꼬리(읽기만)를 함께 본다 (DEF-QA2-003, `last_activity`).
 """
 
 from __future__ import annotations
@@ -198,13 +202,16 @@ class Edge:
 
 
 def resolve_message(sender_key: str, to: str, *, agent_ids: set[str], names: dict[str, str],
-                    at: str | None = None) -> Edge:
-    """SendMessage `to` → message 엣지. `agent_ids` = 알려진 agentId 집합, `names` = 이름(S1 name · 에이전트 이름) → 키."""
+                    at: str | None = None, keys: set[str] | None = None) -> Edge:
+    """SendMessage `to` → message 엣지. `agent_ids` = 알려진 agentId 집합, `names` = 이름(S1 name · 에이전트 이름) → 키,
+    `keys` = 알려진 에이전트 키 전체(`S:<id>` 처럼 접두가 붙은 to 를 맞춘다)."""
     raw = (to or "").strip()
     if raw in agent_ids:
         return Edge(sender_key, agent_key(raw), "message", at, None, L06)
-    if raw.startswith(("A:", "S:", "W:")) and raw[2:] in agent_ids | set(names.values()):
-        return Edge(sender_key, raw, "message", at, None, L06)
+    if raw.startswith(("A:", "S:", "W:")):
+        known = set(keys or ()) | set(names.values()) | {agent_key(i) for i in agent_ids}
+        if raw in known:
+            return Edge(sender_key, raw, "message", at, None, L06)
     if raw in names:
         return Edge(sender_key, names[raw], "message", at, raw[:LABEL_MAX], L06)
     return Edge(sender_key, external_key(raw or "?"), "message", at, (raw or "?")[:LABEL_MAX], L06, external=True)
@@ -294,6 +301,7 @@ class Fact:
     key: str                          # tool_use.id · runId · to · agentId
     status: str | None = None
     is_error: bool = False
+    task_id: str | None = None        # notification 의 <task-id> (서브에이전트면 agentId — 다시 깨운 뒤 알림 잇기)
 
 
 def is_activity(line: dict) -> bool:
@@ -303,6 +311,8 @@ def is_activity(line: dict) -> bool:
     if line.get("type") == "assistant":
         return isinstance(c, list) and any(isinstance(x, dict) and x.get("type") == "tool_use" for x in c)
     if line.get("type") == "user":
+        if line.get("isMeta"):
+            return False
         if isinstance(c, str):
             return True
         return isinstance(c, list) and any(isinstance(x, dict) and x.get("type") == "text" for x in c)
@@ -348,10 +358,12 @@ def facts(line: dict) -> list[Fact]:
                     body = m.group(1)
                     tid = _TAG["tool-use-id"].search(body)
                     st = _TAG["status"].search(body)
-                    if tid:
+                    task = _TAG["task-id"].search(body)
+                    if tid or task:
                         status = st.group(1).strip() if st else None
-                        out.append(Fact("notification", at, tid.group(1).strip(), status,
-                                        bool(status and END_STATUSES.get(status))))
+                        out.append(Fact("notification", at, tid.group(1).strip() if tid else "", status,
+                                        bool(status and END_STATUSES.get(status)),
+                                        task.group(1).strip() if task else None))
             if "<agent-message" in s:
                 for m in _AGENT_MSG.finditer(s):
                     out.append(Fact("agent_message", at, m.group(1)))
@@ -386,6 +398,7 @@ def scan_projects(projects_dir, *, limit_sessions: int | None = None) -> Scan:
     if limit_sessions is not None:
         session_files = session_files[:limit_sessions]
     files: list[tuple[str, Path]] = []
+    pending: list[tuple[str, str | None, str, ReturnSignal]] = []   # (tool_use.id, task-id, 쓴 쪽, 신호)
     for sf in session_files:
         proj, sid = sf.parent.name, sf.stem
         sk = session_key(sid)
@@ -437,17 +450,19 @@ def scan_projects(projects_dir, *, limit_sessions: int | None = None) -> Scan:
                     elif f.kind == "handback_call" and f.at:
                         sc.signals.setdefault(ak, []).append(ReturnSignal(f.at, "handback"))
                     elif f.kind in ("notification", "agent_error") and f.at:
-                        sc.signals.setdefault(f"tu:{f.key}", []).append(
-                            ReturnSignal(f.at, "notification" if f.kind == "notification" else "tool_error",
-                                         f.status, f.is_error))
+                        pending.append((f.key, f.task_id, ak, ReturnSignal(
+                            f.at, "notification" if f.kind == "notification" else "tool_error", f.status, f.is_error)))
     for rec in sc.agents.values():
         sc.index.add_agent(rec)
-    # tool_use.id 로 모은 신호를 자식 키로 옮긴다
-    for rec in sc.agents.values():
-        if rec.spawn_tool_use and f"tu:{rec.spawn_tool_use}" in sc.signals:
-            sc.signals.setdefault(rec.agent_key, []).extend(sc.signals[f"tu:{rec.spawn_tool_use}"])
-    for k in [k for k in sc.signals if k.startswith("tu:")]:
-        del sc.signals[k]
+    # tool_use.id 로 모은 신호를 자식 키로 옮긴다 — 못 맞추면 task-id(= agentId, 다시 깨운 뒤 알림)
+    by_tu = {rec.spawn_tool_use: rec.agent_key for rec in sc.agents.values()
+             if rec.spawn_tool_use and rec.kind in (SUBAGENT, WORKFLOW_AGENT)}
+    for tu, task, author, sig in pending:
+        child = by_tu.get(tu)
+        if child is None and task and sig.source == "notification" and agent_key(task) in sc.agents:
+            child = agent_key(task)
+        if child is not None and child != author:
+            sc.signals.setdefault(child, []).append(sig)
     return sc
 
 
@@ -496,45 +511,158 @@ def index_from_db(con) -> tuple[dict[str, AgentRec], SpawnIndex]:
     return recs, idx
 
 
-def signals_from_db(con) -> dict[str, list[ReturnSignal]]:
-    """자식 키 → 반환 신호: SubagentHandback(자식 tool_call) · spawn tool_use 의 is_error · SubagentStop 훅."""
+def signals_from_db(con, key: str | None = None) -> dict[str, list[ReturnSignal]]:
+    """자식 키 → 반환 신호: SubagentHandback(자식 tool_call) · spawn tool_use 의 is_error · SubagentStop 훅 ·
+    task-notification(`note_notification` 이 남긴 handback 엣지 label). `key` 를 주면 그 에이전트만."""
     out: dict[str, list[ReturnSignal]] = {}
-    for key, at in con.execute("SELECT agent_key, at FROM tool_call WHERE tool='SubagentHandback' AND at IS NOT NULL"):
-        out.setdefault(key, []).append(ReturnSignal(at, "handback"))
-    for key, at in con.execute(
+    one = " AND {col}=?" if key else ""
+    arg = (key,) if key else ()
+    for k, at in con.execute("SELECT agent_key, at FROM tool_call WHERE tool='SubagentHandback' AND at IS NOT NULL"
+                             + one.format(col="agent_key"), arg):
+        out.setdefault(k, []).append(ReturnSignal(at, "handback"))
+    for k, at in con.execute(
             "SELECT a.agent_key, t.result_at FROM agent a JOIN tool_call t ON t.tool_use_id = a.spawn_tool_use "
-            "WHERE t.ok = 0 AND t.result_at IS NOT NULL"):
-        out.setdefault(key, []).append(ReturnSignal(at, "tool_error", None, True))
-    for key, at in con.execute("SELECT agent_key, at FROM hook_event WHERE event='SubagentStop' AND agent_key LIKE 'A:%'"):
-        out.setdefault(key, []).append(ReturnSignal(at, "hook_stop"))
-    try:                               # 개발1 이 task-notification 을 남기면 (progress-dev2 §3 요청 R2) 그것도 쓴다
-        rows = con.execute("SELECT a.agent_key, e.at, e.label FROM edge e JOIN agent a ON a.agent_key = e.src_key "
-                           "WHERE e.kind='handback' AND e.label LIKE 'notification:%'").fetchall()
-    except Exception:                  # noqa: BLE001 — 표가 없을 일은 없지만 신호 하나 때문에 연결 전체를 멈추지 않는다
-        rows = []
-    for key, at, label in rows:
+            "WHERE t.ok = 0 AND t.result_at IS NOT NULL" + one.format(col="a.agent_key"), arg):
+        out.setdefault(k, []).append(ReturnSignal(at, "tool_error", None, True))
+    for k, at in con.execute("SELECT agent_key, at FROM hook_event WHERE event='SubagentStop' AND agent_key LIKE 'A:%'"
+                             + one.format(col="agent_key"), arg):
+        out.setdefault(k, []).append(ReturnSignal(at, "hook_stop"))
+    rows = con.execute("SELECT a.agent_key, e.at, e.label FROM edge e JOIN agent a ON a.agent_key = e.src_key "
+                       "WHERE e.kind='handback' AND e.label LIKE 'notification:%' AND e.at IS NOT NULL"
+                       + one.format(col="a.agent_key"), arg).fetchall()
+    for key_, at, label in rows:
         st = label.split(":", 1)[1]
-        out.setdefault(key, []).append(ReturnSignal(at, "notification", st))
+        out.setdefault(key_, []).append(ReturnSignal(at, "notification", st))
     return out
 
 
-def note_notification(con, author_key: str, tool_use_id: str, status: str | None, at: str | None) -> bool:
+# ── L-07 마지막 활동 (DEF-QA2-003) ─────────────────────────────────────────────────────
+
+#: 기록 파일 → (크기, mtime_ns, since, 결과). 파일이 자라면 다시 읽는다. 메모리에만.
+_ACT_CACHE: dict[str, tuple[int, int, str, str | None]] = {}
+_TAIL_CHUNK = 1 << 16
+
+
+def record_activity_since(path, since: str) -> str | None:
+    """원천 기록 파일(읽기만, 뒤에서부터)에서 `since` 보다 늦은 마지막 활동 줄(`is_activity`)의 시각. 없으면 None.
+
+    본문은 꺼내지 않는다 — 줄을 dict 로 풀어 종류 · 시각만 본다. 파일이 없으면 None(조용한 끼워 넣기 없음: 호출한 쪽은
+    tool_call 값만으로 판정한다)."""
+    import json
+    import os
+    p = str(path)
+    try:
+        st = os.stat(p)
+    except OSError:
+        return None
+    hit = _ACT_CACHE.get(p)
+    if hit and hit[:3] == (st.st_size, st.st_mtime_ns, since):
+        return hit[3]
+    floor = _norm(since)
+    found: str | None = None
+    with open(p, "rb") as fh:
+        pos, buf, done = st.st_size, b"", False
+        while pos > 0 and not done:
+            n = min(_TAIL_CHUNK, pos)
+            pos -= n
+            fh.seek(pos)
+            buf = fh.read(n) + buf
+            parts = buf.split(b"\n")
+            buf = parts[0] if pos > 0 else b""          # 맨 앞 조각은 줄 중간일 수 있다
+            body = parts[1:] if pos > 0 else parts
+            for raw in reversed(body):
+                if not raw.strip():
+                    continue
+                try:
+                    line = json.loads(raw)
+                except ValueError:
+                    continue
+                if not isinstance(line, dict):
+                    continue
+                ts = line.get("timestamp")
+                if not isinstance(ts, str):
+                    continue
+                if _norm(ts) <= floor and line.get("type") in ("assistant", "user"):
+                    done = True                         # 반환 시각 앞까지 왔다
+                    break
+                if is_activity(line) and _norm(ts) > floor:
+                    found = ts
+                    done = True
+                    break
+    _ACT_CACHE[p] = (st.st_size, st.st_mtime_ns, since, found)
+    return found
+
+
+def _record_path(con, key: str) -> str | None:
+    if not key.startswith("A:"):
+        return None
+    row = con.execute("SELECT path FROM src_file WHERE path LIKE ? ORDER BY path LIMIT 1",
+                      (f"%/agent-{key[2:]}.jsonl",)).fetchone()
+    return row[0] if row else None
+
+
+def _activity(con, key: str, tool_last: str | None, last_event: str | None,
+              signals: list[ReturnSignal]) -> str | None:
+    """마지막 활동 = max(tool_call 마지막 시각, 반환 뒤 기록 꼬리의 활동 줄). 반환 뒤 기록이 없으면 파일을 열지 않는다."""
+    ends = [s.at for s in signals if s.source != "notification" or s.status in END_STATUSES]
+    act = tool_last
+    if not ends or not last_event:
+        return act
+    latest = max(ends, key=_norm)
+    if _norm(last_event) <= _norm(latest):
+        return act
+    path = _record_path(con, key)
+    tail = record_activity_since(path, latest) if path else None
+    if tail and (act is None or _norm(tail) > _norm(act)):
+        act = tail
+    return act
+
+
+def last_activity(con, key: str) -> str | None:
+    """에이전트 하나의 L-07 마지막 활동 시각 (DB tool_call + 기록 꼬리)."""
+    t = con.execute("SELECT MAX(at) FROM tool_call WHERE agent_key=?", (key,)).fetchone()
+    le = con.execute("SELECT last_event_at FROM agent WHERE agent_key=?", (key,)).fetchone()
+    return _activity(con, key, t[0] if t else None, le[0] if le else None, signals_from_db(con, key).get(key, []))
+
+
+def return_of(con, key: str) -> Return | None:
+    """에이전트 하나의 L-07 반환 (state.build_ctx 가 오류 여부 — failed/killed 알림 — 를 읽는다)."""
+    ss = signals_from_db(con, key).get(key, [])
+    if not ss:
+        return None
+    t = con.execute("SELECT MAX(at) FROM tool_call WHERE agent_key=?", (key,)).fetchone()
+    le = con.execute("SELECT last_event_at FROM agent WHERE agent_key=?", (key,)).fetchone()
+    return returned(ss, _activity(con, key, t[0] if t else None, le[0] if le else None, ss))
+
+
+def note_notification(con, author_key: str, tool_use_id: str, status: str | None, at: str | None,
+                      task_id: str | None = None) -> bool:
     """`<task-notification>` 한 건 → handback 엣지(자식 → 부모, label 'notification:<status>'). 개발1 ingest 가 부른다.
 
-    자식(spawn_tool_use = tool_use_id) 행이 아직 없으면 False — 다음 증분 때 다시 온다(L-04 와 같은 재시도).
+    자식 찾기: spawn_tool_use = tool_use_id, 없으면 `A:<task_id>` 서브에이전트 (다시 깨운 뒤 알림 — DEF-QA2-002).
+    자식 행이 아직 없으면 False — 다음 증분 때 다시 온다(L-04 와 같은 재시도).
+    엣지는 (자식, 부모) 하나 — 더 늦은 알림만 시각 · 상태를 바꾼다(늦게 읽힌 옛 알림이 새 반환을 덮지 않게).
     """
     from agentdash.core import model as M
 
-    if not tool_use_id or not at:
+    if not at or not (tool_use_id or task_id):
         return False
-    row = con.execute("SELECT agent_key FROM agent WHERE spawn_tool_use=?", (tool_use_id,)).fetchone()
-    if row is None:
+    row = con.execute("SELECT agent_key FROM agent WHERE spawn_tool_use=?", (tool_use_id,)).fetchone() \
+        if tool_use_id else None
+    if row is None and task_id:
+        row = con.execute("SELECT agent_key FROM agent WHERE agent_key=? AND kind IN ('SUBAGENT','WORKFLOW_AGENT')",
+                          (agent_key(task_id[:80]),)).fetchone()
+    if row is None or row[0] == author_key:
         return False
     label = f"notification:{(status or '?')[:20]}"
-    if M.add_edge(con, row[0], author_key, "handback", at, label):
+    cur = con.execute("SELECT at FROM edge WHERE src_key=? AND dst_key=? AND kind='handback'",
+                      (row[0], author_key)).fetchone()
+    if cur is None:
+        M.add_edge(con, row[0], author_key, "handback", at, label)
         return True
-    con.execute("UPDATE edge SET label=? WHERE src_key=? AND dst_key=? AND kind='handback' AND (at IS NULL OR at<=?)",
-                (label, row[0], author_key, at))
+    if cur[0] is None or _norm(at) >= _norm(cur[0]):
+        con.execute("UPDATE edge SET at=?, label=?, count=count+1 WHERE src_key=? AND dst_key=? AND kind='handback'",
+                    (at, label, row[0], author_key))
     return True
 
 
@@ -556,7 +684,7 @@ def on_line(con, author_key: str, line: dict) -> int:
     Workflow runId(L-03). 남긴 수. 개발1 ingest 가 assistant/user 줄마다 부른다 (progress-dev2 §3 R1)."""
     n = 0
     for f in facts(line):
-        if f.kind == "notification" and note_notification(con, author_key, f.key, f.status, f.at):
+        if f.kind == "notification" and note_notification(con, author_key, f.key, f.status, f.at, f.task_id):
             n += 1
         elif f.kind == "workflow_call" and note_workflow_call(con, author_key, f.key, f.at):
             n += 1
@@ -573,8 +701,9 @@ def resolve_all(con, *, sources_complete: bool = True) -> dict[str, Link]:
     recs, idx = index_from_db(con)
     links: dict[str, Link] = {}
     cur_parent = {r[0]: r[1] for r in con.execute("SELECT agent_key, parent_key FROM agent")}
-    # 마지막 활동 = 그 에이전트의 마지막 tool_use 시각 (handback 자신 포함 — 반환 뒤 새 tool_use 가 있으면 다시 깨어난 것)
+    # 마지막 활동 = 마지막 tool_use 시각(handback 자신 포함) + 반환 뒤 기록 꼬리의 들어온 메시지 (`_activity`, DEF-QA2-003)
     last = {r[0]: r[1] for r in con.execute("SELECT agent_key, MAX(at) FROM tool_call GROUP BY agent_key")}
+    last_event = {r[0]: r[1] for r in con.execute("SELECT agent_key, last_event_at FROM agent")}
     for rec in sorted(recs.values(), key=lambda r: r.depth):
         if rec.kind == SESSION:
             continue
@@ -592,7 +721,7 @@ def resolve_all(con, *, sources_complete: bool = True) -> dict[str, Link]:
         rec = recs.get(key)
         if rec is None:
             continue
-        ret = returned(ss, last.get(key))
+        ret = returned(ss, _activity(con, key, last.get(key), last_event.get(key), ss))
         ended = con.execute("SELECT ended_at FROM agent WHERE agent_key=?", (key,)).fetchone()[0]
         if ret is not None:
             if ended != ret.ended_at:
@@ -606,9 +735,10 @@ def resolve_all(con, *, sources_complete: bool = True) -> dict[str, Link]:
     # L-06
     ids = {k[2:] for k in recs if k.startswith("A:")}
     names = {r.name: k for k, r in recs.items() if r.name}
+    keys = set(recs)
     counts: dict[tuple[str, str], int] = {}
     for sender, to, at in con.execute("SELECT agent_key, target, at FROM tool_call WHERE tool='SendMessage'").fetchall():
-        e = resolve_message(sender, to or "", agent_ids=ids, names=names, at=at)
+        e = resolve_message(sender, to or "", agent_ids=ids, names=names, at=at, keys=keys)
         counts[(e.src_key, e.dst_key)] = counts.get((e.src_key, e.dst_key), 0) + 1
         if not _has_edge(con, e):
             M.add_edge(con, e.src_key, e.dst_key, "message", e.at, e.label)

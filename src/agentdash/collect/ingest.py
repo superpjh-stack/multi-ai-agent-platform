@@ -10,6 +10,9 @@
 포크 사본 (D-02 가설 반박): `isFork` 서브에이전트 기록은 맨 앞에 부모 기록 줄을 uuid · requestId · 시각 그대로 다시 적는다.
 그 줄(부모 파일에 같은 uuid 가 있는 줄 + 부모 assistant 와 requestId 가 같은 assistant 줄 = 띄운 호출의 재기록)은
 부모 몫이므로 토큰 · 도구 호출로 세지 않는다. 사본은 포크 시작 때 한 번에 적히므로 처음 읽기(offset 0)에서만 확인한다.
+단 사본 줄의 usage 가 소유 행보다 **더 최종**(output 큼)이면 그 값을 소유 행에 반영한다 (DEF-QA1-001 —
+requestId 하나는 세션에서 한 번, 값은 소유 기록 + 사본을 통틀어 output 최대 줄). 소유 행이 아직 없으면(부모 기록을
+아직 못 읽음) `_fork_pending` 에 두었다가 다음 기록을 읽은 뒤 다시 반영한다.
 """
 
 from __future__ import annotations
@@ -35,6 +38,8 @@ from agentdash.core import usage as U
 META_WAIT_SEC = 60          # 서브에이전트 jsonl 이 meta 보다 먼저 보이면 이만큼 기다린다 (포크 여부를 알아야 사본을 뺀다)
 _post_hooks: list[Callable[[sqlite3.Connection, set[str]], None]] = []
 fork_copied: dict[str, int] = {}      # 포크 jsonl 경로 → 사본으로 뺀 줄 수 (check 도구 · 보고용)
+#: (DB 파일, session_id, requestId) → 사본 줄 중 output 최대 UsageEvent — 소유 행이 생기면 반영 (DEF-QA1-001)
+_fork_pending: dict[tuple[str, str, str], M.UsageEvent] = {}
 _pricing_cache: dict = {}
 
 
@@ -276,6 +281,26 @@ def _ids_of(path: Path) -> tuple[set[str], set[str]]:
     return uuids, rids
 
 
+def _db_id(con: sqlite3.Connection) -> str:
+    row = con.execute("PRAGMA database_list").fetchone()
+    return (row[2] or ":memory:") if row else ""
+
+
+def _apply_fork_pending(con: sqlite3.Connection) -> set[str]:
+    """미뤄 둔 사본 최종값을 소유 행에 반영한다 → 값이 바뀐 소유 agent_key 집합 (usage_daily 재계산 대상)."""
+    if not _fork_pending:
+        return set()
+    dbid = _db_id(con)
+    changed: set[str] = set()
+    for k in [k for k in _fork_pending if k[0] == dbid]:
+        r = M.upgrade_owner_usage(con, k[1], _fork_pending[k])
+        if r is not None:
+            del _fork_pending[k]
+            if r:
+                changed.add(r)
+    return changed
+
+
 def _fork_parent_file(jsonl: Path, extra: M.AgentExtra) -> Path:
     sess_dir = jsonl.parent.parent
     if extra.parent_agent_id:
@@ -340,6 +365,19 @@ def _ingest_transcript(con: sqlite3.Connection, path: Path, kind: str) -> set[st
         if parent_ids is not None and (rec.uuid in parent_ids[0]
                                        or (rec.type == "assistant" and rec.request_id in parent_ids[1])):
             copied += 1
+            if rec.type == "assistant" and rec.usage is not None and rec.request_id \
+                    and rec.model not in pricing.exclude:      # 사본 쪽이 더 최종일 수 있다 → 소유 행에 반영 (DEF-QA1-001)
+                u = rec.usage
+                cev = M.UsageEvent(agent_key="", request_id=rec.request_id, at=rec.timestamp, model=rec.model,
+                                   speed=u.speed, input_tokens=u.input_tokens, cache_read=u.cache_read,
+                                   cache_write_5m=u.cache_write_5m, cache_write_1h=u.cache_write_1h,
+                                   output_tokens=u.output_tokens, thinking_tokens=u.thinking_tokens,
+                                   web_search=u.web_search, web_fetch=u.web_fetch)
+                cev.cost_usd, cev.pricing_ver = U.cost(cev, pricing)
+                pk = (_db_id(con), base.session_id, rec.request_id)
+                prev = _fork_pending.get(pk)
+                if prev is None or (cev.output_tokens or 0) > (prev.output_tokens or 0):
+                    _fork_pending[pk] = cev
             continue                # 포크 사본 — 부모 몫
         ts = rec.timestamp
         first_ts = ts if first_ts is None or ts < first_ts else first_ts
@@ -386,8 +424,9 @@ def _ingest_transcript(con: sqlite3.Connection, path: Path, kind: str) -> set[st
             _set_name(con, key, fallback, force=True)
     if parent_ids is not None:
         fork_copied[str(path)] = copied
+    owners = _apply_fork_pending(con)   # 이 기록이 소유 행을 만들었거나, 이 기록의 사본이 소유 행을 기다린다
     tail.commit(con, ch)
-    return {key}
+    return {key} | owners
 
 
 # ── 진입점 ────────────────────────────────────────────────────────────
@@ -457,6 +496,7 @@ def ingest_all(con: sqlite3.Connection, *, since: str | None = None, run_hooks: 
             continue
         rep.files[k] = rep.files.get(k, 0) + 1
         rep.changed |= ingest_path(con, p)
+    rep.changed |= _apply_fork_pending(con)
     if run_hooks:
         for fn in list(_post_hooks):
             fn(con, rep.changed)

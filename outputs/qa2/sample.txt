@@ -1,0 +1,36 @@
+# STALE 8
+S:dbd09a2a-f7cb-4121-9a92-cf8d0352ad28
+A:adb2bacd2ac16c31f
+A:a2a0029196a84aba3
+A:adc075af0bd2072a0
+A:abca160dd070f2db8
+A:a39a8de156b8640a4
+A:abe5c570d21c89b2a
+A:acfbcbeabcb648847
+# RUNNING 3
+S:2bee9170-9e95-4e4e-873d-8490f228ad20
+A:a85b98ff6f908df54
+A:aa798b51a24f94adf
+# WAITING_INPUT 2
+S:493d1a8d-6430-4776-95f1-f6b085637edd
+S:47aedf14-c5b7-4450-a193-6612b438b1f2
+# 실패 신호 (notification failed) 6
+A:a1be09e3359a3ca1b
+A:ac4e7216cbd09ab07
+A:a9afb7c7042020e72
+A:a92030bc3db0e0a8e
+A:a3a79ff5ebee2a7fa
+A:a5a75228a8eaf44fc
+# 끝남 — notification completed 2 · handback 3 · 손자 1 · 워크플로 1 · 이 프로젝트 아키텍트 1
+A:af7afb54cf071f370
+A:a09ca3114de33f070
+A:adbcd6ddd172a1a37
+A:a13d00c3ffcad4892
+A:a6130eff62a5e5e2c
+A:a76932516fc410131
+A:a5de9442449dd9e3f
+A:ae52277140e6732bc
+# 세션 끝남 3
+S:11ca1f26-f741-41b1-8811-2225b85e23a6
+S:ae4ea40d-8f2c-47cd-ac22-b9c562f8ce86
+S:48969e43-c379-4e13-9121-4effbb9bc79d

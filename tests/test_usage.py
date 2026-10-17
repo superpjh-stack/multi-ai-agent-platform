@@ -133,3 +133,121 @@ def test_add_usage_keeps_final_stream():
     e3 = M.UsageEvent(agent_key="A:x", request_id="r", at="t3", model="m", output_tokens=20)
     M.add_usage(c, e3)
     assert c.execute("SELECT output_tokens, at FROM usage_event").fetchall() == [(50, "t2")]
+
+
+# ── 웨이브 D — DEF-QA1-001: 포크 사본이 부모보다 더 최종인 usage 를 가지면 그 값으로 (부모 몫 그대로) ──
+def _build_fork_final(home):
+    sess = home / "projects" / PK / f"{SID}.jsonl"
+    _write(sess, [
+        _asst("p1", "R1", "2026-10-16T14:59:00Z", 10),          # 부모 기록엔 스트리밍 시작값만
+        _asst("p2", "R2", "2026-10-16T15:00:00Z", 60),
+    ])
+    sub = home / "projects" / PK / SID / "subagents"
+    # 깊이 1 서브에이전트 c1 (포크 아님) — 손자 포크의 부모
+    _write(sub / "agent-c1.jsonl", [_asst("c1a", "RC1", "2026-10-16T15:10:00Z", 7, agent="c1")])
+    (sub / "agent-c1.meta.json").write_text(json.dumps({"agentType": "general-purpose", "toolUseId": "t1",
+                                                        "spawnDepth": 1}))
+    # 포크 f1 (세션의 사본): p1 은 같은 uuid 로 더 큰 output 178 · p2 는 더 작은 값 · 띄운 호출 재기록(새 uuid · R1) 200
+    _write(sub / "agent-f1.jsonl", [
+        _asst("p1", "R1", "2026-10-16T14:59:00Z", 178, agent="f1"),
+        _asst("p2", "R2", "2026-10-16T15:00:00Z", 30, agent="f1"),
+        _asst("fx", "R1", "2026-10-16T15:00:30Z", 200, agent="f1"),
+        _asst("f1a", "RF1", "2026-10-16T15:20:00Z", 3, agent="f1"),
+    ])
+    (sub / "agent-f1.meta.json").write_text(json.dumps({"agentType": "fork", "isFork": True, "toolUseId": "t9",
+                                                        "spawnDepth": 1}))
+    # 손자 포크 f2 (c1 의 사본, parentAgentId) — 경로 정렬상 부모 c1 보다 먼저 읽힐 수 있다
+    _write(sub / "agent-a0f2.jsonl", [
+        _asst("c1a", "RC1", "2026-10-16T15:10:00Z", 50, agent="a0f2"),
+        _asst("f2a", "RF2", "2026-10-16T15:30:00Z", 4, agent="a0f2"),
+    ])
+    (sub / "agent-a0f2.meta.json").write_text(json.dumps({"agentType": "fork", "isFork": True, "toolUseId": "t8",
+                                                          "spawnDepth": 2, "parentAgentId": "c1"}))
+    return sess, sub
+
+
+def _rows_of(con, key):
+    return dict(con.execute("SELECT request_id, output_tokens FROM usage_event WHERE agent_key=?", (key,)).fetchall())
+
+
+def test_fork_copy_final_value_goes_to_owner(home, con):
+    _build_fork_final(home)
+    ingest.ingest_all(con, run_hooks=False)
+    assert _rows_of(con, f"S:{SID}") == {"R1": 200, "R2": 60}       # 세션 안 최댓값 · 줄어든 사본은 무시
+    assert _rows_of(con, "A:f1") == {"RF1": 3}                       # 사본은 여전히 부모 몫
+    assert _rows_of(con, "A:c1") == {"RC1": 50}                      # 손자 포크 사본 → 부모 서브에이전트
+    assert _rows_of(con, "A:a0f2") == {"RF2": 4}
+    # 시각은 소유 기록 그대로 (일자 경계가 사본 시각으로 밀리지 않게)
+    at = con.execute("SELECT at FROM usage_event WHERE agent_key=? AND request_id='R1'", (f"S:{SID}",)).fetchone()[0]
+    assert at == "2026-10-16T14:59:00Z"
+    dup = con.execute("SELECT COUNT(*) FROM (SELECT request_id FROM usage_event GROUP BY request_id HAVING COUNT(*)>1)")
+    assert dup.fetchone()[0] == 0
+    assert U.totals(con, f"S:{SID}", descendants=True)["output_tokens"] == 200 + 60 + 50 + 3 + 4
+    # 비용도 최종값으로 다시 계산
+    c = con.execute("SELECT cost_usd FROM usage_event WHERE agent_key=? AND request_id='R1'", (f"S:{SID}",)).fetchone()[0]
+    ev = M.UsageEvent(agent_key="x", request_id="R1", at="", model="claude-opus-5-5", input_tokens=10, cache_read=0,
+                      cache_write_5m=0, cache_write_1h=0, output_tokens=200)
+    assert c == pytest.approx(U.cost(ev, U.load_pricing())[0])
+
+
+def test_fork_copy_final_when_fork_read_before_owner(home, con):
+    """포크 기록이 부모보다 먼저 읽혀도(감시기 순서) 나중에 소유 행에 반영되고, 부모의 작은 값이 덮지 않는다."""
+    sess, sub = _build_fork_final(home)
+    ingest.ingest_path(con, sub / "agent-c1.meta.json")
+    ingest.ingest_path(con, sub / "agent-a0f2.meta.json")
+    ingest.ingest_path(con, sub / "agent-a0f2.jsonl")              # 부모 c1 기록 아직 안 읽음
+    assert _rows_of(con, "A:a0f2") == {"RF2": 4}
+    ingest.ingest_path(con, sub / "agent-c1.jsonl")
+    assert _rows_of(con, "A:c1") == {"RC1": 50}
+
+
+# ── 웨이브 D — DEF-QA1-006: 기간 · 묶음의 「작성 파일」 = 기간 안 고유 (agent, path) 수 ──
+def _file_tool(uuid, rid, ts, tool, path, tid):
+    d = json.loads(_asst(uuid, rid, ts, 5))
+    d["message"]["content"] = [{"type": "tool_use", "id": tid, "name": tool, "input": {"file_path": path}}]
+    return json.dumps(d)
+
+
+def test_files_written_unique_over_period(home, con):
+    sess = home / "projects" / PK / f"{SID}.jsonl"
+    _write(sess, [
+        _file_tool("w1", "R1", "2026-10-15T01:00:00Z", "Write", "/tmp/proj/a.py", "t1"),   # KST 10-15
+        _file_tool("w2", "R2", "2026-10-16T01:00:00Z", "Edit", "/tmp/proj/a.py", "t2"),    # KST 10-16 같은 파일
+        _file_tool("w3", "R3", "2026-10-16T02:00:00Z", "Write", "/tmp/proj/b.py", "t3"),
+    ])
+    ingest.ingest_all(con, run_hooks=False)
+    U.rebuild_daily(con)
+    for group in ("agent", "project", "type", "model"):
+        t = U.table(con, "2026-10-15", "2026-10-16", group)
+        assert t["total"]["files_written"] == 2, group                 # a.py · b.py (Write 와 Edit 가 다른 날이어도 1)
+        assert sum(r["files_written"] for r in t["rows"]) == 2, group
+    by_day = {r["key"]: r["files_written"] for r in U.table(con, "2026-10-15", "2026-10-16", "day")["rows"]}
+    assert by_day == {"2026-10-15": 1, "2026-10-16": 2}                # 일자 묶음은 그날 고유 수
+    assert U.table(con, "2026-10-16", "2026-10-16", "agent")["total"]["files_written"] == 2
+    assert U.table(con, "2026-10-15", "2026-10-15", "agent")["total"]["files_written"] == 1
+
+
+# ── 웨이브 D — DEF-QA1-002 / D-17 (차단) 임시 표기 ①: 서브에이전트 · 워크플로 출력은 「기록상 과소 (D-17)」 ──
+def test_undercount_flag_on_subagent_totals(home, con):
+    _build(home)
+    ingest.ingest_all(con, run_hooks=False)
+    own = U.totals(con, f"S:{SID}")
+    assert own["undercount"] is False and own["undercount_note"] is None      # 메인 세션 자기 몫은 표기 없음
+    allx = U.totals(con, f"S:{SID}", descendants=True)
+    assert allx["undercount"] is True and allx["undercount_note"] == "기록상 과소 (D-17)"
+    assert allx["undercount_output"] == 7 + 3 + 11                            # 과소 의심 몫 = 자손 출력
+    assert U.totals(con, "A:c1")["undercount"] is True
+    assert allx["output_tokens"] == 140 + 7 + 3 + 11                          # 숫자는 원천 그대로
+
+
+def test_undercount_flag_in_usage_table(home, con):
+    _build(home)
+    ingest.ingest_all(con, run_hooks=False)
+    U.rebuild_daily(con)
+    t = U.table(con, "2026-10-16", "2026-10-17", "agent")
+    flags = {r["key"]: r["undercount"] for r in t["rows"]}
+    assert flags[f"S:{SID}"] is False and flags["A:c1"] is True and flags["A:f1"] is True
+    assert t["total"]["undercount"] is True and t["undercount_note"] == "기록상 과소 (D-17)"
+    assert t["total"]["undercount_output"] == 21
+    by_day = U.table(con, "2026-10-16", "2026-10-17", "day")
+    assert all("undercount" in r for r in by_day["rows"])

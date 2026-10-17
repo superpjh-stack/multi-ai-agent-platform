@@ -1,0 +1,716 @@
+{
+ "now": "2026-10-17T08:09:50Z",
+ "s1": {
+  "493d1a8d-6430-4776-95f1-f6b085637edd": {
+   "file": "95593.json",
+   "status": "shell",
+   "pid": 95593,
+   "alive": true,
+   "updatedAt": 1792220755475
+  },
+  "2bee9170-9e95-4e4e-873d-8490f228ad20": {
+   "file": "85955.json",
+   "status": "busy",
+   "pid": 85955,
+   "alive": true,
+   "updatedAt": 1792220290153
+  },
+  "47aedf14-c5b7-4450-a193-6612b438b1f2": {
+   "file": "95787.json",
+   "status": "idle",
+   "pid": 95787,
+   "alive": true,
+   "updatedAt": 1792223895863
+  }
+ },
+ "results": [
+  {
+   "key": "S:dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "kind": "SESSION",
+   "last_at": "2026-10-14T17:55:19.326Z",
+   "age_s": 224071,
+   "last_kind": "assistant:tool_use",
+   "last_tools": [
+    "AskUserQuestion"
+   ],
+   "pending": [
+    "AskUserQuestion"
+   ],
+   "s1": null,
+   "wakeup": "2026-10-14T17:34:00",
+   "children": 64,
+   "open_children": 0,
+   "last_item_pending_tool_use": true,
+   "qa_state": "STALE",
+   "qa_rule": "R-06",
+   "why": "S1 없음/pid 소멸 · 마지막 항목 결과 없는 tool_use"
+  },
+  {
+   "key": "A:adb2bacd2ac16c31f",
+   "kind": "SUBAGENT",
+   "session": "09cc91b1-cd23-48d9-9fc8-ad621a59024a",
+   "last_at": "2026-09-18T21:07:41.354Z",
+   "age_s": 2458929,
+   "last_kind": "user:message",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-09-18T21:07:41.354Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음"
+  },
+  {
+   "key": "A:a2a0029196a84aba3",
+   "kind": "SUBAGENT",
+   "session": "6a44e325-a62a-4cba-b626-be75dded0119",
+   "last_at": "2026-09-28T01:23:26.010Z",
+   "age_s": 1665984,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-09-28T01:13:14.606Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음"
+  },
+  {
+   "key": "A:adc075af0bd2072a0",
+   "kind": "SUBAGENT",
+   "session": "a82388db-0805-497d-b426-4250137da3b5",
+   "last_at": "2026-09-28T00:17:37.676Z",
+   "age_s": 1669933,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [
+    [
+     "2026-09-27T16:18:14.933Z",
+     "notification:completed"
+    ],
+    [
+     "2026-09-27T16:44:18.582Z",
+     "notification:completed"
+    ],
+    [
+     "2026-09-27T17:57:31.715Z",
+     "notification:completed"
+    ],
+    [
+     "2026-09-28T00:17:39.927Z",
+     "notification:completed"
+    ]
+   ],
+   "last_activity": "2026-09-28T00:17:02.260Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 notification:completed 2026-09-28T00:17:39.927Z"
+  },
+  {
+   "key": "A:abca160dd070f2db8",
+   "kind": "SUBAGENT",
+   "session": "67760b59-0903-467f-972f-2d6b5e5aedac",
+   "last_at": "2026-10-09T03:56:32.968Z",
+   "age_s": 706397,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-09T03:08:06.219Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음"
+  },
+  {
+   "key": "A:a39a8de156b8640a4",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-12T16:21:27.353Z",
+   "age_s": 402503,
+   "last_kind": "assistant:text",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-12T16:21:02.337Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-10-12T16:21:12.538Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음"
+  },
+  {
+   "key": "A:abe5c570d21c89b2a",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-12T17:27:21.841Z",
+   "age_s": 398549,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-12T17:26:36.374Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음"
+  },
+  {
+   "key": "A:acfbcbeabcb648847",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-12T17:27:26.766Z",
+   "age_s": 398544,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-12T17:26:57.667Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "STALE",
+   "qa_rule": "R-11",
+   "why": "소속 세션 프로세스 없음 · 반환 없음"
+  },
+  {
+   "key": "S:2bee9170-9e95-4e4e-873d-8490f228ad20",
+   "kind": "SESSION",
+   "last_at": "2026-10-17T08:05:52.175Z",
+   "age_s": 238,
+   "last_kind": "assistant:text",
+   "last_tools": [],
+   "pending": [],
+   "s1": {
+    "file": "85955.json",
+    "status": "busy",
+    "pid": 85955,
+    "alive": true,
+    "updatedAt": 1792220290153
+   },
+   "wakeup": "2026-10-17T08:35:38",
+   "children": 7,
+   "open_children": 2,
+   "qa_state": "RUNNING",
+   "qa_rule": "R-02a",
+   "why": "S1 busy · pid 살아 있음 · 5 분 안"
+  },
+  {
+   "key": "A:a85b98ff6f908df54",
+   "kind": "SUBAGENT",
+   "session": "2bee9170-9e95-4e4e-873d-8490f228ad20",
+   "last_at": "2026-10-17T08:09:50.948Z",
+   "age_s": 0,
+   "last_kind": "user:tool_result",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-17T08:09:50.428Z",
+   "session_s1": "busy",
+   "session_alive": true,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "RUNNING",
+   "qa_rule": "R-09",
+   "why": "0초 전 기록"
+  },
+  {
+   "key": "A:aa798b51a24f94adf",
+   "kind": "SUBAGENT",
+   "session": "2bee9170-9e95-4e4e-873d-8490f228ad20",
+   "last_at": "2026-10-17T08:09:50.624Z",
+   "age_s": 0,
+   "last_kind": "assistant:tool_use",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-17T08:09:50.624Z",
+   "session_s1": "busy",
+   "session_alive": true,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "RUNNING",
+   "qa_rule": "R-09",
+   "why": "0초 전 기록"
+  },
+  {
+   "key": "S:493d1a8d-6430-4776-95f1-f6b085637edd",
+   "kind": "SESSION",
+   "last_at": "2026-10-17T07:05:55.472Z",
+   "age_s": 3835,
+   "last_kind": "assistant:text",
+   "last_tools": [],
+   "pending": [],
+   "s1": {
+    "file": "95593.json",
+    "status": "shell",
+    "pid": 95593,
+    "alive": true,
+    "updatedAt": 1792220755475
+   },
+   "wakeup": null,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "WAITING_INPUT",
+   "qa_rule": "R-05",
+   "why": "S1 status=shell"
+  },
+  {
+   "key": "S:47aedf14-c5b7-4450-a193-6612b438b1f2",
+   "kind": "SESSION",
+   "last_at": "2026-10-17T07:58:15.848Z",
+   "age_s": 695,
+   "last_kind": "assistant:text",
+   "last_tools": [],
+   "pending": [],
+   "s1": {
+    "file": "95787.json",
+    "status": "idle",
+    "pid": 95787,
+    "alive": true,
+    "updatedAt": 1792223895863
+   },
+   "wakeup": null,
+   "children": 0,
+   "open_children": 0,
+   "qa_state": "WAITING_INPUT",
+   "qa_rule": "R-05",
+   "why": "S1 status=idle"
+  },
+  {
+   "key": "A:a1be09e3359a3ca1b",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-14T15:25:40.877Z",
+   "age_s": 233050,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-14T15:25:40.425Z",
+     "handback"
+    ],
+    [
+     "2026-10-14T00:01:57.090Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-10-14T15:25:40.425Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-14T15:25:40.425Z"
+  },
+  {
+   "key": "A:ac4e7216cbd09ab07",
+   "kind": "SUBAGENT",
+   "session": "df9fa7f8-2ec5-43ca-939a-a97385cbc262",
+   "last_at": "2026-10-11T07:56:58.712Z",
+   "age_s": 519172,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-11T07:56:58.373Z",
+     "handback"
+    ],
+    [
+     "2026-10-11T02:05:26.378Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-10-11T07:56:58.373Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-11T07:56:58.373Z"
+  },
+  {
+   "key": "A:a9afb7c7042020e72",
+   "kind": "SUBAGENT",
+   "session": "df9fa7f8-2ec5-43ca-939a-a97385cbc262",
+   "last_at": "2026-10-11T07:56:48.928Z",
+   "age_s": 519182,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-11T07:56:48.584Z",
+     "handback"
+    ],
+    [
+     "2026-10-11T02:05:26.377Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-10-11T07:56:48.584Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-11T07:56:48.584Z"
+  },
+  {
+   "key": "A:a92030bc3db0e0a8e",
+   "kind": "SUBAGENT",
+   "session": "df9fa7f8-2ec5-43ca-939a-a97385cbc262",
+   "last_at": "2026-10-11T07:56:25.169Z",
+   "age_s": 519205,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-11T07:56:24.785Z",
+     "handback"
+    ],
+    [
+     "2026-10-11T02:05:26.375Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-10-11T07:56:24.785Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-11T07:56:24.785Z"
+  },
+  {
+   "key": "A:a3a79ff5ebee2a7fa",
+   "kind": "SUBAGENT",
+   "session": "67760b59-0903-467f-972f-2d6b5e5aedac",
+   "last_at": "2026-10-08T22:32:19.996Z",
+   "age_s": 725850,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [
+    [
+     "2026-10-08T22:32:20.006Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-10-08T22:32:19.075Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "FAILED",
+   "qa_rule": "R-08",
+   "why": "반환 notification:failed 2026-10-08T22:32:20.006Z"
+  },
+  {
+   "key": "A:a5a75228a8eaf44fc",
+   "kind": "SUBAGENT",
+   "session": "67760b59-0903-467f-972f-2d6b5e5aedac",
+   "last_at": "2026-10-08T22:31:46.581Z",
+   "age_s": 725884,
+   "last_kind": "assistant:text",
+   "handbacks": 0,
+   "signals": [
+    [
+     "2026-10-08T22:31:46.589Z",
+     "notification:failed"
+    ]
+   ],
+   "last_activity": "2026-10-08T22:31:45.785Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "FAILED",
+   "qa_rule": "R-08",
+   "why": "반환 notification:failed 2026-10-08T22:31:46.589Z"
+  },
+  {
+   "key": "A:af7afb54cf071f370",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-13T20:54:53.593Z",
+   "age_s": 299697,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-13T20:54:53.219Z",
+     "handback"
+    ],
+    [
+     "2026-10-13T20:43:53.692Z",
+     "notification:completed"
+    ]
+   ],
+   "last_activity": "2026-10-13T20:54:53.219Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-13T20:54:53.219Z"
+  },
+  {
+   "key": "A:a09ca3114de33f070",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-13T20:54:08.341Z",
+   "age_s": 299742,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-13T20:54:07.764Z",
+     "handback"
+    ],
+    [
+     "2026-10-13T20:54:17.272Z",
+     "notification:completed"
+    ]
+   ],
+   "last_activity": "2026-10-13T20:54:07.764Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 notification:completed 2026-10-13T20:54:17.272Z"
+  },
+  {
+   "key": "A:adbcd6ddd172a1a37",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-12T18:47:48.805Z",
+   "age_s": 393722,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-12T18:47:48.312Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-10-12T18:47:48.312Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-12T18:47:48.312Z"
+  },
+  {
+   "key": "A:a13d00c3ffcad4892",
+   "kind": "SUBAGENT",
+   "session": "dbd09a2a-f7cb-4121-9a92-cf8d0352ad28",
+   "last_at": "2026-10-13T17:54:30.947Z",
+   "age_s": 310519,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-13T17:54:30.479Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-10-13T17:54:30.479Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-13T17:54:30.479Z"
+  },
+  {
+   "key": "A:a6130eff62a5e5e2c",
+   "kind": "SUBAGENT",
+   "session": "67760b59-0903-467f-972f-2d6b5e5aedac",
+   "last_at": "2026-10-09T06:27:32.844Z",
+   "age_s": 697338,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-09T06:27:32.409Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-10-09T06:27:32.409Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-09T06:27:32.409Z"
+  },
+  {
+   "key": "A:a76932516fc410131",
+   "kind": "SUBAGENT",
+   "session": "8f3a6abd-0740-4164-9188-e5ac6af4cd37",
+   "last_at": "2026-10-09T18:33:31.720Z",
+   "age_s": 653779,
+   "last_kind": "assistant:text",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-09T18:33:05.930Z",
+     "handback"
+    ],
+    [
+     "2026-10-09T18:33:34.001Z",
+     "notification:completed"
+    ]
+   ],
+   "last_activity": "2026-10-09T18:33:10.297Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 notification:completed 2026-10-09T18:33:34.001Z"
+  },
+  {
+   "key": "A:a5de9442449dd9e3f",
+   "kind": "WORKFLOW_AGENT",
+   "session": "8f3a6abd-0740-4164-9188-e5ac6af4cd37",
+   "last_at": "2026-10-10T02:49:37.181Z",
+   "age_s": 624013,
+   "last_kind": "user:tool_result",
+   "handbacks": 0,
+   "signals": [],
+   "last_activity": "2026-10-10T02:49:37.131Z",
+   "session_s1": null,
+   "session_alive": false,
+   "toolUseId_present": false,
+   "children": 0,
+   "wf_status": "completed",
+   "wf_keys": [
+    "agentCount",
+    "defaultModel",
+    "durationMs",
+    "logs",
+    "phases",
+    "result",
+    "runId",
+    "script",
+    "scriptPath",
+    "startTime",
+    "status",
+    "summary"
+   ],
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "워크플로 S6 status=completed"
+  },
+  {
+   "key": "A:ae52277140e6732bc",
+   "kind": "SUBAGENT",
+   "session": "2bee9170-9e95-4e4e-873d-8490f228ad20",
+   "last_at": "2026-10-17T07:15:13.268Z",
+   "age_s": 3277,
+   "last_kind": "user:tool_result",
+   "handbacks": 1,
+   "signals": [
+    [
+     "2026-10-17T07:15:12.708Z",
+     "handback"
+    ]
+   ],
+   "last_activity": "2026-10-17T07:15:12.708Z",
+   "session_s1": "busy",
+   "session_alive": true,
+   "toolUseId_present": true,
+   "children": 0,
+   "qa_state": "DONE",
+   "qa_rule": "R-08",
+   "why": "반환 handback 2026-10-17T07:15:12.708Z"
+  },
+  {
+   "key": "S:11ca1f26-f741-41b1-8811-2225b85e23a6",
+   "kind": "SESSION",
+   "last_at": "2026-10-17T01:26:14.917Z",
+   "age_s": 24216,
+   "last_kind": "assistant:text",
+   "last_tools": [],
+   "pending": [],
+   "s1": null,
+   "wakeup": null,
+   "children": 0,
+   "open_children": 0,
+   "last_item_pending_tool_use": false,
+   "qa_state": "DONE",
+   "qa_rule": "R-07",
+   "why": "S1 없음/pid 소멸"
+  },
+  {
+   "key": "S:ae4ea40d-8f2c-47cd-ac22-b9c562f8ce86",
+   "kind": "SESSION",
+   "last_at": "2026-10-16T09:04:39.734Z",
+   "age_s": 83111,
+   "last_kind": "assistant:text",
+   "last_tools": [],
+   "pending": [],
+   "s1": null,
+   "wakeup": null,
+   "children": 1,
+   "open_children": 0,
+   "last_item_pending_tool_use": false,
+   "qa_state": "DONE",
+   "qa_rule": "R-07",
+   "why": "S1 없음/pid 소멸"
+  },
+  {
+   "key": "S:48969e43-c379-4e13-9121-4effbb9bc79d",
+   "kind": "SESSION",
+   "last_at": "2026-09-30T04:29:09.759Z",
+   "age_s": 1482041,
+   "last_kind": "assistant:text",
+   "last_tools": [],
+   "pending": [],
+   "s1": null,
+   "wakeup": "2026-09-30T04:25:55",
+   "children": 0,
+   "open_children": 0,
+   "last_item_pending_tool_use": false,
+   "qa_state": "DONE",
+   "qa_rule": "R-07",
+   "why": "S1 없음/pid 소멸"
+  }
+ ]
+}

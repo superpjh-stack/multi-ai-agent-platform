@@ -266,3 +266,130 @@ def test_note_notification_and_message_edges(tmp_path):
     L.resolve_all(con)
     assert con.execute("SELECT count FROM edge WHERE src_key='S:s' AND dst_key='A:c1' AND kind='message'").fetchone()[0] == 2
     con.close()
+
+
+# ── 웨이브 D (QA2 DEF-QA2-002 · 003 · 007) ──────────────────────────────────────
+
+def _seed_child(con, *, handback_at=None):
+    from agentdash.core import model as M
+    M.upsert_agent(con, M.Agent(agent_key="S:s", kind="SESSION", project_key="p", session_id="s"))
+    M.upsert_agent(con, M.Agent(agent_key="A:c1", kind="SUBAGENT", project_key="p", session_id="s", depth=1,
+                                spawn_tool_use="tu1", last_event_at=handback_at))
+    M.add_tool_call(con, M.ToolCall("S:s", "tu1", "2026-10-17T07:00:00Z", "Agent"))
+    if handback_at:
+        M.add_tool_call(con, M.ToolCall("A:c1", "h1", handback_at, "SubagentHandback"))
+
+
+def _notif(at, tid, status, task=None):
+    t = f"<task-id>{task}</task-id>" if task else ""
+    return {"type": "user", "timestamp": at, "message": {"content":
+            f"<task-notification>{t}<tool-use-id>{tid}</tool-use-id><status>{status}</status></task-notification>"}}
+
+
+def test_L07_facts_carry_task_id():
+    f = L.facts(_notif("t", "toolu_SM", "completed", task="c1"))
+    assert [(x.kind, x.key, x.status, x.task_id) for x in f] == [("notification", "toolu_SM", "completed", "c1")]
+
+
+def test_L07_rewake_notification_matched_by_task_id(tmp_path):
+    """DEF-QA2-002: SendMessage 로 다시 깨운 뒤 온 알림은 새 tool-use-id(SendMessage 호출 id) · task-id = agentId."""
+    from agentdash.core import model as M
+    con = _db(tmp_path)
+    _seed_child(con)
+    assert L.on_line(con, "S:s", _notif("2026-10-17T07:05:00Z", "tu1", "completed", task="c1")) == 1
+    # 다시 깨움 → 자식이 새 tool_use 를 냄 (07:06) → 새 tool-use-id 알림 07:09
+    M.add_tool_call(con, M.ToolCall("S:s", "tuSM", "2026-10-17T07:05:30Z", "SendMessage", target="c1"))
+    M.add_tool_call(con, M.ToolCall("A:c1", "tx", "2026-10-17T07:06:00Z", "Bash"))
+    M.upsert_agent(con, M.Agent(agent_key="A:c1", kind="SUBAGENT", project_key="p", session_id="s", depth=1,
+                                last_event_at="2026-10-17T07:08:50Z"))
+    L.resolve_all(con)
+    assert con.execute("SELECT ended_at FROM agent WHERE agent_key='A:c1'").fetchone()[0] is None   # 깨어남
+    assert L.on_line(con, "S:s", _notif("2026-10-17T07:09:00Z", "tuSM", "completed", task="c1")) == 1
+    L.resolve_all(con)
+    assert con.execute("SELECT ended_at FROM agent WHERE agent_key='A:c1'").fetchone()[0] == "2026-10-17T07:09:00Z"
+    # 모르는 task-id(백그라운드 셸 등)는 잇지 않는다
+    assert L.on_line(con, "S:s", _notif("2026-10-17T07:10:00Z", "tuB", "completed", task="bash123")) == 0
+    con.close()
+
+
+def test_L07_older_notification_does_not_overwrite_newer(tmp_path):
+    """알림이 늦게 읽혀도(시각이 더 이름) 더 늦은 반환의 시각 · 상태를 덮지 않는다."""
+    con = _db(tmp_path)
+    _seed_child(con)
+    L.on_line(con, "S:s", _notif("2026-10-17T07:09:00Z", "tu1", "completed", task="c1"))
+    L.on_line(con, "S:s", _notif("2026-10-17T07:01:00Z", "tu1", "failed", task="c1"))
+    assert con.execute("SELECT at, label FROM edge WHERE kind='handback'").fetchone()[:] == \
+        ("2026-10-17T07:09:00Z", "notification:completed")
+    con.close()
+
+
+def test_L07_scan_rewake_by_task_id(tmp_path):
+    proj = tmp_path / "projects" / "-tmp-proj"
+    sdir = proj / "sess1" / "subagents"
+    sdir.mkdir(parents=True)
+
+    def w(p, rows):
+        p.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+
+    def tu(name, tid, ts):
+        return {"type": "assistant", "timestamp": ts,
+                "message": {"content": [{"type": "tool_use", "name": name, "id": tid, "input": {}}]}}
+
+    w(proj / "sess1.jsonl", [tu("Agent", "tu1", "2026-10-17T07:00:00Z"),
+                             _notif("2026-10-17T07:02:00Z", "tu1", "completed", task="a1"),
+                             tu("SendMessage", "tuSM", "2026-10-17T07:03:00Z"),
+                             _notif("2026-10-17T07:09:00Z", "tuSM", "failed", task="a1")])
+    (sdir / "agent-a1.meta.json").write_text(json.dumps({"toolUseId": "tu1", "spawnDepth": 1}), encoding="utf-8")
+    w(sdir / "agent-a1.jsonl", [tu("Bash", "x1", "2026-10-17T07:01:00Z"),
+                                {"type": "user", "timestamp": "2026-10-17T07:03:01Z", "message": {"content": "msg"}},
+                                tu("Bash", "x2", "2026-10-17T07:04:00Z")])
+    sc = L.scan_projects(tmp_path / "projects")
+    assert len(sc.signals["A:a1"]) == 2
+    r = L.returned(sc.signals["A:a1"], sc.last_activity.get("A:a1"))
+    assert r and r.ended_at == "2026-10-17T07:09:00Z" and r.is_error
+
+
+def test_L07_incoming_message_after_handback_wakes_child(tmp_path):
+    """DEF-QA2-003: 반환 뒤 들어온 메시지(user 텍스트)만 있고 응답이 없어도 '다시 깨어남' — DB 경로가 기록 줄을 본다."""
+    con = _db(tmp_path)
+    jl = tmp_path / "agent-c1.jsonl"
+    rows = [{"type": "assistant", "timestamp": "2026-10-17T07:02:00.000Z", "message": {"content": [
+                {"type": "tool_use", "name": "SubagentHandback", "id": "h1", "input": {}}]}},
+            {"type": "user", "timestamp": "2026-10-17T07:02:02.000Z", "message": {"content": [
+                {"type": "tool_result", "tool_use_id": "h1", "content": "ok"}]}},
+            {"type": "assistant", "timestamp": "2026-10-17T07:02:05.000Z", "message": {"content": [
+                {"type": "text", "text": "bye"}]}}]
+    jl.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    _seed_child(con, handback_at="2026-10-17T07:02:00.000Z")
+    con.execute("INSERT INTO src_file(path, inode, size, offset, mtime) VALUES (?,?,?,?,?)", (str(jl), 1, 0, 0, 0))
+    con.execute("UPDATE agent SET last_event_at='2026-10-17T07:02:05.000Z' WHERE agent_key='A:c1'")
+    L.resolve_all(con)
+    # handback 뒤 tool_result · 마지막 인사 텍스트뿐 → 끝 (D-04)
+    assert con.execute("SELECT ended_at FROM agent WHERE agent_key='A:c1'").fetchone()[0] == "2026-10-17T07:02:00.000Z"
+    with jl.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"type": "user", "timestamp": "2026-10-17T07:20:00.000Z",
+                             "message": {"content": [{"type": "text", "text": "again"}]}}) + "\n")
+    con.execute("UPDATE agent SET last_event_at='2026-10-17T07:20:00.000Z' WHERE agent_key='A:c1'")
+    L.resolve_all(con)
+    assert con.execute("SELECT ended_at FROM agent WHERE agent_key='A:c1'").fetchone()[0] is None
+    assert L.last_activity(con, "A:c1") == "2026-10-17T07:20:00.000Z"
+    con.close()
+
+
+def test_is_activity_skips_meta_and_results():
+    assert L.is_activity({"type": "user", "message": {"content": "hi"}})
+    assert not L.is_activity({"type": "user", "isMeta": True, "message": {"content": "hi"}})
+    assert not L.is_activity({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "x"}]}})
+    assert not L.is_activity({"type": "assistant", "message": {"content": [{"type": "text", "text": "x"}]}})
+
+
+def test_L06_session_prefixed_target():
+    """DEF-QA2-007(c): to="S:<sessionId>" 는 세션이 있으면 그 세션 (이름 없는 세션도)."""
+    e = L.resolve_message("A:x", "S:sess-1", agent_ids={"a1"}, names={}, keys={"S:sess-1", "A:a1"})
+    assert (e.dst_key, e.external) == ("S:sess-1", False)
+    e = L.resolve_message("A:x", "S:sess-1", agent_ids={"a1"}, names={"nm": "S:sess-1"})
+    assert (e.dst_key, e.external) == ("S:sess-1", False)
+    e = L.resolve_message("A:x", "A:a1", agent_ids={"a1"}, names={})
+    assert (e.dst_key, e.external) == ("A:a1", False)
+    e = L.resolve_message("A:x", "S:nope", agent_ids={"a1"}, names={}, keys={"S:sess-1"})
+    assert e.external and e.dst_key == "X:S:nope"

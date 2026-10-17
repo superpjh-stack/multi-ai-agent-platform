@@ -8,6 +8,7 @@
 - 기본값: 같은 `requestId` 는 usage 한 번만 센다.
 - 근거: requestId 있는 assistant 줄 54,708 중 같은 파일 안 같은 requestId 재등장 27,540 줄(내용 블록마다 한 줄). 그중 usage 가 다른 묶음 2,242 — 다른 칸은 `output_tokens` · `output_tokens_details` · `server_tool_use` · `iterations` · `speed` 뿐(입력 · 캐시는 같음)이고 2,242/2,242 에서 output 이 단조 증가 → 스트리밍 중간본. 규칙: (agent_key, requestId) 한 행, output_tokens 가 가장 큰 줄(최종본)을 남긴다 (`model.add_usage`). 표본 10 세션에서 중복 제거로 빠진 출력 토큰 7,628,314 (`check_usage_sum` 끝 줄). requestId 없는 assistant 줄 66 은 전부 `<synthetic>`.
 - 확인 방법: 표본 세션에서 중복 제거 전후 토큰 합 비교 (G-07 · V-03). 담당 개발1.
+- **웨이브 D 보완 (2026-10-17)**: 「마지막 줄 = 최종본」 근거는 **메인 세션 기록에만** 성립한다 — 서브에이전트 · 워크플로 기록은 → **D-17 (차단)**. 또 requestId 하나는 세션 안에서 한 번, 값은 소유 기록 + 포크 사본을 통틀어 output 최대 줄 (DEF-QA1-001, D-02 보완 참고).
 
 ## D-02 자식 기록의 부모 재기록 여부 (A4)
 - 상태: 가설 반박 (개발1, 2026-10-17 실측) → 대안 규칙으로 진행
@@ -15,6 +16,7 @@
 - 근거: 부모가 자식 usage 를 다시 적는 경우는 없다(일반 서브에이전트 · 워크플로 에이전트와 부모 사이 공유 requestId 0). 그러나 **포크(`isFork`) 26 개는 전부 부모 기록 줄을 uuid · requestId · 시각 그대로(agentId 만 바꿔) 맨 앞에 다시 적는다** — 사본 1,142 줄(assistant 455), 여러 파일에 걸친 requestId 137 개가 전부 포크 관련. 또 포크 26 개 모두 띄운 호출(부모 assistant 의 tool_use 줄)을 **새 uuid · 같은 requestId** 로 한 줄 더 적는다(16 개는 첫 assistant, 10 개는 사본 끝).
 - 대안 규칙: 포크 기록에서 부모 파일(`parentAgentId` 있으면 그 에이전트, 없으면 세션 메인)에 같은 uuid 가 있는 줄과 부모 assistant 와 requestId 가 같은 assistant 줄은 부모 몫 → 토큰 · 도구 호출로 세지 않는다 (`collect/ingest.py`). 결과: 백필 DB 에서 두 에이전트에 걸친 requestId 0 (`check_usage_sum` 「세션 안 requestId 중복 0」), 세션 합계 = 자기 + 자손.
 - 확인 방법: 부모 · 자식 토큰 합 비교. 담당 개발1.
+- **웨이브 D 보완 (DEF-QA1-001, 2026-10-17)**: 사본 줄은 여전히 부모 몫(포크 에이전트 토큰으로 세지 않음)이지만, 사본의 output 이 소유 행보다 크면 **그 값을 소유 행에 반영**한다(시각 `at` 은 소유 기록 그대로, `model.upgrade_owner_usage`). 소유 행 = 같은 세션에서 그 requestId 를 가진 행 — 손자 포크의 사본이 이미 사본인 줄이어도 진짜 소유자(세션 · 조부모)에 붙는다. 부모 기록이 나중에 읽히면 미뤄 두었다가 반영(`ingest._fork_pending`). 실측: QA1 128 requestId · 출력 +90,584 (8f3a6abd +5,667 · dbd09a2a +84,917). `check_usage_sum` 은 이 규칙을 복제하지 않고 세션 단위 독립 규칙(소유 = 처음 나온 기록, 값 = 사본 포함 최대)으로 다시 센다.
 
 ## D-03 `thinking_tokens ⊂ output_tokens`
 - 상태: 확정 (개발1, 2026-10-17 실측)
@@ -114,3 +116,36 @@
 - 관찰: `state_log` 은 대시보드가 판정한 순간에만 쌓인다. 백필 DB 의 state_log 319 행은 전부 백필 시각(2026-10-17 07:38Z) — 과거 에이전트 막대의 끝보다 뒤다. 그 시점 상태를 지어낼 근거가 없다.
 - 채택: 막대 = started_at → ended_at(없으면 last_event_at, 살아 있으면 지금). state_log 첫 기록 앞 구간은 「판정 기록 없음」(NONE, 연회색), 그 뒤는 기록된 상태 색. 막대 끝 4 px 에 지금 상태 색. 대시보드를 켜 둔 동안의 새 에이전트부터 상태 색이 채워진다.
 - 확인 방법: `tests/test_usage_page.py::test_timeline_segments`. 담당 개발1.
+
+## D-17 서브에이전트 · 워크플로 기록의 `output_tokens` 는 스트리밍 시작값인 경우가 많다 — D-01 반박 (서브에이전트 한정)
+- 상태: 차단 (아키텍트, 2026-10-17 — DEF-QA1-002. 원천에 최종값이 없어 정확히 고칠 수 없다. 사람이 대안을 고른다)
+- 관찰 (QA1 `outputs/qa1/stream_heuristic.py` — 요청 = 같은 기록 · 같은 requestId, 의심 = output 최대 < 30 이면서 content 블록 JSON 길이 > 400 자, 길이만 잼):
+  - QA1 실측 (17:2x): 메인 세션 요청 10,175 중 13 (0.1%) · **서브에이전트 17,299 중 11,840 (68.4%)** · 워크플로 에이전트 85 중 60 (70.6%). 의심 요청의 기록 output 합 121,024 vs text + 도구 입력 길이 ÷ 4 합 4,226,667 → **하한 추정 ≈ 4.1M 출력 토큰 과소** (DB 서브에이전트 출력 합 8.18M 의 절반 규모).
+  - 아키텍트 재실행 (웨이브 D, 같은 스크립트): 메인 10,186 중 13 (0.1%) · 서브 17,492 중 11,999 (68.6%) · 워크플로 85 중 60 (70.6%) · 하한 추정 4,138,268.
+  - 직접 증거: DEF-QA1-001 의 사본 비교 — 같은 uuid · 같은 내용 길이인데 부모 기록 output 10 vs 포크 사본 178. 서브에이전트 기록에는 최종 usage 줄이 안 남는 경우가 대부분이다.
+  - 대체 원천 없음: 부모 기록의 `<task-notification>` `subagent_tokens` 는 마지막 요청의 문맥 크기와 48/58 일치 — 누적 출력이 아니다 (`outputs/qa1/notif_usage.py`).
+- 영향: 서브에이전트 · 워크플로 에이전트의 출력 토큰 · 비용(출력 단가 몫)과 그들을 품은 세션 합계(자기 + 자손)가 실제보다 적다. G-07 의 글자 기준(DB = 원천 직접 합)은 깨지지 않는다 — 숫자가 「원천과 같이」 틀린다.
+- 사람이 고를 대안:
+  1. **「기록상 과소」 표기만** — 숫자는 원천 그대로, 서브 · 워크플로 몫이 든 출력 · 비용 옆에 표기. (지금 임시로 이것)
+  2. **길이 기반 추정치를 별도 열로 `[추정]`** — 의심 요청에 text + 도구 입력 길이 ÷ 4 를 하한 추정으로 따로 보여 준다(기록 열은 그대로). 요청별 길이를 수집 때 재야 하므로 `usage_event` 에 열 추가 = spec §3 스키마 변경(정본 수정 필요).
+  3. **다른 원천** — 예: 훅(`SubagentStop` · `PostToolUse`) 이나 Claude Code 가 따로 남기는 사용량 기록이 생기면 그것을 쓴다. 지금 기록에서는 찾지 못했다.
+- 임시 적용 (① — 결정 전): `core/usage.py` `UNDERCOUNT_KINDS` · `UNDERCOUNT_NOTE = "기록상 과소 (D-17)"`.
+  - D-04 (`/usage`, `GET /api/v1/usage`): 서브에이전트 · 워크플로 몫이 섞인 행 · 합계에 `undercount=true` · `undercount_output`(그 몫의 출력), 화면 출력 · 비용 칸 옆 「과소 (D-17)」 · 카드 「기록상 과소 (D-17)」 · CSV 열 `output 기록상 과소 (D-17)`.
+  - D-03 (`GET /api/v1/agents/{key}` 의 `workload.own` · `with_descendants` = `usage.totals`): 같은 세 키. 화면 표기는 개발2 소유 — `progress-dev1.md` §3 요청.
+  - 숫자는 바꾸지 않는다.
+- 요청별 의심 플래그를 `usage_event` 에 두지 않은 이유: 스키마는 spec §3 과 글자 단위로 같아야 한다(G-01 `tests/test_schema.py`) — 열 추가는 정본 변경이라 사람 결정(대안 ②)에 묶인다. 대신 `check_usage_sum` 끝 줄이 표본 세션의 의심 요청 비율을 매번 다시 잰다(길이만).
+- 확인 방법: `.venv/bin/python -I outputs/qa1/stream_heuristic.py` · `uv run python src/agentdash/tools/check_usage_sum.py` 끝 줄. 담당 아키텍트(결정) · 개발1(표기) · 개발2(D-03 표기).
+
+## D-18 S1 `busy` 인데 미래 시각 `ScheduleWakeup` 을 걸고 잠든 세션 (QA2 DEF-QA2-004)
+- 상태: 가설 (개발2, 2026-10-17 웨이브 D) — **사람 확인 필요 — spec R-03 은 idle 만 명시**
+- 관찰: 오케스트레이터 세션 `S:2bee9170…` 은 S1 `busy` · pid 살아 있음 · 마지막 기록 뒤 5 분 넘게 새 줄 없음 · 가장 늦은 tool_use 가 `ScheduleWakeup`(깰 시각 미래). spec 글자(R-02b)대로면 STALE 이지만 실제로는 루프가 잠든 것 — D-14 대로 턴 뒤에도 busy 가 남는다.
+- 근거: spec §4.1 SLEEPING 정의(「ScheduleWakeup · 루프로 예약된 시각까지 잠듦」) · §13-5 수용 기준(「/loop 세션이 ScheduleWakeup 으로 잠들면 SLEEPING 과 깰 시각」) · §9.2 Stop 행(예약 있으면 SLEEPING 이 미종료 자식 WAITING_CHILD 보다 먼저) · D-14.
+- 채택 (`core/state.py` `_session`): S1 busy · 5 분 넘게 기록 없음 · 훅 도구 실행 중 아님 · **가장 늦은 tool_use 가 ScheduleWakeup 이고 깰 시각 > 지금** → `SLEEPING`(규칙 코드 R-03, 근거에 `D-18` · 깰 시각). 순서: R-02a(5 분 안 RUNNING) > 훅 도구 실행 중 RUNNING > **D-18 SLEEPING** > D-14 WAITING_CHILD > R-02b STALE. "마지막 assistant" 는 마지막 tool_use 로 본다(예약 뒤 마지막 인사 텍스트 줄은 DB 에 없고 활동이 아니다 — D-04 와 같은 해석). idle 계열 R-03 도 같은 조건으로 좁혔다.
+- 실측: 개발2 백필 DB 에서 그 세션 = SLEEPING R-03 (D-18). QA2 `judge.py`(spec 글자) 는 STALE R-02b(D-14 대안 WAITING_CHILD) — 전수 대조의 남은 불일치 1 건이 이것.
+- 테스트: `tests/test_state.py::test_rule_table[D-18 …]` 5 행 · `test_db_wakeup_must_be_last_assistant`. 사람이 spec R-03 을 busy 까지 넓힐지 정한다. 담당 개발2.
+
+## D-19 S1 파일은 있는데 pid 가 죽은 세션 (QA2 DEF-QA2-005)
+- 상태: 가설 (개발2, 2026-10-17 웨이브 D)
+- 관찰: spec R-02a 는 pid 생존을 요구하고 R-02b 는 pid 를 말하지 않으며, R-06/R-07 은 「S1 없음(프로세스 소멸)」. S1 있음 · pid 소멸 · 5 분 안은 어느 규칙에도 안 걸리고, 5 분 뒤는 R-02b 글자로 STALE 이 된다. 지금 실제 S1 3 개는 모두 pid 살아 있어 영향 0.
+- 채택 (현재 구현 유지): pid 소멸 = 「S1 없음(프로세스 소멸)」 — R-06(마지막 항목 결과 없는 tool_use → STALE) / R-07(DONE). S1 status · 예약 시각은 보지 않는다. R-01 훅도 SessionEnd 밖에는 쓰지 않는다(Stop 등은 프로세스가 사라진 뒤 의미 없음). 근거 문구 `S1 있음 · pid 소멸 (D-19)`.
+- 테스트: `tests/test_state.py::test_rule_table[D-19 …]` 4 행 + 기존 `R-06 pid 소멸`. 사람이 spec R-02b/R-06 문구를 정한다. 담당 개발2.

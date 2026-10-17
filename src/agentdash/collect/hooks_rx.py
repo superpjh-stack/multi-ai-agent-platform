@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 
 from agentdash.core import state as S
 
@@ -29,8 +30,9 @@ KEEP = ("hook_event_name", "session_id", "transcript_path", "cwd", "agent_id", "
         "tool_name", "tool_use_id", "notification_type", "source", "reason")
 #: 앞 120 자만 남기는 필드
 KEEP_SHORT = ("message", "title")
-#: 도구 입력에서 남기는 키 (본문 command · prompt · content 는 버린다)
-TOOL_INPUT_KEEP = ("file_path", "notebook_path", "path", "url", "description", "subagent_type", "run_in_background")
+#: 도구 입력에서 남기는 키 (본문 command · prompt · content 는 버린다). `url` 은 **호스트만** `host` 로 남긴다
+#: (spec.md §3 tool_call.target · DEF-QA1-007 — 경로 · 쿼리 · 조각에 토큰이 실릴 수 있다).
+TOOL_INPUT_KEEP = ("file_path", "notebook_path", "path", "description", "subagent_type", "run_in_background")
 _AGENT_FILE = re.compile(r"agent-([0-9a-zA-Z]+)\.jsonl$")
 
 
@@ -63,9 +65,23 @@ def filter_payload(raw) -> dict:
                 kept[k] = v
             elif isinstance(v, str):
                 kept[k] = v[:SHORT]
+        host = _host(ti.get("url"))
+        if host:
+            kept["host"] = host
         if kept:
             out["tool_input"] = kept
     return out
+
+
+def _host(u) -> str | None:
+    """URL → 호스트 이름만 (포트 · 경로 · 쿼리 · 사용자 정보 버림). URL 이 아니면 None."""
+    if not isinstance(u, str):
+        return None
+    try:
+        h = urlsplit(u.strip()).hostname
+    except ValueError:
+        return None
+    return h[:SHORT] if h else None
 
 
 def agent_key_for(p: dict) -> str | None:
@@ -82,7 +98,7 @@ def agent_key_for(p: dict) -> str | None:
 
 def target_of(p: dict) -> str | None:
     ti = p.get("tool_input") or {}
-    for k in ("file_path", "notebook_path", "path", "url", "description"):
+    for k in ("file_path", "notebook_path", "path", "host", "description"):
         if ti.get(k):
             return str(ti[k])[:SHORT]
     return None

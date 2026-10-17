@@ -11,7 +11,7 @@ SCHEMA = Path(__file__).with_name("schema.sql")
 
 
 def _refuse_source(path: Path) -> None:
-    """원천(읽기 전용) 아래에 DB 를 만들려는 시도는 거부한다 — G-14."""
+    """원천(읽기 전용) 아래에 DB 를 만들려는 시도는 거부한다 — G-14. 디스크에 아무것도 만들기 전에 부른다."""
     if _settings.get().is_source_path(path):
         raise RuntimeError(f"DB 경로가 원천 루트 아래: {path}")
 
@@ -29,6 +29,7 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
 def init_db(path: str | Path | None = None) -> Path:
     """schema.sql 을 적용한다 (이미 있으면 그대로 둔다). 만든 DB 경로를 돌려준다."""
     p = Path(path) if path is not None else _settings.get().db_path
+    _refuse_source(p)                          # 검사 먼저 — 원천 아래면 폴더도 만들지 않는다 (DEF-QA1-003)
     p.parent.mkdir(parents=True, exist_ok=True)
     con = connect(p)
     try:

@@ -97,3 +97,29 @@ def test_bind_catches_external(tmp_path):
 def test_bind_repo_clean():
     ok, _, bad = check_bind.check()
     assert ok, bad
+
+
+# ── 웨이브 D — AGENTDASH_DB 를 원천 씨앗으로 (DEF-QA1-003 경로를 G-14 가 직접 시험) ──
+def test_readonly_db_seed_passes_on_repo():
+    """수집기 · 서버 진입점에 원천 아래 DB 경로를 주면 전부 거부되고 디스크에 아무것도 생기지 않는다."""
+    ok, detail, bad = check_readonly.db_seed_runtime()
+    assert ok, (detail, bad)
+    assert "진입점" in detail
+
+
+def test_readonly_db_seed_catches_mkdir_before_refusal():
+    """참 양성: 거부 전에 폴더를 만드는 진입점(DEF-QA1-003 꼴)을 FAIL 로 잡는다."""
+    bad_entry = ("가짜 mkdir 먼저", ["python", "-c",
+                 "import os, pathlib; p = pathlib.Path(os.environ['AGENTDASH_DB']); "
+                 "p.parent.mkdir(parents=True, exist_ok=True); raise SystemExit('거부')"])
+    ok, detail, bad = check_readonly.db_seed_runtime(entries=[bad_entry])
+    assert not ok
+    assert any("생김" in b for b in bad), bad
+
+
+def test_readonly_db_seed_catches_accepting_entry():
+    """참 양성: 원천 아래 DB 를 거부하지 않고 받아들이는 진입점도 FAIL."""
+    lax = ("가짜 받아들임", ["python", "-c", "print('ok')"])
+    ok, _, bad = check_readonly.db_seed_runtime(entries=[lax])
+    assert not ok
+    assert any("거부 안 함" in b for b in bad), bad

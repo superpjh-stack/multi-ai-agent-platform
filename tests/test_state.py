@@ -99,6 +99,29 @@ CASES = [
     ("R-01 서브에이전트 훅 도구 실행 중 · 301초", "R-01", SUB,
      Ctx(last_record_at=ago(STALE + 10), hook=hook("PreToolUse", STALE + 1, tool_running=True, tool_name="Bash")),
      S.RUNNING),
+    # 웨이브 D — QA2 DEF-QA2-004 · 005 · 006 빈 경계
+    ("D-18 busy · 301초 · 예약 미래 · 자식 0 → SLEEPING", "R-03", SESSION,
+     Ctx(last_record_at=ago(STALE + 1), s1=busy(), wakeup_at=NOW + timedelta(minutes=5)), S.SLEEPING),
+    ("D-18 busy · 예약 미래 + 자식 1 (R-03 먼저)", "R-03", SESSION,
+     Ctx(last_record_at=ago(STALE + 60), s1=busy(), wakeup_at=NOW + timedelta(minutes=5), open_children=1), S.SLEEPING),
+    ("D-18 아님: busy · 예약 지남 → R-02b", "R-02b", SESSION,
+     Ctx(last_record_at=ago(STALE + 1), s1=busy(), wakeup_at=NOW - timedelta(seconds=1)), S.STALE),
+    ("D-18 아님: busy · 예약 미래 · 5분 안 → R-02a", "R-02a", SESSION,
+     Ctx(last_record_at=ago(30), s1=busy(), wakeup_at=NOW + timedelta(minutes=5)), S.RUNNING),
+    ("D-18 아님: busy · 예약 미래 · 훅 도구 실행 중 → RUNNING", "R-02b", SESSION,
+     Ctx(last_record_at=ago(STALE + 1), s1=busy(), wakeup_at=NOW + timedelta(minutes=5),
+         hook=HookInfo("PreToolUse", ago(STALE + 30), tool_running=True, tool_name="Bash")), S.RUNNING),
+    ("D-19 busy · pid 소멸 · 60초 · 미결 없음 → R-07", "R-07", SESSION,
+     Ctx(last_record_at=ago(60), s1=busy(alive=False)), S.DONE),
+    ("D-19 busy · pid 소멸 · 600초 → R-07", "R-07", SESSION,
+     Ctx(last_record_at=ago(600), s1=busy(alive=False)), S.DONE),
+    ("D-19 idle · pid 소멸 · 예약 미래여도 → R-07", "R-07", SESSION,
+     Ctx(last_record_at=ago(600), s1=idle(alive=False), wakeup_at=NOW + timedelta(minutes=5)), S.DONE),
+    ("D-19 pid 소멸 · Stop 훅 → 훅 무시 R-07", "R-07", SESSION,
+     Ctx(last_record_at=ago(60), s1=busy(alive=False), hook=hook("Stop", 5)), S.DONE),
+    ("세션 busy 정확히 300초 → R-02b", "R-02b", SESSION, Ctx(last_record_at=ago(STALE), s1=busy()), S.STALE),
+    ("서브에이전트 정확히 90초 → R-12", "R-12", SUB, Ctx(last_record_at=ago(SLOW)), S.RUNNING),
+    ("서브에이전트 정확히 300초 → R-11", "R-11", SUB, Ctx(last_record_at=ago(STALE)), S.STALE),
 ]
 
 
@@ -195,4 +218,119 @@ def test_evaluate_all_on_ingested_fixture(fake_claude_home_ro, tmp_path):
     # 픽스처 S1 의 pid 는 이 컴퓨터에서 살아 있지 않을 수 있다 → 세션은 R-02a~R-07 중 하나
     assert {r[3] for r in rows if r[1] == "SESSION"} <= {"R-02a", "R-02b", "R-03", "R-04", "R-05", "R-06", "R-07"}
     assert con.execute("SELECT COUNT(*) FROM state_log").fetchone()[0] >= len(rows)
+    con.close()
+
+
+# ── 웨이브 D — DB 경로 (build_ctx) : QA2 DEF-QA2-001 · 003 · 006(a)(d)(f) ─────────────────
+
+def _db(tmp_path):
+    from agentdash.db import conn
+    p = tmp_path / "w.db"
+    conn.init_db(p)
+    return conn.connect(p)
+
+
+def _session(con, sid="s"):
+    from agentdash.core import model as M
+    M.upsert_agent(con, M.Agent(agent_key=f"S:{sid}", kind="SESSION", project_key="p", session_id=sid,
+                                last_event_at=_iso(ago(STALE + 60))))
+
+
+def _child(con, aid, tu, *, last, sid="s", depth=1, parent=None):
+    from agentdash.core import model as M
+    M.upsert_agent(con, M.Agent(agent_key=f"A:{aid}", kind="SUBAGENT", project_key="p", session_id=sid, depth=depth,
+                                spawn_tool_use=tu, last_event_at=_iso(last)))
+    M.add_tool_call(con, M.ToolCall(parent or f"S:{sid}", tu, _iso(ago(3600)), "Agent"))
+
+
+def _iso(t):
+    return t.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def _notif(at, tid, status, task=None):
+    t = f"<task-id>{task}</task-id>" if task else ""
+    return {"type": "user", "timestamp": _iso(at), "message": {"content":
+            f"<task-notification>{t}<tool-use-id>{tid}</tool-use-id><status>{status}</status></task-notification>"}}
+
+
+def test_db_failed_notification_is_FAILED(tmp_path):
+    """DEF-QA2-001: 반환 신호가 failed/killed 알림뿐이면 FAILED (R-08), 그 뒤 handback 으로 다시 끝나면 DONE."""
+    from agentdash.core import linker as L, model as M
+    con = _db(tmp_path)
+    _session(con)
+    _child(con, "f1", "tu1", last=ago(1000))
+    _child(con, "k1", "tu2", last=ago(1000))
+    _child(con, "r1", "tu3", last=ago(400))
+    L.on_line(con, "S:s", _notif(ago(999), "tu1", "failed"))
+    L.on_line(con, "S:s", _notif(ago(999), "tu2", "killed"))
+    L.on_line(con, "S:s", _notif(ago(900), "tu3", "failed"))         # 실패 뒤 다시 깨어나 handback
+    M.add_tool_call(con, M.ToolCall("A:r1", "h3", _iso(ago(400)), "SubagentHandback"))
+    L.resolve_all(con)
+    out = S.evaluate_all(con, NOW)
+    assert (out["A:f1"].state, out["A:f1"].rule) == (S.FAILED, "R-08")
+    assert out["A:k1"].state == S.FAILED and "is_error" in out["A:k1"].evidence
+    assert out["A:r1"].state == S.DONE
+    # D-01 카드 "실패" 수 = agent.state FAILED
+    assert con.execute("SELECT COUNT(*) FROM agent WHERE state='FAILED'").fetchone()[0] == 2
+    con.close()
+
+
+def test_db_rewake_after_return_runs_again(tmp_path):
+    """DEF-QA2-003: 반환 뒤 새 활동(tool_use)이 들어오면 DONE → RUNNING (post_hook 이 ended_at 바뀐 자식을 다시 판정)."""
+    from agentdash.core import linker as L, model as M
+    con = _db(tmp_path)
+    _session(con)
+    _child(con, "c1", "tu1", last=ago(600))
+    M.add_tool_call(con, M.ToolCall("A:c1", "h1", _iso(ago(600)), "SubagentHandback"))
+    S.post_hook(con, {"A:c1"})
+    assert con.execute("SELECT state FROM agent WHERE agent_key='A:c1'").fetchone()[0] == S.DONE
+    M.add_tool_call(con, M.ToolCall("A:c1", "x1", _iso(ago(2)), "Bash"))
+    con.execute("UPDATE agent SET last_event_at=? WHERE agent_key='A:c1'", (_iso(ago(2)),))
+    S.post_hook(con, {"A:c1"})
+    v = S.evaluate_one(con, "A:c1", NOW, s1map={})[0]
+    assert (v.state, v.rule) == (S.RUNNING, "R-09")
+    # 부모 기록에만 새 알림(failed)이 온 경우도 자식이 다시 판정된다 (자식 키가 changed 에 없어도)
+    L.on_line(con, "S:s", _notif(ago(1), "tu1", "failed"))
+    S.post_hook(con, {"S:s"})
+    assert con.execute("SELECT state FROM agent WHERE agent_key='A:c1'").fetchone()[0] == S.FAILED
+    con.close()
+
+
+def test_db_stale_children_do_not_hold_parent(tmp_path):
+    """DEF-QA2-006(d): STALE 자식만 남은 부모 — 세션 R-04 · 서브에이전트 R-10 에 걸리지 않는다."""
+    con = _db(tmp_path)
+    _session(con)
+    _child(con, "p1", "tu1", last=ago(STALE + 100))
+    _child(con, "g1", "tu2", last=ago(STALE + 100), depth=2, parent="A:p1")
+    con.execute("UPDATE agent SET parent_key='S:s' WHERE agent_key='A:p1'")
+    con.execute("UPDATE agent SET parent_key='A:p1' WHERE agent_key='A:g1'")
+    s1map = {"s": S.S1Info("idle", True)}
+    rows = {r[0]: tuple(r) for r in con.execute(
+        "SELECT agent_key, kind, session_id, last_event_at, ended_at FROM agent")}
+    S.apply(con, "A:g1", S.evaluate({"kind": "SUBAGENT"}, S.build_ctx(con, rows["A:g1"], NOW, s1map, S._open_children(con)), NOW), NOW)
+    assert con.execute("SELECT state FROM agent WHERE agent_key='A:g1'").fetchone()[0] == S.STALE
+    v = S.evaluate({"kind": "SUBAGENT"}, S.build_ctx(con, rows["A:p1"], NOW, s1map, S._open_children(con)), NOW)
+    assert (v.state, v.rule) == (S.STALE, "R-11")
+    S.apply(con, "A:p1", v, NOW)
+    v = S.evaluate({"kind": "SESSION"}, S.build_ctx(con, rows["S:s"], NOW, s1map, S._open_children(con)), NOW)
+    assert (v.state, v.rule) == (S.WAITING_INPUT, "R-05")
+    con.close()
+
+
+def test_db_wakeup_must_be_last_assistant(tmp_path):
+    """DEF-QA2-006(f): ScheduleWakeup 뒤에 다른 tool_use 가 있으면 R-03 의 '마지막 assistant' 가 아니다."""
+    from agentdash.core import model as M
+    con = _db(tmp_path)
+    _session(con)
+    wake = _iso(NOW + timedelta(minutes=10))
+    M.add_tool_call(con, M.ToolCall("S:s", "w1", _iso(ago(700)), "ScheduleWakeup", target=f"wake@{wake}"))
+    row = tuple(con.execute("SELECT agent_key, kind, session_id, last_event_at, ended_at FROM agent "
+                            "WHERE agent_key='S:s'").fetchone())
+    s1map = {"s": S.S1Info("busy", True)}
+    v = S.evaluate({"kind": "SESSION"}, S.build_ctx(con, row, NOW, s1map, {}), NOW)
+    assert (v.state, v.rule) == (S.SLEEPING, "R-03") and "D-18" in v.evidence and v.extra["wake_at"]
+    M.add_tool_call(con, M.ToolCall("S:s", "b1", _iso(ago(650)), "Bash"))
+    M.set_tool_result(con, "b1", True, _iso(ago(649)))
+    v = S.evaluate({"kind": "SESSION"}, S.build_ctx(con, row, NOW, s1map, {}), NOW)
+    assert (v.state, v.rule) == (S.STALE, "R-02b")
     con.close()

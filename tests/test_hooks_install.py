@@ -142,9 +142,13 @@ def test_yes_refused_on_claude_home_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTDASH_CLAUDE_HOME", str(home))
     original = p.read_bytes()
     import os
-    r = run("--settings", str(p), "--yes", env={**os.environ})
+    env = {k: v for k, v in os.environ.items() if k != "PYTEST_CURRENT_TEST"}   # --yes 가드 자체를 본다
+    r = run("--settings", str(p), "--yes", env=env)
     assert r.returncode == 2 and "--yes" in r.stdout
     assert p.read_bytes() == original
+    r = run("--settings", str(p), "--yes", env={**os.environ})                     # pytest 중 — 무조건 거부
+    assert r.returncode == 2 and "테스트 중" in r.stdout
+    assert p.read_bytes() == original and not list(home.glob("*.bak-agentdash-*"))
 
 
 def test_check_reports(target):
@@ -187,3 +191,148 @@ def test_send_unreachable_host_still_within_1s():
     finally:
         s.close()
     assert q.returncode == 0 and q.stdout == b"" and dt <= 1.3, dt
+
+
+# ---- 웨이브 D — DEF-QA1-004 · DEF-QA1-005 ----------------------------------------------------------------------
+# 실제 ~/.claude/settings.json 은 **비교 · 읽기(stat · sha)만** 한다. 쓰기 경로는 전부 함정(trap)으로 막아
+# 가드가 틀려도 쓰지 못하게 하고, 함정이 한 번이라도 불리면 실패한다.
+import hashlib  # noqa: E402
+import os  # noqa: E402
+import shlex  # noqa: E402
+
+REAL_SETTINGS = Path.home() / ".claude" / "settings.json"          # 비교 대상 — 열어서 쓰지 않는다
+
+
+def _snap(p: Path):
+    if not p.exists():
+        return None
+    return p.stat().st_mtime_ns, hashlib.sha1(p.read_bytes()).hexdigest()
+
+
+@pytest.fixture
+def trapped(monkeypatch):
+    mod = _load_module()
+    calls: list[str] = []
+
+    def trap(name):
+        def f(*a, **k):
+            calls.append(name)
+            raise AssertionError(f"쓰기 · 확인 시도: {name}")
+        return f
+
+    for n in ("install", "uninstall", "atomic_write", "restore"):
+        monkeypatch.setattr(mod, n, trap(n))
+    monkeypatch.setattr("builtins.input", trap("input"))
+    monkeypatch.setattr(Path, "write_bytes", trap("Path.write_bytes"))
+    monkeypatch.setattr(Path, "write_text", trap("Path.write_text"))
+    monkeypatch.setattr(os, "replace", trap("os.replace"))
+    return mod, calls
+
+
+def _assert_fake_home_on():
+    assert os.environ["AGENTDASH_CLAUDE_HOME"] and \
+        Path(os.environ["AGENTDASH_CLAUDE_HOME"]).resolve() != (Path.home() / ".claude").resolve()
+    assert os.environ.get("PYTEST_CURRENT_TEST")
+
+
+@pytest.mark.parametrize("arg", [str(REAL_SETTINGS), "~/.claude/settings.json"])
+def test_real_home_settings_refused_with_fake_home_yes(trapped, arg, capsys):
+    """DEF-QA1-004 — conftest 의 가짜 home 이 켜져 있어도 실제 홈의 settings.json 에 --yes 는 거부."""
+    mod, calls = trapped
+    _assert_fake_home_on()
+    before = _snap(REAL_SETTINGS)
+    assert mod.is_real_target(Path(arg).expanduser()) is True
+    assert mod.main(["--settings", arg, "--yes"]) == 2
+    assert mod.main(["--settings", arg, "--uninstall", "--yes"]) == 2
+    assert calls == []
+    assert _snap(REAL_SETTINGS) == before
+    assert "거부" in capsys.readouterr().out
+
+
+def test_real_home_settings_refused_in_pytest_without_prompt(trapped):
+    """pytest 중이면 --yes 없이도 확인 프롬프트를 띄우지 않고 거부."""
+    mod, calls = trapped
+    _assert_fake_home_on()
+    before = _snap(REAL_SETTINGS)
+    assert mod.main(["--settings", str(REAL_SETTINGS)]) == 2
+    assert mod.main(["--settings", str(REAL_SETTINGS), "--uninstall"]) == 2
+    assert calls == []                                   # input() 도 불리지 않음
+    assert _snap(REAL_SETTINGS) == before
+
+
+def test_real_home_settings_via_symlink_refused(trapped, tmp_path):
+    """심볼릭 링크(파일 · 상위 폴더)로 실제 경로를 가리켜도 거부 (resolve 후 비교)."""
+    mod, calls = trapped
+    link = tmp_path / "link-settings.json"
+    os.symlink(REAL_SETTINGS, link)                      # tmp 안에 링크만 만든다 (원천 무변경)
+    dlink = tmp_path / "home-link"
+    os.symlink(REAL_SETTINGS.parent, dlink)
+    before = _snap(REAL_SETTINGS)
+    for p in (link, dlink / "settings.json"):
+        assert mod.is_real_target(p) is True
+        assert mod.main(["--settings", str(p), "--yes"]) == 2
+    assert calls == []
+    assert _snap(REAL_SETTINGS) == before
+
+
+def test_configured_claude_home_settings_refused_in_pytest(trapped):
+    """설정된(가짜) claude_home 의 settings.json 도 실제 파일로 본다 — pytest 중 무조건 거부."""
+    mod, calls = trapped
+    p = Path(os.environ["AGENTDASH_CLAUDE_HOME"]) / "settings.json"
+    assert mod.is_real_target(p) is True
+    assert mod.main(["--settings", str(p), "--yes"]) == 2
+    assert mod.main(["--settings", str(p)]) == 2
+    assert calls == []
+
+
+def test_other_tmp_file_is_not_real(tmp_path):
+    mod = _load_module()
+    assert mod.is_real_target(tmp_path / "settings.json") is False
+
+
+OTHER = {"hooks": [{"type": "command", "command": "bash /other/project/hook_send.sh"}]}
+
+
+def _mine() -> str:
+    return f"bash {shlex.quote(str(SEND))}"
+
+
+def _count_mine(data: dict) -> int:
+    return sum(1 for ev in EVENTS for e in data.get("hooks", {}).get(ev, []) for h in e.get("hooks", [])
+               if h.get("command") == _mine())
+
+
+def test_other_projects_hook_send_is_not_mine(tmp_path):
+    """DEF-QA1-005 — 남의 `…/hook_send.sh` 는 내 것이 아니다: 설치 9 · 제거 후 남의 항목 남음 · 원본 바이트 동일."""
+    data = fake_settings()
+    data["hooks"]["Stop"].append(OTHER)
+    data["hooks"]["SessionStart"] = [{"hooks": [{"type": "command", "command": "/x/agentdash/scripts/hook_send.sh"}]}]
+    t = tmp_path / "settings.json"
+    t.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    original = t.read_bytes()
+    r = run("--settings", str(t), "--yes")
+    assert r.returncode == 0, r.stdout + r.stderr
+    after = json.loads(t.read_text(encoding="utf-8"))
+    assert _count_mine(after) == 9
+    assert after["hooks"]["Stop"][: len(data["hooks"]["Stop"])] == data["hooks"]["Stop"]
+    assert run("--settings", str(t), "--check").stdout.count("설치: 9/9") == 1
+    r = run("--settings", str(t), "--uninstall", "--yes")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert t.read_bytes() == original
+    # 백업 없이 제거해도 남의 항목은 남는다
+    assert run("--settings", str(t), "--yes").returncode == 0
+    for b in t.parent.glob("settings.json.bak-agentdash-*"):
+        b.unlink()
+    assert run("--settings", str(t), "--uninstall", "--yes").returncode == 0
+    assert json.loads(t.read_text(encoding="utf-8")) == data
+
+
+def test_only_others_hook_send_counts_as_not_installed(tmp_path):
+    data = {"hooks": {ev: [OTHER] for ev in EVENTS}}
+    t = tmp_path / "settings.json"
+    t.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    r = run("--settings", str(t), "--check")
+    assert "설치: 0/9" in r.stdout
+    r = run("--settings", str(t), "--uninstall", "--yes")
+    assert r.returncode == 0 and "없음" in r.stdout
+    assert json.loads(t.read_text()) == data

@@ -14,6 +14,12 @@
   D-14  S1 `busy` 인 채 5 분 넘게 기록이 없어도 미종료 백그라운드 자식(RUNNING · WAITING_* — STALE 자식은 빼고)이 있으면
         R-02b 의 STALE 대신 WAITING_CHILD(R-04) — 오케스트레이터가 턴을 끝내고(turn_duration) 자식을 기다리는 동안
         S1 이 busy · updatedAt 그대로 남는 실측(2026-10-17, 세션 1 건 · 자식 2).
+  D-18  [가설 — 사람 확인 필요, spec R-03 은 idle 만 명시] S1 `busy` · 5 분 넘게 기록 없음이어도 마지막 assistant 가 미래 시각의
+        `ScheduleWakeup` 을 예약했고 그 뒤 새 tool_use 가 없으면 SLEEPING(규칙 코드 R-03, 근거 `D-18`). R-02b STALE 보다 먼저,
+        D-14 WAITING_CHILD 보다도 먼저(idle 계열의 R-03 > R-04 순서와 같게). 훅이 도구 실행 중이라 하면 RUNNING 이 이긴다.
+  D-19  [가설] S1 파일은 있는데 pid 가 죽었으면 "S1 없음"(R-06 · R-07)으로 본다 — R-01 훅도 SessionEnd 밖에는 쓰지 않는다.
+  R-08  반환의 오류 여부는 L-07 `linker.return_of` 의 is_error(가장 늦은 반환이 failed/killed 알림 · Agent tool_result
+        is_error) — QA2 DEF-QA2-001.
 """
 
 from __future__ import annotations
@@ -138,11 +144,12 @@ def _r01(kind, ctx: Ctx, now: datetime, rec: str, stale: int) -> Verdict | None:
         return None
     if ctx.last_record_at and ctx.last_record_at > h.at:
         return None
-    if kind == SESSION_KIND and ctx.s1 is None and h.event != "SessionEnd":
+    gone = ctx.s1 is None or not ctx.s1.pid_alive          # D-19: pid 소멸 = S1 없음
+    if kind == SESSION_KIND and gone and h.event != "SessionEnd":
         return None                    # 프로세스가 사라졌다 — R-06/R-07 이 판단
     hook = f"훅 {h.event} {_iso(h.at)}"
     if h.event == "PreToolUse" or h.tool_running:
-        if ctx.s1 is None and kind == SESSION_KIND:
+        if gone and kind == SESSION_KIND:
             return None
         if kind != SESSION_KIND and not ctx.session_alive:
             return None
@@ -182,6 +189,9 @@ def _session(ctx: Ctx, now: datetime, age, rec: str, stale: int) -> Verdict:
             note = _tool_note(ctx.hook, now)
             if note:
                 return _v(RUNNING, "R-02b", s1note, note, rec)
+            if ctx.wakeup_at and ctx.wakeup_at > now:
+                return _v(SLEEPING, "R-03", s1note, f"ScheduleWakeup 깰 시각 {_iso(ctx.wakeup_at)}", rec, "D-18",
+                          wake_at=_iso(ctx.wakeup_at))
             if ctx.open_children > 0:
                 return _v(WAITING_CHILD, "R-04", s1note, "턴 끝(turn_duration)" if ctx.turn_ended else "",
                           f"미종료 백그라운드 자식 {ctx.open_children}", rec, "D-14")
@@ -196,7 +206,7 @@ def _session(ctx: Ctx, now: datetime, age, rec: str, stale: int) -> Verdict:
         if ctx.open_children > 0:
             return _v(WAITING_CHILD, "R-04", s1note, f"미종료 백그라운드 자식 {ctx.open_children}", rec)
         return _v(WAITING_INPUT, "R-05", s1note, rec)
-    gone = "S1 없음" if s1 is None else "S1 있음 · pid 소멸"
+    gone = "S1 없음" if s1 is None else "S1 있음 · pid 소멸 (D-19)"
     if ctx.pending_tool_use:
         return _v(STALE, "R-06", gone, "마지막 항목이 결과 없는 tool_use", rec)
     return _v(DONE, "R-07", gone, rec)
@@ -307,9 +317,10 @@ def build_ctx(con, row, now: datetime, s1map: dict, children: dict) -> Ctx:
                         (key,)).fetchone()
         if t is not None:
             ctx.pending_tool_use = t[2] is None and t[0] not in ("Agent", "Workflow")
-        w = con.execute("SELECT target FROM tool_call WHERE agent_key=? AND tool='ScheduleWakeup' ORDER BY at DESC "
+        # R-03 "마지막 assistant 가 ScheduleWakeup" — 가장 늦은 tool_use 가 ScheduleWakeup 일 때만 (같은 줄의 다른 도구는 허용)
+        w = con.execute("SELECT target, at FROM tool_call WHERE agent_key=? AND tool='ScheduleWakeup' ORDER BY at DESC "
                         "LIMIT 1", (key,)).fetchone()
-        if w and w[0] and str(w[0]).startswith("wake@"):
+        if w and w[0] and str(w[0]).startswith("wake@") and (t is None or str(t[3]) <= str(w[1])):
             ctx.wakeup_at = _dt(str(w[0])[5:])
     else:
         if ended is None and kind == "WORKFLOW_AGENT":
@@ -320,9 +331,11 @@ def build_ctx(con, row, now: datetime, s1map: dict, children: dict) -> Ctx:
         ctx.returned = ended is not None
         ctx.return_at = _dt(ended)
         if ctx.returned:
+            from agentdash.core import linker
+            ret = linker.return_of(con, key)            # failed/killed 알림 · Agent is_error (DEF-QA2-001)
             e = con.execute("SELECT 1 FROM agent a JOIN tool_call t ON t.tool_use_id=a.spawn_tool_use "
                             "WHERE a.agent_key=? AND t.ok=0", (key,)).fetchone()
-            ctx.return_error = e is not None
+            ctx.return_error = (ret is not None and ret.is_error) or (ret is None and e is not None)
         s = s1map.get(sid)
         ctx.session_alive = bool(s and s.pid_alive)
     return ctx
@@ -366,7 +379,10 @@ def evaluate_all(con, now: datetime | None = None) -> dict[str, Verdict]:
 def post_hook(con, changed: set[str]) -> None:
     """개발1 ingest.add_post_hook 용 — 연결(linker.resolve_all) 뒤 바뀐 에이전트와 그 조상만 다시 판정한다."""
     from agentdash.core import linker
+    before = dict(con.execute("SELECT agent_key, ended_at FROM agent").fetchall())
     linker.resolve_all(con, sources_complete=False)
+    # 부모 기록의 알림 · 다시 깨움으로 ended_at 이 바뀐 자식도 다시 판정 (자식 기록은 그대로라 changed 에 없다)
+    changed = set(changed) | {k for k, e in con.execute("SELECT agent_key, ended_at FROM agent") if before.get(k) != e}
     if not changed:
         return
     now = datetime.now(timezone.utc)

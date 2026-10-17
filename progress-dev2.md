@@ -17,7 +17,7 @@ DB 쓰기 함수는 개발1 규약대로 **커밋하지 않는다**(호출한 �
 def resolve(agent: AgentRec, index: SpawnIndex, *, sources_complete=True) -> Link
     # 못 찾으면 parent_key=None · sources_complete=False → L-04(재시도) / True → L-05 (구성도는 unresolved_key(project) 에 붙임)
 def retry_pending(agents, links, index, *, sources_complete) -> {key: Link}      # L-04 바뀐 것만
-def resolve_message(sender_key, to, *, agent_ids: set, names: {name: key}, at=None) -> Edge   # L-06, 못 맞추면 X:<to>
+def resolve_message(sender_key, to, *, agent_ids: set, names: {name: key}, at=None, keys: set | None = None) -> Edge   # L-06, 못 맞추면 X:<to>
 def returned(signals: [ReturnSignal], last_activity_at) -> Return | None           # L-07 (D-04 대안 규칙)
 def spawn_edge(child_key, link) / handback_edge(child_key, parent_key, ret) -> Edge | None
 def facts(line: dict) -> [Fact]      # 줄 하나 → agent_call · workflow_call · send_message · handback_call · notification · agent_error · agent_message
@@ -25,7 +25,10 @@ def is_activity(line: dict) -> bool  # L-07 다시 깨어남 판정용
 def session_key / agent_key / workflow_key / unresolved_key("U:<proj>") / external_key("X:<name>")
 # DB
 def on_line(con, author_key, line: dict) -> int    # ingest 가 assistant/user 줄마다 부른다 — task-notification · Workflow runId 를 남김
-def note_notification(con, author_key, tool_use_id, status, at) -> bool
+def note_notification(con, author_key, tool_use_id, status, at, task_id=None) -> bool   # 웨이브 D: task-id(=agentId) 로도 잇는다
+def return_of(con, key) -> Return | None        # 웨이브 D: 한 에이전트의 L-07 반환 (is_error = failed/killed 알림 · Agent is_error)
+def last_activity(con, key) -> str | None       # 웨이브 D: tool_call + 반환 뒤 기록 꼬리(읽기만)의 활동 줄
+def signals_from_db(con, key=None) -> {key: [ReturnSignal]}
 def note_workflow_call(con, author_key, wf_id, at) -> bool
 def resolve_all(con, *, sources_complete=True) -> {key: Link}   # parent_key · spawn/workflow/handback/message 엣지 · ended_at
 def scan_projects(projects_dir) -> Scan    # 원천 트리 직접 스캔(읽기만) — check_link_rate · 테스트용
@@ -147,3 +150,47 @@ Accept: text/event-stream (또는 ?follow=1) 이면 붙잡고 실시간, 그 밖
 
 ### 3 추가 요청
 - **R7 → 아키텍트 (메모)**: `tests/test_routes.py::test_placeholder_names_owner` 를 고쳤다(D-01 이 placeholder 라는 단정 → 남은 placeholder 는 담당을 밝힌다 + D-01~03 은 placeholder 아님). `app/main.py` 에 R5 lifespan 을 넣었다.
+
+## 5. 웨이브 D — QA1 결함 수정 (2026-10-17 17:35, 커밋 10cbd18 기준 · 커밋 안 함)
+
+바꾼 파일: `scripts/hooks_install.py`(`_protected_settings` · `is_real_target` · `marked` · `main` 가드 순서) · `scripts/hook_send.sh`(주석) · `collect/hooks_rx.py`(`_host` · `filter_payload` · `target_of`) · `tools/check_hooks.py`(5 · 6 항목 · 정확 일치 셈) · `tools/gate.py`(G-15 행만 — `test_hooks_install.py` 추가) · `tests/test_hooks_install.py`(+8) · `tests/test_hooks_rx.py`(새, 3). 실패 테스트 먼저(빨강 8) → 고침 → 초록.
+
+| 결함 | 고친 것 | 실측 | 검증 방법 |
+|---|---|---|---|
+| DEF-QA1-004 (중대) | `is_real_target` = 설정과 무관한 `Path.home()/.claude/settings.json` + 설정된 claude_home 의 것 **둘 다**, resolve(심볼릭 링크) 후 비교 + samefile. 실제 파일이면 pytest 중 무조건 거부(프롬프트 없음) · `--yes` 거부 · 둘 다 exit 2 | 가짜 home 켠 채 실제 경로 · `~/` 형 · tmp 링크(파일 · 상위 폴더) · `--uninstall` → 전부 2 · 쓰기 함수 · `input()` 함정 호출 0 · 실제 파일 mtime · sha 전후 같음. 옛 코드에선 함정 5 회 불림(= 썼을 것) | `tests/test_hooks_install.py::test_real_home_*` · `test_configured_*` · QA1 `hooks_fake.sh` F: True/True/True |
+| DEF-QA1-005 (중대) | 식별 = 명령 문자열이 `bash '<저장소 절대경로>/scripts/hook_send.sh'` 와 **정확 일치** | 남의 `bash /other/project/hook_send.sh` 있는 가짜 settings: 덧붙임 9 · 제거 후 남의 항목 1 남음 · 원본 바이트 동일 (백업 없이 제거해도 JSON 동일). 남의 것만 9 개면 `--check` 0/9 | `test_other_projects_hook_send_is_not_mine` · `test_only_others_*` · QA1 D: 9 · 1 |
+| DEF-QA1-007 (경미) | `tool_input.url` → 호스트만 `host` 로(포트 · 경로 · 쿼리 · 조각 버림), `target_of` 는 `host` | `https://h.example:8443/a/SECRET?token=SECRET#SECRET` → `h.example` · 필터 결과 · detail 에 표지 0 | `tests/test_hooks_rx.py` · QA1 `hook_payload.py` WebFetch 표지 False |
+| check_hooks 보강 | 5) 실제 파일 가드(in-process, 쓰기 함수 함정 · 실제 파일 읽기만) 5 경우 6) 남의 같은 이름 훅 · 덧붙임은 정확 일치로 셈 | `G-15 PASS — 덧붙임 9 · 실제 파일 가드 5/5 거부 · 함정 0 · 남의 같은 이름 훅 덧붙임 9 · 남음 1 · 송신 0.01s` · 옛 설치 스크립트(10cbd18) 로 돌리면 FAIL 위반 9 | `uv run python src/agentdash/tools/check_hooks.py` |
+| G-15 (gate) | 수단 = check_hooks + `test_hooks_install.py` | PASS (check_hooks ‖ 18 passed) | `make gate` |
+| pytest 전체 | — | 209 passed | `uv run pytest -q` |
+| make gate (기본 DB) | — | PASS 21 · FAIL 1 (G-12 QA2 상태 대조 — DEF-QA2-001~003, 이 웨이브 범위 밖) | `make gate` 17:35 |
+| G-14 정적 | 바꾼 3 파일 | PASS 쓰기 호출 12 · 원천 경로 대상 0 | `check_readonly.py --scan …` |
+| 실제 `~/.claude/settings.json` | — | mtime 1792131308 → 1792131308 · sha1 8641eb22e8f5… 전 = 후 · `~/.claude` 의 `bak-agentdash*` 0 | `stat -f %m` · `shasum` |
+
+## 5. 웨이브 D — 상태 · 연결 결함 수정 (2026-10-17, DB `data/agentdash-dev2.db`)
+
+바꾼 파일: `core/state.py` · `core/linker.py` · `tests/test_state.py`(+16 표 행 · DB 경로 4) · `tests/test_linker.py`(+7) · `decisions.md`(D-18 · D-19 새로). 다른 사람 파일 0. 각 결함은 QA2 재현 → 실패 테스트 → 수정 → 재현 순서.
+
+| 결함 | 원인 | 수정 | 테스트 | 재현 (judge.py) |
+|---|---|---|---|---|
+| DEF-QA2-001 failed/killed 알림 → DONE | `build_ctx.return_error` 가 Agent tool_result `ok=0` 만 봄 | `linker.return_of(con, key)` 의 is_error(가장 늦은 반환이 failed/killed 알림) 를 R-08 에 씀 | `test_db_failed_notification_is_FAILED` | 전수 DONE→FAILED 12 → 0 · DB FAILED R-08 12 (D-01 "실패" = state FAILED 수) |
+| DEF-QA2-002 다시 깨운 뒤 알림 못 이음 | `note_notification` 이 spawn tool_use id 로만 자식 찾음 | `Fact.task_id` · `<task-id>`(= agentId) 로 이음. 엣지는 더 늦은 알림만 시각 · 상태 갱신 (늦게 읽힌 옛 알림이 덮지 않게). `scan_projects` 도 같게 | `test_L07_rewake_notification_matched_by_task_id` · `…older_notification_does_not_overwrite_newer` · `…scan_rewake_by_task_id` · `facts_carry_task_id` | `A:adc075af…` STALE → DONE R-08 |
+| DEF-QA2-003 마지막 활동 = tool_call 만 | `resolve_all` 이 `MAX(tool_call.at)` | `linker._activity` = tool_call + 반환 뒤 기록 꼬리(`src_file` 경로, `rb` 로 뒤에서부터, `is_activity` 줄만 · isMeta 제외 · 크기/mtime 캐시). 반환 뒤 기록이 없으면 파일을 안 연다. `post_hook` 이 resolve_all 로 ended_at 이 바뀐 자식도 다시 판정 → 반환 뒤 새 활동이면 RUNNING | `test_L07_incoming_message_after_handback_wakes_child` · `test_db_rewake_after_return_runs_again` · `test_is_activity_skips_meta_and_results` | `A:a3b3e327…` DONE → STALE R-11 |
+| DEF-QA2-004 busy + 예약 미래 → STALE | spec R-03 은 idle 만 | **D-18 가설**: busy · 5 분 무기록 · 가장 늦은 tool_use 가 ScheduleWakeup · 깰 시각 미래 → SLEEPING R-03 (R-02b · D-14 보다 먼저, 훅 도구 실행 중보다는 뒤). ScheduleWakeup 이 가장 늦은 tool_use 일 때만 예약으로 봄(006 f) | 표 5 행 · `test_db_wakeup_must_be_last_assistant` | 오케스트레이터 `S:2bee9170…` SLEEPING R-03 (judge 는 spec 글자 STALE — 남은 1 건) |
+| DEF-QA2-005 S1 있음 · pid 소멸 | spec 빈칸 | **D-19 가설**: pid 소멸 = S1 없음 → R-06/R-07 (구현 유지) + R-01 훅도 SessionEnd 만 | 표 4 행 | 실제 영향 0 (S1 3 개 pid 살아 있음) |
+| DEF-QA2-006 빈 경계 | — | 90 · 300 초 정각(서브에이전트 R-12 · R-11, 세션 busy 300 초 R-02b) · STALE 자식만 남은 부모(R-05 · R-11) · DB 경로 FAILED · 예약 "마지막 assistant" | `test_rule_table` 3 행 · `test_db_stale_children_do_not_hold_parent` 외 | — |
+| DEF-QA2-007 L-06 `S:` 비교 | `raw[2:]` 를 `"S:<id>"` 꼴 값과 비교 | `resolve_message(…, keys=)` — 접두 붙은 to 는 알려진 키 전체와 비교 (resolve_all 이 agent 키 전부 넘김) | `test_L06_session_prefixed_target` | — |
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| G-12 표본 30 (QA2 `sample.txt`) | 전 **오판 3** (DONE→FAILED 2 · STALE→DONE 1) → 후 **불일치 1** (`S:2bee9170…` SLEEPING(D-18) vs judge spec 글자 STALE) | 백필 → `uv run python -I outputs/qa2/judge.py outputs/qa2/sample.txt <out.json>` → judge 결과와 DB `agent.state` 대조(스크래치 `cmp.py`, 키 · 상태만) |
+| 전수 대조 (WORKFLOW 노드 제외 325) | 전 **14** (DONE→FAILED 12 · STALE→DONE 1 · DONE→STALE 1) → 후 **1** (위와 같은 D-18 건) | 같은 방법, 키 목록 = `SELECT agent_key FROM agent WHERE kind!='WORKFLOW'` |
+| 판정 분포 (후) | 세션 77: DONE R-07 73 · WAITING_INPUT R-05 2 · SLEEPING R-03 1 · STALE R-06 1 / 서브에이전트 242: DONE R-08 221 · FAILED R-08 12 · STALE R-11 7 · RUNNING R-09 2 / 워크플로 1 · 워크플로 에이전트 6 DONE | `SELECT kind,state,state_reason,COUNT(*) FROM agent GROUP BY 1,2,3` |
+| G-06 | PASS — 원천 248/248 · DB 248/248 · 반환 분포 반환 233 · 미반환 9 | `uv run python src/agentdash/tools/check_link_rate.py --db data/agentdash-dev2.db` |
+| G-09 · G-10 | test_state 55 passed · test_linker 24 passed | `uv run pytest -q tests/test_state.py tests/test_linker.py` |
+| G-13 · G-14 | PASS — dev2 DB TEXT 352912 · 300 자 초과 0 / 정적 위반 0 · 읽기 전용 pytest 242 passed · 트리 변경 0 | `check_no_payload.py` · `check_readonly.py` |
+| pytest 전체 | 242 passed | `uv run pytest -q` |
+
+### 3 추가 요청 (웨이브 D)
+- **R8 → 개발1**: L-07 "마지막 활동"(tool_use 를 낸 assistant 줄 · 들어온 메시지 user 줄, `linker.is_activity`) 시각을 ingest 가 남겨 주면 linker 가 원천 기록 꼬리를 다시 읽지 않아도 된다. 지금은 `linker._activity` 가 반환 뒤 기록이 있는 자식만 `src_file` 경로를 `rb` 로 뒤에서부터 읽는다(캐시). 열이 없으므로(스키마 = 아키텍트 · spec) 방법은 개발1 · 아키텍트 판단 — 없어도 동작한다.
+- **R9 → 개발1 (메모)**: `model.add_edge` 는 기존 엣지에 더 이른 `label` 이 와도 덮는다(`COALESCE(?, label)`). handback 알림은 linker 가 직접 "더 늦은 것만" 갱신하게 바꿨다 — 다른 엣지 종류에도 같은 문제가 없는지 확인 부탁.

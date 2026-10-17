@@ -4,6 +4,7 @@
     uv run python src/agentdash/tools/check_readonly.py            # 정적 스캔 + 읽기 전용 가짜 루트 pytest
     uv run python src/agentdash/tools/check_readonly.py --static   # 정적 스캔만
     uv run python src/agentdash/tools/check_readonly.py --runtime  # 읽기 전용 가짜 루트 pytest 만
+    uv run python src/agentdash/tools/check_readonly.py --db-seed  # AGENTDASH_DB 씨앗 (정적 + 진입점 런타임) 만
     uv run python src/agentdash/tools/check_readonly.py --scan 파일…  # 지정 파일만 정적 스캔 (테스트용)
 
 정적 스캔 (src/agentdash/** · scripts/*.py)
@@ -19,7 +20,16 @@
 런타임
   · tests/fixtures 를 임시 폴더로 복사해 `chmod -R a-w` 한 가짜 루트를 AGENTDASH_CLAUDE_HOME · AGENTDASH_AGENTS_ROOT 로 주고
     AGENTDASH_TEST_READONLY=1 로 pytest 전체를 돌린다. 통과 + 실행 전후 트리(경로 · 크기 · mtime · sha256) 동일이어야 PASS.
+AGENTDASH_DB 씨앗 (웨이브 D — DEF-QA1-003 · 008 을 이 도구가 못 보던 길)
+  · DB 경로(`AGENTDASH_DB` · `.db_path`)도 원천이 될 수 있는 값으로 본다.
+    정적: DB 경로 값에 쓰는 호출(mkdir · makedirs · touch · write_* · open(w) · sqlite3.connect(mode=ro 아님))은
+    같은 함수 안에서 **그보다 앞줄에** 원천 거부(`_refuse_source` · `refuse_source` · `is_source_path`)가 있어야 한다.
+    런타임: 쓰기 가능한 가짜 루트(home · agents)를 만들고, 그 아래 DB 경로를 AGENTDASH_DB 로 준 채 DB 를 여는 진입점
+    (db.conn · backfill · pricing-check · reprice · export · pipeline · 서버 lifespan) 을 하나씩 돌린다.
+    전부 「원천 루트 아래」 로 거부(종료코드 ≠ 0)해야 하고, 실행 전후 가짜 루트 트리가 같아야(폴더 · 파일 0 생성) PASS.
+    + 가짜 루트를 설정한 채로도 실제 홈의 .claude 와 기본 agents_root 아래가 원천으로 판정되는지 (비교만, 열지 않음).
 출력: `G-14  원천 무접촉 (정적)  PASS|FAIL  …` · `G-14  원천 무접촉 (읽기 전용 pytest)  PASS|FAIL  …`
+      · `G-14  원천 무접촉 (DB 경로 씨앗)  PASS|FAIL  …`
 """
 
 from __future__ import annotations
@@ -40,6 +50,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 SCAN_DIRS = [ROOT / "src" / "agentdash", ROOT / "scripts"]
 FIXTURES = ROOT / "tests" / "fixtures"
+READONLY_ENV = "AGENTDASH_TEST_READONLY"
 
 SEED_NAME = re.compile(r"^(claude_home|agents_root|source_roots?|src_root|CLAUDE_HOME|AGENTS_ROOT)$")
 SEED_ATTR = {"claude_home", "agents_root", "source_roots"}
@@ -67,25 +78,27 @@ def _dotted(node: ast.AST) -> str:
 
 
 class Taint:
-    def __init__(self, tree: ast.Module):
+    def __init__(self, tree: ast.Module, seed_name: re.Pattern = SEED_NAME, seed_attr: set[str] = SEED_ATTR,
+                 seed_env: set[str] = SEED_ENV, home_seeds: bool = True):
         self.tree = tree
         self.names: set[str] = set()
         self.funcs: set[str] = set()      # 원천 경로를 돌려주는 함수
+        self.seed_name, self.seed_attr, self.seed_env, self.home_seeds = seed_name, seed_attr, seed_env, home_seeds
 
     def tainted(self, e: ast.AST | None) -> bool:
         if e is None:
             return False
         if isinstance(e, ast.Name):
-            return e.id in self.names or bool(SEED_NAME.match(e.id))
+            return e.id in self.names or bool(self.seed_name.match(e.id))
         if isinstance(e, ast.Attribute):
-            if e.attr in SEED_ATTR:
+            if e.attr in self.seed_attr:
                 return True
             if e.attr in PATH_ATTRS:
                 return self.tainted(e.value)
             return False
         if isinstance(e, ast.Subscript):
             sl = e.slice
-            if isinstance(sl, ast.Constant) and sl.value in SEED_ENV and _dotted(e.value).endswith("environ"):
+            if isinstance(sl, ast.Constant) and sl.value in self.seed_env and _dotted(e.value).endswith("environ"):
                 return True
             return self.tainted(e.value)
         if isinstance(e, ast.BinOp):
@@ -108,13 +121,13 @@ class Taint:
         if isinstance(e, ast.Call):
             f = e.func
             d = _dotted(f)
-            if d.endswith("home") and d.split(".")[-1] == "home" and "Path" in d:     # Path.home()
+            if self.home_seeds and d.endswith("home") and d.split(".")[-1] == "home" and "Path" in d:     # Path.home()
                 return True
-            if d.endswith("expanduser") and e.args and isinstance(e.args[0], ast.Constant) \
+            if self.home_seeds and d.endswith("expanduser") and e.args and isinstance(e.args[0], ast.Constant) \
                     and str(e.args[0].value).startswith("~"):
                 return True
             if d.endswith("environ.get") or d.endswith("getenv"):
-                return bool(e.args) and isinstance(e.args[0], ast.Constant) and e.args[0].value in SEED_ENV
+                return bool(e.args) and isinstance(e.args[0], ast.Constant) and e.args[0].value in self.seed_env
             if isinstance(f, ast.Attribute) and f.attr in PATH_METHODS:
                 return self.tainted(f.value) or (f.attr in {"join"} and bool(e.args) and self.tainted(e.args[0]))
             last = d.split(".")[-1] if d else ""
@@ -160,7 +173,7 @@ class Taint:
                             changed |= self._mark(it.optional_vars)
                 elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     for a in node.args.args + node.args.kwonlyargs:
-                        if SEED_NAME.match(a.arg) and a.arg not in self.names:
+                        if self.seed_name.match(a.arg) and a.arg not in self.names:
                             self.names.add(a.arg)
                             changed = True
                     if node.name not in self.funcs:
@@ -333,10 +346,141 @@ def runtime(pytest_args: list[str] | None = None) -> tuple[bool, str, list[str]]
     return code == 0 and not changed, detail, bad
 
 
+# ── AGENTDASH_DB 씨앗 (DEF-QA1-003 · 008) ──────────────────────────────
+DB_SEED_NAME = re.compile(r"^db_path$")
+DB_SEED_ATTR = {"db_path"}
+DB_SEED_ENV = {"AGENTDASH_DB"}
+GUARD_CALLS = {"_refuse_source", "refuse_source", "is_source_path"}
+REFUSE_MARK = "원천 루트 아래"          # db/conn.py _refuse_source 의 거부 문구
+
+
+def scan_db_seed(path: Path) -> list[str]:
+    """DB 경로 값에 쓰는 호출이 같은 함수 안 앞줄의 원천 거부 없이 나오면 위반."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    tn = Taint(tree, DB_SEED_NAME, DB_SEED_ATTR, DB_SEED_ENV, home_seeds=False)
+    tn.solve()
+    rel = path.relative_to(ROOT) if ROOT in path.parents else path
+    bad: list[str] = []
+    funcs = [n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+    for fn in funcs:
+        guards = [c.lineno for c in ast.walk(fn) if isinstance(c, ast.Call)
+                  and _dotted(c.func).split(".")[-1] in GUARD_CALLS]
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Call):
+                continue
+            f, d = node.func, _dotted(node.func)
+            last = d.split(".")[-1] if d else ""
+            hit = None
+            if isinstance(f, ast.Attribute) and f.attr in {"mkdir", "touch", "write_text", "write_bytes"} \
+                    and not d.startswith(("os.", "shutil.")) and tn.tainted(f.value):
+                hit = f".{f.attr}()"
+            elif isinstance(f, ast.Name) and f.id == "open" and _writes(_mode_of(node, 1)) and node.args \
+                    and tn.tainted(node.args[0]):
+                hit = "open(w)"
+            elif d.startswith("os.") and last in {"makedirs", "mkdir"} and node.args and tn.tainted(node.args[0]):
+                hit = f"{d}()"
+            elif d.endswith("sqlite3.connect") and node.args and tn.tainted(node.args[0]) \
+                    and "mode=ro" not in ast.unparse(node.args[0]):
+                hit = "sqlite3.connect()"
+            if hit and not any(g < node.lineno for g in guards):
+                bad.append(f"{rel}:{node.lineno}: DB 경로에 원천 거부 없이 쓰기 {hit} (함수 {fn.name})")
+    return bad
+
+
+#: (이름, 명령) — "python" 은 지금 인터프리터로 바꾼다. 전부 DB 를 conn.init_db / connect 로 연다.
+DB_ENTRIES: list[tuple[str, list[str]]] = [
+    ("db.conn", ["python", "-m", "agentdash.db.conn"]),
+    ("backfill", ["python", "-m", "agentdash.collect.backfill"]),
+    ("pricing-check", ["python", "-m", "agentdash.core.usage", "pricing-check"]),
+    ("reprice", ["python", "-m", "agentdash.core.usage", "reprice"]),
+    ("export", ["python", "-m", "agentdash.core.usage", "export"]),
+    ("pipeline", ["python", "-m", "agentdash.core.pipeline"]),
+    ("lifespan", ["python", "-c", "import asyncio\nfrom agentdash.app.main import app, lifespan\n"
+                  "async def m():\n    async with lifespan(app):\n        pass\nasyncio.run(m())"]),
+]
+
+
+def _real_guard_probe(fake_home: Path, fake_agents: Path) -> list[str]:
+    """가짜 루트를 설정한 채 실제 기본 루트 아래가 원천으로 판정되는지 (DEF-QA1-008). 비교만 — 경로를 열지 않는다."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from agentdash import settings as _s
+
+    keep = {k: os.environ.get(k) for k in ("AGENTDASH_CLAUDE_HOME", "AGENTDASH_AGENTS_ROOT")}
+    os.environ["AGENTDASH_CLAUDE_HOME"], os.environ["AGENTDASH_AGENTS_ROOT"] = str(fake_home), str(fake_agents)
+    try:
+        st = _s.get()
+        default_agents = Path(str(_s.load_yaml("settings.yaml")["sources"]["agents_root"])).expanduser()
+        probes = {"실제 홈 .claude": Path.home() / ".claude" / "agentdash-probe" / "x.db",
+                  "기본 agents_root": default_agents / "agentdash-probe" / "x.db"}
+        bad = [f"원천 판정 빠짐: {k} (설정 루트가 가짜일 때)" for k, v in probes.items() if not st.is_source_path(v)]
+        if st.is_source_path(ROOT / "data" / "x.db"):
+            bad.append("저장소 data/ 가 원천으로 판정됨")
+        return bad
+    finally:
+        for k, v in keep.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def db_seed_runtime(entries: list[tuple[str, list[str]]] | None = None) -> tuple[bool, str, list[str]]:
+    entries = DB_ENTRIES if entries is None else entries
+    tmp = Path(tempfile.mkdtemp(prefix="agentdash-dbseed-"))
+    fake_home, fake_agents = tmp / "claude_home", tmp / "agents_root"
+    (fake_home / "projects").mkdir(parents=True)
+    (fake_agents / "Other Project").mkdir(parents=True)
+    targets = {"home/newdir": fake_home / "newdir" / "deep" / "x.db",
+               "home": fake_home / "x.db",
+               "agents/Other Project": fake_agents / "Other Project" / "sub" / "x.db"}
+    before = _snapshot(tmp)
+    bad: list[str] = []
+    t0 = time.time()
+    runs = 0
+    try:
+        for name, cmd in entries:
+            cmd = [sys.executable if c == "python" else c for c in cmd]
+            for tname, target in targets.items():
+                env = dict(os.environ)
+                env.update({"AGENTDASH_CLAUDE_HOME": str(fake_home), "AGENTDASH_AGENTS_ROOT": str(fake_agents),
+                            "AGENTDASH_DB": str(target), "AGENTDASH_NO_WATCH": "1",
+                            "PYTHONPATH": str(ROOT / "src") + os.pathsep + env.get("PYTHONPATH", "")})
+                env.pop(READONLY_ENV, None)
+                try:
+                    p = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, timeout=120)
+                    code, out = p.returncode, (p.stdout or "") + (p.stderr or "")
+                except subprocess.TimeoutExpired:
+                    code, out = 124, "timeout"
+                runs += 1
+                if code == 0 or REFUSE_MARK not in out:
+                    bad.append(f"{name} → {tname}: 거부 안 함 (종료코드 {code})")
+                after = _snapshot(tmp)
+                new = sorted(set(after) - set(before))
+                if new:
+                    bad.append(f"{name} → {tname}: 거부 전 생김 {', '.join(new[:3])}")
+                    before = after
+        bad += _real_guard_probe(fake_home, fake_agents)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    detail = (f"진입점 {len(entries)} × 원천 아래 DB 경로 {len(targets)} = {runs} 회 · 거부 "
+              f"{runs - sum(1 for b in bad if '거부 안 함' in b)} · 생긴 항목 {sum(1 for b in bad if '생김' in b)} · "
+              f"실제 루트 판정 {'OK' if not any('원천 판정' in b or 'data/' in b for b in bad) else 'FAIL'} · "
+              f"{time.time() - t0:.1f}s")
+    return not bad, detail, bad
+
+
+def db_seed(entries=None) -> tuple[bool, str, list[str]]:
+    files = sorted(p for d in SCAN_DIRS if d.exists() for p in d.rglob("*.py"))
+    sbad = [b for f in files for b in scan_db_seed(f)]
+    ok, detail, rbad = db_seed_runtime(entries)
+    return ok and not sbad, f"정적 위반 {len(sbad)} · {detail}", sbad + rbad
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--static", action="store_true")
     ap.add_argument("--runtime", action="store_true")
+    ap.add_argument("--db-seed", action="store_true")
     ap.add_argument("--scan", nargs="+")
     a = ap.parse_args()
     rc = 0
@@ -346,8 +490,10 @@ def main() -> int:
             print("  위반", b)
         print(f"G-14  원천 무접촉 (정적)  {'PASS' if ok else 'FAIL'}  {detail}")
         return 0 if ok else 1
-    do_static = a.static or not a.runtime
-    do_runtime = a.runtime or not a.static
+    only = a.static or a.runtime or a.db_seed
+    do_static = a.static or not only
+    do_runtime = a.runtime or not only
+    do_db = a.db_seed or not only
     if do_static:
         ok, detail, bad = static()
         for b in bad[:30]:
@@ -359,6 +505,12 @@ def main() -> int:
         for b in bad[:30]:
             print("  위반", b)
         print(f"G-14  원천 무접촉 (읽기 전용 pytest)  {'PASS' if ok else 'FAIL'}  {detail}")
+        rc |= 0 if ok else 1
+    if do_db:
+        ok, detail, bad = db_seed()
+        for b in bad[:30]:
+            print("  위반", b)
+        print(f"G-14  원천 무접촉 (DB 경로 씨앗)  {'PASS' if ok else 'FAIL'}  {detail}")
         rc |= 0 if ok else 1
     return rc
 
