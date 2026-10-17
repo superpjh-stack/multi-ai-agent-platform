@@ -96,6 +96,28 @@ def _tokens(con, keys: list[str] | None = None) -> dict[str, int]:
     return out
 
 
+#: 가설 규칙으로 정한 판정 표시 (DEF-QA2-102) — D-18: S1 busy 인데 미래 ScheduleWakeup → SLEEPING R-03 (spec 글자로는 STALE R-02b)
+D18_NOTE = "가설 D-18"
+
+
+def hypothesis_note(state: str | None, rule: str | None, evidence: str | None) -> str | None:
+    """판정이 사람 확인 전 가설(decisions.md D-18)에 기댄 것이면 표시 문구. 근거 문자열은 300 자에서 잘릴 수 있어
+    앞쪽의 `S1 status=busy` 로도 본다 (idle 의 R-03 은 spec 그대로)."""
+    if state != "SLEEPING" or rule != "R-03" or not evidence:
+        return None
+    return D18_NOTE if ("D-18" in evidence or "status=busy" in evidence) else None
+
+
+def _last_evidence(con, keys: list[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for k in keys:
+        r = con.execute("SELECT reason FROM state_log WHERE agent_key=? ORDER BY at DESC, rowid DESC LIMIT 1",
+                        (k,)).fetchone()
+        if r and r[0]:
+            out[k] = r[0]
+    return out
+
+
 def project_label(project_key: str, project_path: str | None) -> str:
     from agentdash.core.graph import project_label as pl
     return pl(project_key, project_path)
@@ -170,7 +192,9 @@ def live_agents(con, now: datetime | None = None) -> list[dict]:
     tok = _tokens(con, keys)
     tools = _last_tools(con, keys)
     kids = dict(con.execute("SELECT parent_key, COUNT(*) FROM agent WHERE parent_key IS NOT NULL GROUP BY 1").fetchall())
+    evid = _last_evidence(con, [r["agent_key"] for r in rows if r["state"] == "SLEEPING"])
     for r in rows:
+        r["hypothesis"] = hypothesis_note(r["state"], r["state_reason"], evid.get(r["agent_key"]))
         r["project"] = project_label(r["project_key"], r["project_path"])
         r["elapsed"] = dur(ago(r["started_at"], now))
         r["idle"] = dur(ago(r["last_event_at"], now))
@@ -232,7 +256,7 @@ def live_verdict(con, a: dict, now: datetime) -> dict:
     ctx = S.build_ctx(con, row, now, S.load_s1(), S._open_children(con))
     v = S.evaluate({"kind": a["kind"]}, ctx, now)
     return {"state": v.state, "rule": v.rule, "evidence": v.evidence, "slow": v.slow,
-            "matches_db": v.state == a["state"]}
+            "matches_db": v.state == a["state"], "hypothesis": hypothesis_note(v.state, v.rule, v.evidence)}
 
 
 def ancestors(con, a: dict) -> list[dict]:
@@ -321,6 +345,8 @@ def agent_detail(con, key: str, now: datetime | None = None) -> dict:
     return {
         "found": True, "agent": a, "state": {"db": a["state"], "rule": a["state_reason"], "since": a["state_since"],
                                              "evidence": log[0]["reason"] if log else None,
+                                             "hypothesis": hypothesis_note(a["state"], a["state_reason"],
+                                                                           log[0]["reason"] if log else None),
                                              "now": live_verdict(con, a, now)},
         "state_log": log, "parent": parent, "ancestors": ancestors(con, a), "link_note": link_note,
         "children": children_of(con, key), "usage": workload(con, a, now), "files": files,

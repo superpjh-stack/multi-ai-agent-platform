@@ -70,3 +70,88 @@ def test_missing_report_is_unverified(tmp_path):
 def test_tool_output_rows_still_read_whole(tmp_path):
     """검사기 출력(도구)은 지금처럼 모든 행을 읽는다 — 표지 형식은 QA 리포트에만."""
     assert gate.rows_of("x\nG-07  토큰 합  PASS  a\nG-07  토큰 합  FAIL  b\n", "G-07") == [("PASS", "a"), ("FAIL", "b")]
+
+
+# ── 웨이브 D3 — DEF-QA1-103: QA 리포트 전부 · 가장 최근 회차 · 개발 판정과 더 나쁜 쪽 ──────────────
+import pytest  # noqa: E402
+
+
+@pytest.fixture
+def qa_root(tmp_path, monkeypatch):
+    (tmp_path / "outputs" / "e2e").mkdir(parents=True)
+    monkeypatch.setattr(gate, "ROOT", tmp_path)
+
+    def write(rel, text):
+        (tmp_path / "outputs" / rel).write_text(text, encoding="utf-8")
+    return write
+
+
+def _row(gid, st, note=""):
+    return f"<!-- gate:{gid} -->\n{gid}  항목  {st}  {note or st}\n"
+
+
+def test_round_of():
+    assert gate.round_of("qa1-데이터안전.md") == ("qa1-데이터안전", 0)
+    assert gate.round_of("qa1-데이터안전-r2.md") == ("qa1-데이터안전", 2)
+    assert gate.round_of("qa1-데이터안전-r10.md") == ("qa1-데이터안전", 10)
+    assert gate.round_of("self-observe-r2.md") == ("self-observe", 2)
+
+
+def test_latest_round_wins(qa_root):
+    qa_root("qa1-데이터안전.md", _row("G-14", "FAIL", "원본 옛 판정"))
+    qa_root("qa1-데이터안전-r2.md", _row("G-14", "PASS", "r2 판정"))
+    rows = gate.qa_latest("G-14")
+    assert [(f, s) for f, s, _ in rows] == [("outputs/qa1-데이터안전-r2.md", "PASS")]
+    qa_root("qa1-데이터안전-r10.md", _row("G-14", "WARN", "r10"))       # 숫자 비교 (r10 > r2)
+    assert [(f, s) for f, s, _ in gate.qa_latest("G-14")] == [("outputs/qa1-데이터안전-r10.md", "WARN")]
+
+
+def test_original_used_when_no_round(qa_root):
+    qa_root("qa1-데이터안전.md", _row("G-07", "FAIL", "원본"))
+    assert [(f, s) for f, s, _ in gate.qa_latest("G-07")] == [("outputs/qa1-데이터안전.md", "FAIL")]
+
+
+def test_each_family_read_and_e2e_included(qa_root):
+    qa_root("qa1-데이터안전-r2.md", _row("G-15", "PASS"))
+    qa_root("qa2-상태대조-r2.md", _row("G-15", "WARN"))
+    qa_root("e2e/self-observe-r2.md", _row("G-22", "PASS"))
+    assert sorted(s for _, s, _ in gate.qa_latest("G-15")) == ["PASS", "WARN"]
+    assert [f for f, _, _ in gate.qa_latest("G-22")] == ["outputs/e2e/self-observe-r2.md"]
+    assert gate.qa_latest("G-04") == []
+
+
+@pytest.mark.parametrize("dev,qa,want", [
+    ("PASS", "FAIL", "FAIL"), ("FAIL", "PASS", "FAIL"), ("PASS", "미검증", "미검증"),
+    ("미검증", "PASS", "미검증"), ("WARN", "미검증", "WARN"), ("PASS", "PASS", "PASS"),
+    ("PASS", "BLOCKED", "BLOCKED"), ("FAIL", "BLOCKED", "FAIL"),
+])
+def test_dev_and_qa_worse_wins(qa_root, monkeypatch, tmp_path, dev, qa, want):
+    qa_root("qa1-데이터안전-r2.md", _row("G-14", qa, "QA 실측"))
+    monkeypatch.setattr(gate, "run", lambda cmd, timeout=900: (0, f"G-14  도구  {dev}  개발 실측\n"))
+    monkeypatch.setattr(gate, "TOOLS", tmp_path)
+    (tmp_path / "check_readonly.py").write_text("", encoding="utf-8")
+    st, detail = gate.judge("G-14", "아키텍트", [("tool", "check_readonly")], {})
+    assert st == want
+    assert "outputs/qa1-데이터안전-r2.md" in detail and "QA 실측" in detail and "개발 실측" in detail
+    if qa == "BLOCKED":
+        assert "BLOCKED" in detail
+
+
+def test_dev_only_gate_without_qa_unchanged(qa_root, monkeypatch, tmp_path):
+    monkeypatch.setattr(gate, "run", lambda cmd, timeout=900: (0, "G-05  도구  PASS  개발 실측\n"))
+    monkeypatch.setattr(gate, "TOOLS", tmp_path)
+    (tmp_path / "check_parse_errors.py").write_text("", encoding="utf-8")
+    assert gate.judge("G-05", "개발1", [("tool", "check_parse_errors")], {}) == ("PASS", "개발 실측")
+
+
+def test_qa_required_gate_reads_latest_round(qa_root):
+    """QA 몫 게이트(G-12 등)는 GATES 의 ("qa", "") — 리포트 묶음 중 최근 회차, 없으면 미검증."""
+    assert gate.judge("G-12", "QA2", [("qa", "")], {})[0] == "미검증"
+    qa_root("qa2-상태대조.md", "표지 없는 옛 형식\nG-12  x  PASS  y\n")
+    qa_root("qa2-상태대조-r2.md", _row("G-12", "PASS", "r2"))
+    st, detail = gate.judge("G-12", "QA2", [("qa", "")], {})
+    assert st == "PASS" and "qa2-상태대조-r2.md" in detail
+
+
+def test_gates_table_uses_qa_auto():
+    assert all(name == "" for _, _, _, means in gate.GATES for k, name in means if k == "qa")

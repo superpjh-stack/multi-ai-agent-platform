@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import os
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -70,15 +71,69 @@ class Settings:
         이 저장소 자체가 agents_root 아래에 있으므로(`~/Desktop/AI Coding/Multi-agent Dashboard`)
         저장소 안(data/ · outputs/ · tests/fixtures/)만 예외다. 루트는 `guard_roots` (설정값 + 실제 기본값).
         """
-        p = Path(path).expanduser().resolve()
         homes, agents = self.guard_roots
-        if any(_under(p, h) for h in homes):
+        if any(same_or_under(path, h) for h in homes):
             return True
-        return any(_under(p, a) for a in agents) and not _under(p, ROOT)
+        return any(same_or_under(path, a) for a in agents) and not same_or_under(path, ROOT, loose=False)
 
 
-def _under(p: Path, root: Path) -> bool:
-    return p == root or root in p.parents
+# ── 경로 정체성 비교 (DEF-QA1-101) ────────────────────────────────────────────────────────────────
+# 경로 문자열 모양(대소문자 · 유니코드 정규화 · 심볼릭 링크 · `..`)과 무관하게 **같은 폴더인가** 로 판정한다.
+# macOS APFS(기본)는 대소문자 · NFC/NFD 를 무시하므로 `~/.CLAUDE` 와 `~/.claude` 가 같은 폴더다.
+# 비교 전용 — stat 만 하고 열거나 만들지 않는다.
+
+def _norm(part: str) -> str:
+    return unicodedata.normalize("NFC", part).casefold()
+
+
+def _abs_resolved(path: str | Path) -> Path:
+    p = Path(os.path.expanduser(str(path)))
+    if not p.is_absolute():
+        p = Path.cwd() / p
+    return p.resolve()          # 존재하는 부분은 심볼릭 링크를 따라가고 `..` 를 정리한다 (없는 꼬리도)
+
+
+def _existing_base(p: Path) -> Path:
+    """p 자신 또는 존재하는 가장 가까운 조상."""
+    cur = p
+    while not os.path.exists(cur) and cur != cur.parent:
+        cur = cur.parent
+    return cur
+
+
+def _ident(p: Path) -> tuple[int, int] | None:
+    try:
+        st = os.stat(p)
+    except OSError:
+        return None
+    return st.st_dev, st.st_ino
+
+
+def same_or_under(path: str | Path, root: str | Path, *, loose: bool = True) -> bool:
+    """path 가 root 와 같은 곳이거나 그 아래인가 — 파일 시스템 정체성 기준.
+
+    1. 둘 다 resolve(심볼릭 링크 · `..`). root 의 존재하는 가장 가까운 조상(rb)과 그 아래 없는 꼬리(rt).
+    2. path 의 존재하는 가장 가까운 조상부터 위로 올라가며 (st_dev, st_ino) 가 rb 와 같은 조상 X 를 찾고,
+       X 아래 path 이름들이 rt 로 시작하면(NFC + casefold 비교) 같은 곳/아래.
+    3. loose(기본) 이면 이름 비교도 더한다 — 경로 전체를 NFC + casefold 해 root 가 접두면 같은 곳으로 본다
+       (없는 꼬리 · 대소문자 구분 볼륨에서는 과잉 거부 쪽 — 쓰기 거부 판정에 쓴다). 허용 예외 판정은 loose=False.
+    """
+    p, r = _abs_resolved(path), _abs_resolved(root)
+    rn = [_norm(x) for x in r.parts]
+    if loose and [_norm(x) for x in p.parts][: len(rn)] == rn:
+        return True
+    rb = _existing_base(r)
+    rid = _ident(rb)
+    if rid is None:
+        return False
+    rt = rn[len(rb.parts):]
+    pb = _existing_base(p)
+    for x in (pb, *pb.parents):
+        if _ident(x) == rid:
+            rest = [_norm(s) for s in p.parts[len(x.parts):]]
+            if rest[: len(rt)] == rt:
+                return True
+    return False
 
 
 def load_yaml(name: str) -> dict:

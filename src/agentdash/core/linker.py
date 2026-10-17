@@ -543,14 +543,19 @@ def _activity(con, key: str, tool_last: str | None, last_event: str | None,
               signals: list[ReturnSignal]) -> str | None:
     """마지막 활동 = max(tool_call 마지막 시각, 반환 뒤 last_event_at). 원천 기록 파일은 열지 않는다 (R8).
 
-    ingest 가 `agent.last_event_at` 에 SubagentHandback 뒤 활동 아닌 꼬리 줄(그 결과 · 첨부 · 마지막 인사)을 넣지 않으므로
-    `last_event_at > 가장 늦은 반환` 이면 그 뒤에 활동(들어온 메시지 · 새 tool_use)이 있었던 것 (DEF-QA2-003)."""
+    ingest 가 `agent.last_event_at` 에 SubagentHandback 뒤 활동 아닌 꼬리 줄(그 결과 · 첨부)을 넣지 않으므로
+    `last_event_at > 가장 늦은 반환` 이면 그 뒤에 활동(들어온 메시지 · 새 tool_use)이 있었던 것 (DEF-QA2-003).
+    단 그 시각이 사용량 줄(assistant 응답) 시각이면 활동으로 보지 않는다 (DEF-QA1-102 — 응답은 마지막 기록엔 넣는다)."""
     ends = [s.at for s in signals if s.source != "notification" or s.status in END_STATUSES]
     act = tool_last
     if not ends or not last_event:
         return act
     latest = max(ends, key=_norm)
     if _norm(last_event) <= _norm(latest):
+        return act
+    # ingest 는 handback 뒤 사용량 줄(tool_use 없는 응답)도 last_event_at 에 넣는다 (DEF-QA1-102) — 그 시각이면 활동 아님
+    # (tool_use 가 있었다면 tool_last 가 이미 그 시각). 들어온 메시지 · 그 뒤 다른 줄이 마지막이면 활동.
+    if con.execute("SELECT 1 FROM usage_event WHERE agent_key=? AND at=? LIMIT 1", (key, last_event)).fetchone():
         return act
     if act is None or _norm(last_event) > _norm(act):
         act = last_event

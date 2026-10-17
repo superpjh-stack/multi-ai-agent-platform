@@ -156,3 +156,10 @@
 - 그래서 `linker._activity` = max(tool_call 마지막 시각, 반환 뒤 last_event_at) — 원천 기록 파일 꼬리 다시 읽기(`record_activity_since`) 삭제. `state.build_ctx` → `linker.return_of` 도 파일을 열지 않는다.
 - 근거: spec R-02a · R-09 · R-11 「마지막 · 최근 기록」, QA2 `judge.py` `last_at`(모든 줄). 실측: 재백필 기본 DB 전수 326 대조 불일치 1 (D-18 `S:2bee9170…` 그대로).
 - 테스트: `tests/test_model.py` (모든 줄 · handback 뒤 꼬리 · 증분) · `tests/test_linker.py::test_L07_incoming_message_after_handback_wakes_child` · `…ingest_to_linker_rewake_end_to_end`.
+
+## D-21 `last_event_at` ≥ 마지막 usage · tool_call — handback 뒤 사용량 줄은 기록이지만 활동은 아니다 (DEF-QA1-102, D-20 보완)
+- 상태: 확정 (웨이브 D3 — 아키텍트 · 개발1, 2026-10-17). 스키마 변경 없음.
+- 규칙: `collect/ingest.py` — handback 뒤에도 **사용량 · tool_use 가 있는 assistant 줄**은 `last_event_at` 에 넣는다(활동 아닌 첨부 · 결과 · isMeta 꼬리는 D-20 대로 제외, after_hb 유지). 증분 이어 가기: 마지막 기록이 handback 이하 **또는 handback 뒤 사용량 줄 시각**이면 「handback 뒤」. `core/linker._activity` — `last_event_at` 이 그 에이전트의 사용량 줄 시각과 같으면 다시 깨어난 증거로 보지 않는다(tool_use 가 있었다면 tool_call 이 이미 그 시각).
+- 한계: 반환 뒤 들어온 메시지에 tool_use 없이 답만 하고 그 뒤 줄이 없으면 「반환 그대로」 로 본다(QA2 judge 는 다시 깨어남) — 실측 0 건.
+- 실측: 개발1 DB 재백필 — `usage_event.at > last_event_at` 에이전트 60 → 0 · 61 행/출력 34,334/$11.5749 → 0 · tool_call 뒤 0. QA2 `judge.py` 전수 328 불일치 전 1 (D-18) → 후 0 (그 순간 오케스트레이터 RUNNING — 유휴면 D-18 1 건). ingest 만 바꾸고 linker 를 그대로 두면 51 (반환 뒤 응답을 깨어남으로 오판) — 그래서 linker 도 함께.
+- 테스트: `tests/test_model.py::test_post_handback_billed_reply_*` 2 · `tests/test_linker.py::test_L07_billed_reply_after_handback_is_not_a_rewake`.

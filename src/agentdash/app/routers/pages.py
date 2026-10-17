@@ -44,9 +44,19 @@ def dashboard(request: Request, part: str | None = None):
 
 
 @router.get("/graph")
-def graph_page(request: Request):
+def graph_page(request: Request, project: str | None = None):
+    # 프로젝트 옵션을 서버에서 미리 채운다 — 첫 로드의 `?project=` 가 select 에 남아 첫 fetch 에 실린다 (DEF-QA2-103)
+    con = conn.connect()
+    try:
+        rows = con.execute("SELECT project_key, MAX(project_path) FROM agent GROUP BY project_key").fetchall()
+    finally:
+        con.close()
+    projects = sorted(({"key": k, "label": Q.project_label(k, p)} for k, p in rows if k),
+                      key=lambda x: (x["label"].lower(), x["key"]))
+    if project and project not in {x["key"] for x in projects}:
+        projects.insert(0, {"key": project, "label": project[:60]})     # 모르는 키도 그대로 보낸다 (API 가 판단)
     return render(request, "graph.html", {"title": "네트워크 구성도", "active": "/graph", "states": S.STATES,
-                                          "state_ko": Q.STATE_KO})
+                                          "state_ko": Q.STATE_KO, "projects": projects, "project": project or ""})
 
 
 @router.get("/agents/{key}/raw")

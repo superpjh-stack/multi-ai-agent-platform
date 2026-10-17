@@ -45,6 +45,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -411,7 +412,11 @@ def _real_guard_probe(fake_home: Path, fake_agents: Path) -> list[str]:
         st = _s.get()
         default_agents = Path(str(_s.load_yaml("settings.yaml")["sources"]["agents_root"])).expanduser()
         probes = {"실제 홈 .claude": Path.home() / ".claude" / "agentdash-probe" / "x.db",
-                  "기본 agents_root": default_agents / "agentdash-probe" / "x.db"}
+                  "기본 agents_root": default_agents / "agentdash-probe" / "x.db",
+                  # 대소문자 · NFD 변형 (DEF-QA1-101) — 판정만, 열지 않는다
+                  "실제 홈 .CLAUDE": Path.home() / ".CLAUDE" / "agentdash-probe" / "x.db",
+                  "기본 agents_root 소문자": Path(str(default_agents).lower()) / "agentdash-probe" / "x.db",
+                  "기본 agents_root NFD": Path(unicodedata.normalize("NFD", str(default_agents))) / "agentdash-probe"}
         bad = [f"원천 판정 빠짐: {k} (설정 루트가 가짜일 때)" for k, v in probes.items() if not st.is_source_path(v)]
         if st.is_source_path(ROOT / "data" / "x.db"):
             bad.append("저장소 data/ 가 원천으로 판정됨")
@@ -427,12 +432,19 @@ def _real_guard_probe(fake_home: Path, fake_agents: Path) -> list[str]:
 def db_seed_runtime(entries: list[tuple[str, list[str]]] | None = None) -> tuple[bool, str, list[str]]:
     entries = DB_ENTRIES if entries is None else entries
     tmp = Path(tempfile.mkdtemp(prefix="agentdash-dbseed-"))
-    fake_home, fake_agents = tmp / "claude_home", tmp / "agents_root"
+    # agents 루트 이름에 한글(NFC 로 만든다) — NFD 변형 경로가 문자열로는 달라지게 (DEF-QA1-101)
+    fake_home, fake_agents = tmp / "claude_home", tmp / unicodedata.normalize("NFC", "agents_root_에이전트")
     (fake_home / "projects").mkdir(parents=True)
     (fake_agents / "Other Project").mkdir(parents=True)
+    nfd_agents = Path(unicodedata.normalize("NFD", str(fake_agents)))
     targets = {"home/newdir": fake_home / "newdir" / "deep" / "x.db",
                "home": fake_home / "x.db",
-               "agents/Other Project": fake_agents / "Other Project" / "sub" / "x.db"}
+               "agents/Other Project": fake_agents / "Other Project" / "sub" / "x.db",
+               # 대소문자 · 유니코드 정규화 변형 (APFS 는 같은 폴더로 연다 — 문자열 비교면 통과해 버린다)
+               "HOME 대문자/newdir": tmp / "CLAUDE_HOME" / "newdir" / "x.db",
+               "Home 대소문자/projects": tmp / "Claude_Home" / "projects" / "y.db",
+               "agents NFD/Other Project": nfd_agents / "Other Project" / "sub" / "x.db",
+               "agents NFD+대문자/other project": tmp / unicodedata.normalize("NFD", "AGENTS_ROOT_에이전트") / "other project" / "x.db"}
     before = _snapshot(tmp)
     bad: list[str] = []
     t0 = time.time()

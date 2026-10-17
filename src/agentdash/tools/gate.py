@@ -7,6 +7,10 @@
 판정은 **실제 명령의 출력으로만** 한다.
   · QA 리포트(outputs/…md)는 표지 `<!-- gate:G-nn -->` 바로 다음 줄 하나만 판정 행으로 읽는다 (DEF-QA2-008). 표지가 없으면
     `미검증 — QA 재검증 필요(리포트 형식)`. 리포트에 붙인 `make gate` 출력 같은 다른 판정 꼴 줄은 읽지 않는다.
+  · 모든 게이트에 대해 QA 리포트 묶음(`outputs/qa*-*.md` · `outputs/e2e/self-observe*.md`, 묶음 = 이름에서 `-rN` 을 뗀 것)마다
+    그 게이트 표지가 있는 **가장 최근 회차**(N 이 큰 것, 없으면 원본) 하나를 읽는다. 개발 도구 판정과 QA 판정이 다르면
+    **더 나쁜 쪽** (PASS < 미검증 < WARN < FAIL, BLOCKED 은 FAIL 다음 · 출처 표시). 실측 칸에 읽은 파일을 적는다 (DEF-QA1-103).
+    GATES 의 ("qa", "") 는 「QA 판정 필수」 — 표지가 하나도 없으면 미검증.
   · 검사기(src/agentdash/tools/check_*.py)가 있으면 돌려서 그 출력의 `G-nn  항목  PASS|FAIL|WARN|BLOCKED|미검증  실측` 행을 읽는다.
     한 게이트에 행이 여럿이면 FAIL > BLOCKED > WARN > 미검증 > PASS.
   · 게이트가 테스트 파일로 정의돼 있으면(goal.md §2 「검증」 열) 그 파일만 pytest 로 돌린다.
@@ -37,7 +41,12 @@ _ROW = re.compile(r"^\s*(G-\d{2})\s+(.*?)\s{2,}(PASS|FAIL|WARN|BLOCKED|미검증
 _QA_MARK = re.compile(r"^\s*<!--\s*gate:(G-\d{2})\s*-->\s*$")
 QA_FORMAT_NOTE = "— QA 재검증 필요(리포트 형식)"
 
-#: (게이트, 항목, 담당, 판정 수단). 수단 = ("tool", 이름) | ("test", 파일) | ("qa", 리포트 경로) 목록 — 전부 통과해야 PASS.
+#: QA 리포트 묶음 (DEF-QA1-103) — ROOT 기준 glob. 회차 = 파일 이름 끝 `-rN` (없으면 0).
+QA_GLOBS = ("outputs/qa*-*.md", "outputs/e2e/self-observe*.md")
+_ROUND = re.compile(r"^(?P<base>.+?)(?:-r(?P<n>\d+))?\.md$")
+
+#: (게이트, 항목, 담당, 판정 수단). 수단 = ("tool", 이름) | ("test", 파일) | ("qa", "" = QA 판정 필수 · 또는 리포트 경로)
+#: 목록 — 전부 통과해야 PASS. QA 리포트 판정은 수단과 무관하게 모든 게이트에 더한다 (qa_latest).
 GATES: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("G-01", "골격 — make setup · 테이블 11", "아키텍트", [("test", "test_schema.py"), ("db", "tables")]),
     ("G-02", "파서 회귀 — 픽스처 S1~S6 · S9 (V-08)", "개발1", [("test", "test_parsers.py")]),
@@ -50,7 +59,7 @@ GATES: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("G-09", "판정 규칙 13 — 표 기반 테스트", "개발2", [("test", "test_state.py")]),
     ("G-10", "연결 규칙 L-01~L-07 테스트", "개발2", [("test", "test_linker.py")]),
     ("G-11", "실시간 — SSE 5 초 · 훅 1 초", "개발2", [("test", "test_realtime.py")]),
-    ("G-12", "상태 대조 — 표본 30 오판 ≤ 2", "QA2", [("qa", "outputs/qa2-상태대조.md")]),
+    ("G-12", "상태 대조 — 표본 30 오판 ≤ 2", "QA2", [("qa", "")]),
     ("G-13", "본문 미저장 — DB TEXT ≤ 300 · 픽스처 (V-04)", "아키텍트", [("tool", "check_no_payload"),
                                                                     ("script", "check_fixtures_redacted")]),
     ("G-14", "원천 무접촉 — 정적 + 읽기 전용 pytest + DB 경로 (V-05)", "아키텍트", [("tool", "check_readonly")]),
@@ -59,12 +68,12 @@ GATES: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("G-16", "로컬 전용 — 127.0.0.1 · 외부 전송 0 (V-06)", "아키텍트", [("tool", "check_bind")]),
     ("G-17", "화면 6 · API 10 — HTTP 200", "개발1·2", [("tool", "check_routes")]),
     ("G-18", "구성도 — 300 노드 ≤ 300 ms · 접기 · 보기 3", "개발2", [("test", "test_graph.py"),
-                                                                ("qa", "outputs/qa2-상태대조.md")]),
+                                                                ("qa", "")]),
     ("G-19", "진척 판정 — P-01~P-07 · 고려솔더 (V-11)", "개발1", [("tool", "check_pipeline"),
                                                               ("test", "test_pipeline.py")]),
     ("G-20", "비용 화면 — [추정] 표기 · 단가 없음 · reprice", "개발1", [("test", "test_usage_page.py")]),
-    ("G-21", "브라우저 — 콘솔 오류 0 · 390px", "QA2", [("qa", "outputs/qa2-상태대조.md")]),
-    ("G-22", "자기 관찰 — 루프 서브에이전트 RUNNING → DONE", "QA2", [("qa", "outputs/e2e/self-observe.md")]),
+    ("G-21", "브라우저 — 콘솔 오류 0 · 390px", "QA2", [("qa", "")]),
+    ("G-22", "자기 관찰 — 루프 서브에이전트 RUNNING → DONE", "QA2", [("qa", "")]),
 ]
 
 
@@ -107,6 +116,39 @@ def qa_rows(text: str, gid: str) -> list[tuple[str, str]]:
     return res
 
 
+def round_of(name: str) -> tuple[str, int]:
+    """파일 이름 → (묶음, 회차). `qa1-데이터안전-r2.md` → ("qa1-데이터안전", 2) · 접미사 없으면 0."""
+    m = _ROUND.match(name)
+    if not m:
+        return name, 0
+    return m.group("base"), int(m.group("n") or 0)
+
+
+def _rel(p: Path) -> str:
+    try:
+        return p.relative_to(ROOT).as_posix()
+    except ValueError:
+        return p.as_posix()
+
+
+def qa_latest(gid: str, extra: list[Path] | None = None) -> list[tuple[str, str, str]]:
+    """그 게이트의 QA 판정 — 묶음마다 표지가 있는 가장 최근 회차 파일 하나. [(파일, 판정, 실측)]."""
+    files = {p for g in QA_GLOBS for p in ROOT.glob(g) if p.is_file()} | set(extra or [])
+    fams: dict[tuple[str, str], list[tuple[int, Path]]] = {}
+    for p in files:
+        base, n = round_of(p.name)
+        fams.setdefault((p.parent.as_posix(), base), []).append((n, p))
+    out = []
+    for key in sorted(fams):
+        for _, p in sorted(fams[key], key=lambda x: -x[0]):
+            rows = qa_rows(p.read_text(encoding="utf-8"), gid)
+            if rows:
+                st, detail = combine(rows)
+                out.append((_rel(p), st, detail))
+                break
+    return out
+
+
 def combine(items: list[tuple[str, str]]) -> tuple[str, str]:
     st = max((s for s, _ in items), key=lambda s: _RANK[s])
     detail = " ‖ ".join(d for _, d in items if d)
@@ -115,6 +157,8 @@ def combine(items: list[tuple[str, str]]) -> tuple[str, str]:
 
 def judge(gid: str, owner: str, means: list[tuple[str, str]], cache: dict) -> tuple[str, str]:
     results: list[tuple[str, str]] = []
+    explicit: list[Path] = []
+    qa_required = False
     for kind, name in means:
         if kind == "db":
             from agentdash import settings as _s
@@ -149,13 +193,29 @@ def judge(gid: str, owner: str, means: list[tuple[str, str]], cache: dict) -> tu
             else:
                 results.append((FAIL, f"{name}: {gid} 행 없음 (종료코드 {code}) {last_line(out, 80)}"))
         elif kind == "qa":
-            path = ROOT / name
-            if not path.exists():
-                results.append((UNVERIFIED, f"{name} 없음 — QA 리포트 대기 (웨이브 C)"))
-                continue
-            rows = qa_rows(path.read_text(encoding="utf-8"), gid)
-            results.extend(rows or [(UNVERIFIED, f"{QA_FORMAT_NOTE}: {name} 에 <!-- gate:{gid} --> 표지 판정 행 없음")])
-    return combine(results)
+            qa_required = True
+            if name:
+                path = ROOT / name
+                if not path.exists():
+                    results.append((UNVERIFIED, f"{name} 없음 — QA 리포트 대기 (웨이브 C)"))
+                    continue
+                explicit.append(path)
+    # QA 리포트 판정 (DEF-QA1-103) — 모든 게이트, 묶음마다 최근 회차. 개발 판정과 더 나쁜 쪽.
+    qa = qa_latest(gid, explicit)
+    if qa_required and not qa:
+        if not results:
+            where = ", ".join(_rel(p) for p in explicit) or " · ".join(QA_GLOBS)
+            results.append((UNVERIFIED, f"{QA_FORMAT_NOTE}: {where} 에 <!-- gate:{gid} --> 표지 판정 행 없음"))
+    if not qa:
+        return combine(results)
+    qa_st, _ = combine([(s, d) for _, s, d in qa])
+    qa_detail = " ‖ ".join(f"QA {f} {s}: {d}" for f, s, d in qa)
+    if not results:                     # QA 몫 게이트 — 판정 실측 뒤에 읽은 파일
+        return qa_st, " ‖ ".join(f"{d[:300]} (QA {f})" for f, s, d in qa)[:480]
+    dev_st, dev_detail = combine(results)
+    st = max((dev_st, qa_st), key=lambda s: _RANK[s])
+    tag = f"개발 {dev_st} · QA {qa_st}" + (" (BLOCKED 쪽 있음)" if BLOCKED in (dev_st, qa_st) else "")
+    return st, f"{tag} ‖ {qa_detail[:220]} ‖ 개발: {dev_detail}"[:480]
 
 
 def blocked_gates() -> dict[str, str]:

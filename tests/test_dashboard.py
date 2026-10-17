@@ -231,3 +231,48 @@ def test_d03_undercount_note_d17(db):
     out = _row(page, "출력 토큰")
     assert out.index("1,234") < out.index(note)                                         # 자손 포함 칸에만 (자기 칸 뒤)
     assert note not in c.get("/agents/S:done").text                                     # 자손 없는 세션 — 표기 없음
+
+
+# ── 웨이브 D3 — DEF-QA2-102: D-18 가설로 SLEEPING 이 된 판정에 「가설 D-18」 표시 ──────────────
+D18_NOTE = "가설 D-18"
+
+
+def _seed_sleepers(con):
+    s = Synth(con)
+    s.agent("S:d18", "SESSION", "-p1", "d18", state="SLEEPING", rule="R-03", ago_min=6, name="sleeper-d18")
+    s.agent("S:idle", "SESSION", "-p1", "idle", state="SLEEPING", rule="R-03", ago_min=6, name="sleeper-idle")
+    con.execute("INSERT INTO state_log (agent_key, at, state, reason) VALUES ('S:d18', ?, 'SLEEPING', ?)",
+                (iso(NOW), "R-03 S1 status=busy · ScheduleWakeup 깰 시각 2026-10-17T10:00:00Z · 마지막 기록 … · D-18"))
+    con.execute("INSERT INTO state_log (agent_key, at, state, reason) VALUES ('S:idle', ?, 'SLEEPING', ?)",
+                (iso(NOW), "R-03 S1 status=idle · ScheduleWakeup 깰 시각 2026-10-17T10:00:00Z"))
+    con.commit()
+
+
+def test_hypothesis_note_rule():
+    from agentdash.app.routers import agents as Q
+    assert Q.hypothesis_note("SLEEPING", "R-03", "R-03 S1 status=busy · 깰 시각 … · D-18") == D18_NOTE
+    assert Q.hypothesis_note("SLEEPING", "R-03", "R-03 S1 status=busy · 깰 시각 " + "x" * 400) == D18_NOTE   # 잘려도
+    assert Q.hypothesis_note("SLEEPING", "R-03", "R-03 S1 status=idle · 깰 시각 …") is None
+    assert Q.hypothesis_note("STALE", "R-02b", "R-02b S1 status=busy · 300초") is None
+    assert Q.hypothesis_note("SLEEPING", "R-03", None) is None
+
+
+def test_d01_card_marks_d18_hypothesis(db):
+    _seed_sleepers(db)
+    page = client().get("/").text
+    i = page.index('data-key="S:d18"')
+    card = page[i:page.index("</div>\n    </div>", i)] if "</div>\n    </div>" in page[i:] else page[i:i + 1500]
+    assert D18_NOTE in card
+    j = page.index('data-key="S:idle"')
+    assert D18_NOTE not in page[j:j + 600]
+
+
+def test_d03_marks_d18_hypothesis(db):
+    _seed_sleepers(db)
+    c = client()
+    j = c.get("/api/v1/agents/S:d18").json()
+    assert j["state"]["hypothesis"] == D18_NOTE
+    page = c.get("/agents/S:d18").text
+    assert D18_NOTE in page[page.index("판정 (저장)"):page.index("판정 (지금)")]
+    assert c.get("/api/v1/agents/S:idle").json()["state"]["hypothesis"] is None
+    assert D18_NOTE not in c.get("/agents/S:idle").text

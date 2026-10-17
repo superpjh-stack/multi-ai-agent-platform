@@ -144,3 +144,54 @@ def test_incoming_message_after_handback_is_a_record_across_increments(home, con
                 _line("attachment", "2026-10-17T07:20:01.000Z")], mode="a")
     ingest.ingest_all(con, run_hooks=False)
     assert _last(con, "A:c1") == "2026-10-17T07:20:01.000Z"                         # 깨어난 뒤엔 모든 줄
+
+
+# ── 웨이브 D3 — DEF-QA1-102: last_event_at ≥ 그 에이전트의 마지막 usage · tool_call 시각 ──────────────
+_USAGE = {"input_tokens": 1, "output_tokens": 7, "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0}
+
+
+def _billed(ts, text="note", rid=None):
+    d = json.loads(_line("assistant", ts, [{"type": "text", "text": text}], agentId="c1"))
+    d["message"]["usage"] = dict(_USAGE)
+    d["requestId"] = rid or f"req-{ts}"
+    return json.dumps(d)
+
+
+def _floor_ok(con, key):
+    le = _last(con, key)
+    u = con.execute("SELECT MAX(at) FROM usage_event WHERE agent_key=?", (key,)).fetchone()[0]
+    t = con.execute("SELECT MAX(at) FROM tool_call WHERE agent_key=?", (key,)).fetchone()[0]
+    return all(x is None or le >= x for x in (u, t))
+
+
+def test_post_handback_billed_reply_is_a_record(home, con):
+    """handback 뒤 isMeta task-notification 에 응답한 assistant 줄(사용량 있음) — 마지막 기록에 들어간다 (QA1 재현 꼴)."""
+    _sub(home, [
+        _line("assistant", "2026-10-17T07:02:00.000Z", _tu("SubagentHandback", "h1"), agentId="c1"),
+        _line("user", "2026-10-17T07:02:02.000Z", [{"type": "tool_result", "tool_use_id": "h1"}], agentId="c1"),
+        _line("user", "2026-10-17T07:25:00.000Z", "<task-notification>x</task-notification>", isMeta=True, agentId="c1"),
+        _billed("2026-10-17T07:25:03.000Z"),
+        _line("attachment", "2026-10-17T07:25:04.000Z"),                         # 활동 아닌 꼬리 — 여전히 제외
+    ])
+    ingest.ingest_all(con, run_hooks=False)
+    assert _last(con, "A:c1") == "2026-10-17T07:25:03.000Z"
+    assert _floor_ok(con, "A:c1")
+
+
+def test_post_handback_billed_reply_across_increments(home, con):
+    """증분으로 읽어도 같다 — 사용량 줄 뒤의 꼬리 줄은 다음 증분에서도 「handback 뒤」 로 이어 간다."""
+    _sub(home, [
+        _line("assistant", "2026-10-17T07:02:00.000Z", _tu("SubagentHandback", "h1"), agentId="c1"),
+        _billed("2026-10-17T07:02:05.000Z", "bye"),
+    ])
+    ingest.ingest_all(con, run_hooks=False)
+    assert _last(con, "A:c1") == "2026-10-17T07:02:05.000Z"
+    _sub(home, [_line("attachment", "2026-10-17T07:05:00.000Z"),
+                _line("user", "2026-10-17T07:30:00.000Z", "meta", isMeta=True, agentId="c1"),
+                _billed("2026-10-17T07:30:02.000Z", "again")], mode="a")
+    ingest.ingest_all(con, run_hooks=False)
+    assert _last(con, "A:c1") == "2026-10-17T07:30:02.000Z"
+    _sub(home, [_line("system", "2026-10-17T07:31:00.000Z", subtype="turn_duration")], mode="a")
+    ingest.ingest_all(con, run_hooks=False)
+    assert _last(con, "A:c1") == "2026-10-17T07:30:02.000Z"
+    assert _floor_ok(con, "A:c1")

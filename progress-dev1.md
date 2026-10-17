@@ -223,3 +223,11 @@ ingest_all(con, *, since=None, run_hooks=True, link=True)   # link 이고 state.
 - **R8 반영** — `agent.last_event_at` = 모든 줄 종류의 마지막 기록(handback 뒤 활동 아닌 꼬리 제외, D-20). `parsers/transcript.parse_line(raw, *, others=False)` — `others=True` 면 세지 않는 줄 종류도 `Record(type, uuid, timestamp)` 만 (ingest 가 씀; 기본 동작 그대로). 새 열 없음. 테스트 `tests/test_model.py` 3 (빨강 → 초록).
 - **R9 반영** — `model.add_edge`: label 은 더 늦은(같은) 시각 값만 바꾼다, 시각 없는 값 · 옛 값은 label 을 안 덮음(엣지 4 종 공통, `at` 도 시각 없는 값으로 안 바뀜). 테스트 `tests/test_model.py` 10 (빨강 8 → 초록).
 - 재백필 기본 DB 4.0 s · 원천 파일 580 · agent 77 / 243 / 6 / 1 · usage_event 27,570 · parse_error 0. `uv run pytest -q` **266 passed**. `make gate` PASS 18 · 미검증 4 (G-12 · G-18 · G-21 · G-22 — QA 리포트 형식, DEF-QA2-008) · FAIL 0. 실제 settings.json sha1 8641eb22e8f5… 그대로.
+
+## 2D3. 웨이브 D3 (수정 담당 — 아키텍트 · 개발1, 2026-10-17 18:30 · 커밋 안 함)
+- **DEF-QA1-101** `settings.same_or_under` (resolve → 존재하는 가장 가까운 조상부터 (st_dev, st_ino) 비교 · 없는 꼬리 NFC+casefold) — `is_source_path` · `db/conn` 거부 · `scripts/hooks_install.is_real_target` 가 같은 함수. 저장소 예외는 정체성만(loose=False). 테스트 `test_settings.py` +7 · `test_hooks_install.py` +1 (빨강 → 초록). QA1 재현(`$S/CASEHOME/newdir/x.db` · `$S/CaseHome/projects/y.db`) → `RuntimeError`, 생긴 항목 0. 실제 `~/.CLAUDE/…` · `~/desktop/ai coding/…` 판정 True (판정만).
+- **check_readonly --db-seed** 경로 3 → 7 (대문자 · 대소문자 · NFD · NFD+대문자) + 실제 루트 변형 3. 옛 settings.py(8606bc8) 사본에서 FAIL(거부 21/49 · 생긴 항목 4) · 새 코드 PASS 49/49.
+- **DEF-QA1-103 · DEF-QA2-101** gate: 모든 게이트에 QA 묶음(`outputs/qa*-*.md` · `e2e/self-observe*.md`)별 최근 회차 표지 판정 · 개발 판정과 더 나쁜 쪽 · 실측 칸에 파일. CLAUDE.md 「QA 리포트 형식」 1 줄. `test_gate.py` +15.
+- **DEF-QA1-102** D-21 (ingest + linker._activity). 사용량 뒤 last_event_at 60 → 0. judge.py 전수 328 불일치 1 → 0 (ingest 만이면 51).
+- **DEF-QA2-102** D-01 카드 · D-03 판정(저장 · 지금)에 「가설 D-18」 (`agents.hypothesis_note`). **DEF-QA2-103** `/graph` 프로젝트 옵션 서버에서 미리 채움 + `selected` · JS 는 없는 것만 더함. 테스트 +4.
+- 기본 DB 재백필 · `uv run pytest -q` **296 passed** · `make gate` PASS 21 · FAIL 1 (G-14 = QA1 r2 FAIL 반영, 개발 PASS — QA1 재검증 대기). settings.json sha1 8641eb22e8f5… 전 = 후.

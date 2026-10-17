@@ -231,3 +231,18 @@ def test_graph_page_has_pinned_cdn_and_views():
         assert f'data-view="{v}"' in t
     assert "breadthfirst" in t and "cose" in t and "/api/v1/stream" in t   # 보기 배치 · SSE
     assert "data-placeholder" not in t
+
+
+def test_graph_page_project_query_applied_on_first_load(db):
+    """DEF-QA2-103: `/graph?project=<키>` 첫 로드 — select 에 그 옵션이 처음부터 있고 선택돼 있어 첫 fetch 가 그 프로젝트로 간다."""
+    s = Synth(db)
+    s.agent("S:a", "SESSION", "-proj-alpha", "a", path="/work/alpha")
+    s.agent("S:b", "SESSION", "-proj-beta", "b", path="/work/beta")
+    db.commit()
+    from agentdash.app.main import app
+    t = TestClient(app).get("/graph?view=tree&since=24h&project=-proj-beta").text
+    sel = t[t.index('<select name="project">'):t.index("</select>", t.index('<select name="project">'))]
+    assert 'value="-proj-beta" selected' in sel and 'value="-proj-alpha"' in sel
+    assert "sel.options.length <= 1" not in t          # 옵션이 이미 있어도 API 목록으로 채우는 쪽이 값을 지우지 않는다
+    t2 = TestClient(app).get("/graph?project=%22%3E%3Cscript%3E").text   # 이스케이프
+    assert "<script>\"" not in t2 and '"><script>' not in t2

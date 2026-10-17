@@ -355,7 +355,10 @@ def _ingest_transcript(con: sqlite3.Connection, path: Path, kind: str) -> set[st
     if ch.start_offset > 0 and not ch.reset:
         hb = con.execute("SELECT tool, at FROM tool_call WHERE agent_key=? ORDER BY at DESC LIMIT 1", (key,)).fetchone()
         le = con.execute("SELECT last_event_at FROM agent WHERE agent_key=?", (key,)).fetchone()
-        after_hb = bool(hb and hb[0] == "SubagentHandback" and hb[1] and (le is None or le[0] is None or le[0] <= hb[1]))
+        # 「handback 뒤」 이어 가기: 마지막 기록이 handback 시각 이하이거나, handback 뒤 사용량 줄 시각 (DEF-QA1-102)
+        after_hb = bool(hb and hb[0] == "SubagentHandback" and hb[1] and (
+            le is None or le[0] is None or le[0] <= hb[1]
+            or con.execute("SELECT 1 FROM usage_event WHERE agent_key=? AND at=? LIMIT 1", (key, le[0])).fetchone()))
     first_ts = last_ts = None
     cwd = branch = version = agent_name = None
     usage_n = 0
@@ -395,7 +398,10 @@ def _ingest_transcript(con: sqlite3.Connection, path: Path, kind: str) -> set[st
         act = rec.raw is not None and is_activity(rec.raw)
         if act:
             after_hb = any(tu.name == "SubagentHandback" for tu in rec.tool_uses)
-        if act or not after_hb:
+        # 사용량 · 도구 호출이 있는 assistant 줄은 handback 뒤여도 마지막 기록에 넣는다 — last_event_at ≥ 마지막 usage ·
+        # tool_call (DEF-QA1-102). 활동이 아니므로 after_hb 는 그대로 — linker 는 사용량 줄 시각을 활동으로 보지 않는다.
+        billed = rec.type == "assistant" and (rec.usage is not None or bool(rec.tool_uses))
+        if act or not after_hb or billed:
             last_ts = ts if last_ts is None or ts > last_ts else last_ts
         first_ts = ts if first_ts is None or ts < first_ts else first_ts
         cwd = rec.cwd or cwd

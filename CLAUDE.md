@@ -35,6 +35,7 @@
 ## QA 리포트 형식
 
 - `gate.py` 는 QA 리포트(`outputs/qa*.md` · `outputs/e2e/self-observe.md`)에서 **표지 줄 `<!-- gate:G-nn -->` 바로 다음 줄 하나**만 그 게이트의 판정 행(`G-nn  항목  PASS|FAIL|WARN|BLOCKED|미검증  실측`)으로 읽는다 — 리포트의 다른 판정 꼴 줄(붙여 넣은 `make gate` 출력 등)은 읽지 않고, 표지가 없으면 `미검증 — QA 재검증 필요(리포트 형식)` (DEF-QA2-008).
+- 모든 게이트에 대해 리포트 묶음(`outputs/qa*-*.md` · `outputs/e2e/self-observe*.md`, 이름 끝 `-rN` 을 뗀 것)마다 그 표지가 있는 **가장 최근 회차**(N 큰 것, 없으면 원본) 하나를 읽고, 개발 도구 판정과 다르면 **더 나쁜 쪽**(PASS < 미검증 < WARN < FAIL, BLOCKED 은 FAIL 다음 · 출처 표시) — 실측 칸에 읽은 파일을 적는다 (DEF-QA1-103). 새 회차는 덮어쓰지 말고 `-r{N+1}` 로 낸다.
 
 ## 규모 (`spec.md` 에서 센 값 — `goal.md` §9 명령)
 

@@ -423,3 +423,54 @@ def test_L06_session_prefixed_target():
     assert (e.dst_key, e.external) == ("A:a1", False)
     e = L.resolve_message("A:x", "S:nope", agent_ids={"a1"}, names={}, keys={"S:sess-1"})
     assert e.external and e.dst_key == "X:S:nope"
+
+
+def test_L07_billed_reply_after_handback_is_not_a_rewake(tmp_path, monkeypatch):
+    """DEF-QA1-102: handback 뒤 isMeta 알림에 tool_use 없이 답한 assistant(사용량 있음)는 마지막 기록에는 들어가지만
+    활동이 아니다 → 반환 그대로(DONE). 그 뒤 들어온 메시지는 여전히 다시 깨어남."""
+    from agentdash.collect import ingest
+    from agentdash.db import conn
+    home = tmp_path / "home"
+    sid = "11111111-2222-3333-4444-555555555555"
+    proj = home / "projects" / "-tmp-proj"
+    sub = proj / sid / "subagents"
+    sub.mkdir(parents=True)
+    monkeypatch.setenv("AGENTDASH_CLAUDE_HOME", str(home))
+
+    def ln(typ, ts, content, usage=False, **kw):
+        d = {"type": typ, "uuid": f"{typ}-{ts}", "timestamp": ts, "sessionId": sid, "cwd": "/tmp/proj",
+             "message": {"content": content, **({"model": "claude-opus-5-5"} if typ == "assistant" else {})}}
+        if usage:
+            d["message"]["usage"] = {"input_tokens": 1, "output_tokens": 9}
+            d["requestId"] = f"req-{ts}"
+        d.update(kw)
+        return json.dumps(d) + "\n"
+
+    (proj / f"{sid}.jsonl").write_text(ln("assistant", "2026-10-17T06:59:00.000Z",
+                                          [{"type": "tool_use", "id": "t1", "name": "Agent", "input": {}}]))
+    (sub / "agent-c1.meta.json").write_text(json.dumps({"agentType": "general-purpose", "toolUseId": "t1",
+                                                        "spawnDepth": 1}))
+    rec = sub / "agent-c1.jsonl"
+    rec.write_text(ln("assistant", "2026-10-17T07:02:00.000Z",
+                      [{"type": "tool_use", "id": "h1", "name": "SubagentHandback", "input": {}}], True, agentId="c1")
+                   + ln("user", "2026-10-17T07:02:02.000Z", [{"type": "tool_result", "tool_use_id": "h1"}], agentId="c1")
+                   + ln("user", "2026-10-17T07:25:00.000Z", "<task-notification>x</task-notification>",
+                        isMeta=True, agentId="c1")
+                   + ln("assistant", "2026-10-17T07:25:03.000Z", [{"type": "text", "text": "ok"}], True, agentId="c1"))
+    con = conn.connect(conn.init_db(tmp_path / "e.db"))
+    ingest.ingest_all(con, run_hooks=False)
+    L.resolve_all(con)
+    row = con.execute("SELECT ended_at, last_event_at FROM agent WHERE agent_key='A:c1'").fetchone()
+    assert tuple(row) == ("2026-10-17T07:02:00.000Z", "2026-10-17T07:25:03.000Z")
+    assert L.return_of(con, "A:c1") is not None
+    with rec.open("a", encoding="utf-8") as fh:
+        fh.write(ln("attachment", "2026-10-17T07:26:00.000Z", None))          # 꼬리 — 여전히 끝
+    ingest.ingest_all(con, run_hooks=False)
+    L.resolve_all(con)
+    assert con.execute("SELECT ended_at FROM agent WHERE agent_key='A:c1'").fetchone()[0] == "2026-10-17T07:02:00.000Z"
+    with rec.open("a", encoding="utf-8") as fh:
+        fh.write(ln("user", "2026-10-17T07:40:00.000Z", [{"type": "text", "text": "again"}], agentId="c1"))
+    ingest.ingest_all(con, run_hooks=False)
+    L.resolve_all(con)
+    assert con.execute("SELECT ended_at FROM agent WHERE agent_key='A:c1'").fetchone()[0] is None
+    con.close()

@@ -49,7 +49,7 @@
     {% for a in live %}
     <div class="agent{% if a.state_reason == 'R-12' %} slow{% endif %}" style="--c:var(--st-{{ a.state }})" data-key="{{ a.agent_key }}">
       <div><span class="pill" style="--c:var(--st-{{ a.state }})">{{ state_ko.get(a.state, a.state) }}</span>
-        <code>{{ a.state_reason }}</code>{% if a.state_reason == 'R-12' %} <span class="warn">응답 느림</span>{% endif %}</div>
+        <code>{{ a.state_reason }}</code>{% if a.state_reason == 'R-12' %} <span class="warn">응답 느림</span>{% endif %}{% if a.hypothesis %} <span class="warn" data-hypothesis title="decisions.md D-18 — 사람 확인 전 가설. spec 글자로는 STALE R-02b">{{ a.hypothesis }}</span>{% endif %}</div>
       <div><a class="name" href="/agents/{{ a.agent_key }}">{{ a.name or a.agent_key }}</a></div>
       <div class="meta">{{ a.project }} · {{ a.kind }}{% if a.agent_type %} · {{ a.agent_type }}{% endif %}</div>
       <div>{% if a.tool %}{% if a.tool.running %}<b>실행 중</b>{% else %}마지막{% endif %} {{ a.tool.tool }} <span class="ev">{{ a.tool.target }}</span>{% else %}<span class="muted">도구 호출 없음</span>{% endif %}</div>

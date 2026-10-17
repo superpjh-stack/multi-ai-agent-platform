@@ -25,7 +25,7 @@
   <label>기간 <select name="since">
     <option value="1h">1 시간</option><option value="24h">24 시간</option><option value="7d">7 일</option>
     <option value="30d">30 일</option><option value="all">전체</option></select></label>
-  <label>프로젝트 <select name="project"><option value="">전체</option></select></label>
+  <label>프로젝트 <select name="project"><option value="">전체</option>{% for pr in projects %}<option value="{{ pr.key }}"{% if pr.key == project %} selected{% endif %}>{{ pr.label }}</option>{% endfor %}</select></label>
   <label>유형 <select name="kind"><option value="">전체</option><option value="SESSION">세션</option>
     <option value="SUBAGENT">서브에이전트</option><option value="WORKFLOW_AGENT">워크플로 에이전트</option>
     <option value="WORKFLOW">워크플로</option></select></label>
@@ -176,10 +176,11 @@
     }).then(function (g) {
       err.textContent = "";
       var sel = form.elements.project;
-      if (sel.options.length <= 1) {
-        g.projects.forEach(function (pr) { var o = document.createElement("option"); o.value = pr.key; o.textContent = pr.label; sel.appendChild(o); });
-        if (q.get("project")) sel.value = q.get("project");
-      }
+      var have = {}; Array.prototype.forEach.call(sel.options, function (o) { have[o.value] = 1; });
+      g.projects.forEach(function (pr) {       // 서버가 미리 채운 옵션은 그대로 · 새 프로젝트만 더한다 (DEF-QA2-103)
+        if (have[pr.key]) return;
+        var o = document.createElement("option"); o.value = pr.key; o.textContent = pr.label; sel.appendChild(o);
+      });
       var t1 = performance.now();
       var want = {}; g.nodes.forEach(function (n) { n.data.display = display(n.data); want[n.data.id] = 1; });
       g.edges.forEach(function (e) { want[e.data.id] = 1; });

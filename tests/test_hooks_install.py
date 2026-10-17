@@ -336,3 +336,19 @@ def test_only_others_hook_send_counts_as_not_installed(tmp_path):
     r = run("--settings", str(t), "--uninstall", "--yes")
     assert r.returncode == 0 and "없음" in r.stdout
     assert json.loads(t.read_text()) == data
+
+
+# ---- 웨이브 D3 — DEF-QA1-101: 대소문자 · NFD 변형도 같은 파일로 본다 (판정만) ---------------------------------
+def test_case_and_nfd_variants_of_protected_settings_are_real(trapped):
+    """설정된(가짜) claude_home 에 settings.json 이 아직 없을 때 — 대소문자 변형 경로는 samefile 로 못 잡는다(파일 없음)."""
+    import unicodedata
+
+    mod, calls = trapped
+    home = Path(os.environ["AGENTDASH_CLAUDE_HOME"])
+    assert not (home / "settings.json").exists()
+    for p in (home / "SETTINGS.JSON", Path(str(home).swapcase()) / "settings.json",
+              Path(unicodedata.normalize("NFD", str(home))) / "Settings.json",
+              Path.home() / ".CLAUDE" / "settings.json", Path.home() / ".Claude" / "Settings.JSON"):
+        assert mod.is_real_target(p) is True, p
+        assert mod.main(["--settings", str(p), "--yes"]) == 2
+    assert calls == []

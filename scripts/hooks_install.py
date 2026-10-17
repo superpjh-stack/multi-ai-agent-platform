@@ -87,20 +87,17 @@ def _protected_settings() -> list[Path] | None:
 
 def is_real_target(target: Path) -> bool:
     """실제 settings.json 인가 (--yes · pytest 금지 판정용 — 비교만). 실제 홈 · 설정된 claude_home 둘 다,
-    resolve(심볼릭 링크 따라감) 후 경로 비교 + 둘 다 있으면 같은 파일(inode) 비교."""
+    `settings.same_or_under` — 심볼릭 링크 · `..` · 대소문자 · NFC/NFD 무관하게 같은 파일인가."""
     cands = _protected_settings()
     if cands is None:
         return True                    # 판정 불가 → 실제 파일일 수 있다고 보고 막는다
+    from agentdash import settings as _s
+
     t = Path(os.path.expanduser(str(target)))
-    try:
-        tr = t.resolve()
-    except (OSError, RuntimeError):
-        return True
     for c in cands:
         try:
-            if tr == c.resolve():
-                return True
-            if t.exists() and c.exists() and os.path.samefile(t, c):
+            # 파일 시스템 정체성 기준 (DEF-QA1-101): resolve · 존재하는 조상 inode · 없는 꼬리 NFC+casefold
+            if _s.same_or_under(t, c):
                 return True
         except (OSError, RuntimeError):
             return True
