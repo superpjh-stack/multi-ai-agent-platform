@@ -1,0 +1,24 @@
+{
+  "pid": 85955,
+  "sessionId": "2bee9170-9e95-4e4e-873d-8490f228ad20",
+  "cwd": "/Users/gerardo92/Desktop/AI Coding/Multi-agent Dashboard",
+  "startedAt": 1792203801991,
+  "procStart": "<redacted>",
+  "version": "2.1.301",
+  "peerProtocol": 1,
+  "peerFeatures": [
+    "<redacted>",
+    "<redacted>",
+    "<redacted>"
+  ],
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "pidDomain": "<redacted>",
+  "messagingSocketPath": "<redacted>",
+  "name": "multi-agent-dashboard-ce",
+  "nameSource": "<redacted>",
+  "nameSince": 1792203801991,
+  "status": "busy",
+  "updatedAt": 1792220290153,
+  "statusUpdatedAt": 1792220290153
+}

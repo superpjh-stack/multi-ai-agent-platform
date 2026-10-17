@@ -1,0 +1,63 @@
+# 단계 사전 — spec.md §7.1 (Q5 확정) 표 그대로. 패턴의 {회사} 는 companies.yaml 표준 이름 · 별칭.
+# 폴더는 AGENTDASH_AGENTS_ROOT 아래 상대 경로다.
+display_order: ["01", "02", "03", "04", "00", "05", "06", "08"]   # D-06 열 순서 (spec.md §7 D-06)
+exclude:                         # 세지 않는 것 (spec.md §7.1)
+  - "_구판_*"
+  - "_preview*"
+  - "scratch/"
+  - "tour/"
+version_pick: "highest_v_then_latest_run"   # 같은 산출물이 여러 버전이면 가장 높은 v · 가장 최근 실행
+run_company_order: ["run.json", "output_filename"]   # 실행 폴더의 회사 판정 순서
+stages:
+  "01":
+    label: 분석
+    folder: "01 Analyze Agent"
+    need: 3
+    artifacts: [SF-AD1, SF-AD2, SF-AD3]
+    patterns: ["outputs/*-all/*SF-AD{1,2,3}_*_{회사}_v*.docx"]
+  "02":
+    label: 설계
+    folder: "02 Design Agent"
+    need: 5
+    artifacts: [SF-TD1, SF-TD2, SF-TD3, SF-TD4, SF-TD5]
+    patterns: ["outputs/*-all/*SF-TD{1..5}_*_{회사}_v*.docx"]
+  "03":
+    label: 화면
+    folder: "03 UI Agent"
+    need: 3
+    artifacts: [화면설명서 html, 화면정의서 pptx, 영상 mp4]
+    note: "영상은 4 벌 중 1 개 이상"
+    patterns: ["outputs/{회사}_제조AI_화면{설명서,정의서}*_v*.*"]
+  "04":
+    label: 시험 · 인수
+    folder: "04 QA Agent"
+    need: 7
+    artifacts: [단위테스트결과서, 통합테스트결과서, 시스템전환결과서, 메뉴얼, 사용자테스트결과서, 운영지원계획서, 운영현황보고서]
+    patterns: ["outputs/{회사}_제조AI_{문서명}_v*.docx"]
+  "00":
+    label: 관리
+    folder: "00 PM Agent"
+    need: 5
+    artifacts: [중간보고서, SF-PM1, SF-PM2, SF-PM3, SF-PM4]
+    patterns: ["outputs/*-midterm/ 의 run.json 회사", "outputs/pm-{회사}/*SF-PM{1..4}*"]
+  "05":
+    label: Open
+    folder: "05 Open Agent"
+    need: null
+    rule: null          # 규칙 미정 → UNKNOWN (P-07)
+  "06":
+    label: Coding
+    folder: "06 Coding Agent"
+    need: null
+    rule: null          # 규칙 미정 → UNKNOWN. 대상 회사 칸에 웨이브 표시(✅ 🔄 ⏸)만
+    wave_marks: ["✅", "🔄", "⏸"]
+  "08":
+    label: AI Agent Making
+    folder: "08 AI Agent Making Agent"
+    need: null
+    rule: null          # 규칙 미정 → UNKNOWN (P-07)
+progress_rules:                  # 칸 상태 판정 P-01~P-07 의 문자열 기준 (spec.md §7.1)
+  decision_section: "## 지금 해야 할 것"
+  decision_keywords: ["판단 필요", "사용자 판단", "확인 필요"]   # P-01
+  in_progress_window_min: 30                                     # P-02
+  done_keyword: "완료"                                           # P-05

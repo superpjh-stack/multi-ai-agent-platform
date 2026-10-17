@@ -1,0 +1,9 @@
+{
+  "agentType": "general-purpose",
+  "launchedWithDefaults": true,
+  "description": "Phase 0 architect scaffolding",
+  "toolUseId": "toolu_01XK2PfdfSiFCddWX9sHB4BB",
+  "spawnDepth": 1,
+  "requestShape": "background",
+  "requestNonInteractive": true
+}

@@ -1,0 +1,8 @@
+{
+  "agentType": "general-purpose",
+  "description": "QA re-verify all fixes",
+  "toolUseId": "toolu_011zsJANDy8RWXGjsy3Vq6Gp",
+  "spawnDepth": 1,
+  "requestShape": "background",
+  "requestNonInteractive": true
+}

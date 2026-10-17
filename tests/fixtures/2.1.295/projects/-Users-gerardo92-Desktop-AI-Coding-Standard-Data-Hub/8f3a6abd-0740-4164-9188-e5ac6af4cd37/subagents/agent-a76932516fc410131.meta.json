@@ -1,0 +1,11 @@
+{
+  "agentType": "fork",
+  "isFork": true,
+  "description": "Re-verify QA2 defects",
+  "toolUseId": "toolu_01451N16aoN8zRRfQ275511x",
+  "parentAgentId": "aca12685adbb11b9c",
+  "spawnDepth": 2,
+  "requestShape": "background",
+  "requestNonInteractive": true,
+  "model": "inherit"
+}

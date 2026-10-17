@@ -1,0 +1,29 @@
+# 비용 단가표 — spec.md §6.1 (Q4 확정) 표를 그대로 옮겼다. 단가는 1M 토큰당 US$.
+# 표에 없는 모델은 비용 NULL (지어내지 않는다). `make pricing-check` 가 그 목록을 찍는다.
+version: "2026-10-06"
+source: "Anthropic 1st-party API list price"
+source_url: "https://platform.claude.com/docs/en/about-claude/pricing"
+# cost = (input×in + cache_read×cr + cache_write_5m×in×1.25 + cache_write_1h×in×2.0 + output×out) / 1e6 × (speed=="fast" ? fast_mult : 1)
+# thinking_tokens 는 output_tokens 안에 포함 [가설 D-03] · TTL 분리 값이 없는 옛 기록은 전부 5m
+cache_write_mult: { "5m": 1.25, "1h": 2.0 }
+models:
+  claude-fable-5-1:  { in: 10.00, out: 50.00, cache_read: 0.25 }
+  claude-fable-5:    { in: 10.00, out: 50.00, cache_read: 1.00 }
+  claude-opus-5-5:   { in: 4.00,  out: 20.00, cache_read: 0.20, fast_mult: 2.0 }   # 빠른 모드 ×2 (8 / 40)
+  claude-opus-5:     { in: 5.00,  out: 25.00, cache_read: 0.50, fast_mult: 2.0 }   # 빠른 모드 ×2 (10 / 50)
+  claude-opus-4-8:   { in: 5.00,  out: 25.00, cache_read: 0.50 }
+  claude-opus-4-7:   { in: 5.00,  out: 25.00, cache_read: 0.50 }
+  claude-opus-4-6:   { in: 5.00,  out: 25.00, cache_read: 0.50 }
+  claude-sonnet-5-5: { in: 2.00,  out: 10.00, cache_read: 0.20 }
+  claude-sonnet-5:   { in: 2.00,  out: 10.00, cache_read: 0.20 }
+  claude-sonnet-4-6: { in: 3.00,  out: 15.00, cache_read: 0.30 }
+  claude-haiku-5-5:
+    tiers:                       # 프롬프트(입력+캐시 읽기+캐시 쓰기) 크기 기준
+      - { max_prompt: 100000, in: 0.10, out: 0.50, cache_read: 0.01 }
+      - { max_prompt: null,   in: 0.50, out: 2.50, cache_read: 0.05 }
+    cache_read_estimated: true   # [추정: 입력의 0.1 배] — D-08 공식 단가 대조 대기
+  claude-haiku-4-5:  { in: 1.00,  out: 5.00,  cache_read: 0.10 }
+aliases:                         # 날짜 · 접미사가 붙은 ID 를 위 키로 모은다 (spec.md §6.1 발췌에 있는 것만)
+  "claude-opus-5-5[1m]": claude-opus-5-5
+exclude_models:                  # 토큰 · 비용에서 뺀다 (spec.md §6 규칙)
+  - "<synthetic>"

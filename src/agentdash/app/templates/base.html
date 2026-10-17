@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} · 에이전트 대시보드</title>
+<style>
+  :root { --bg:#fafafa; --fg:#1d1d1f; --muted:#6e6e73; --line:#d2d2d7; --warn:#b25000; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161617; --fg:#f5f5f7; --muted:#a1a1a6; --line:#3a3a3c; --warn:#ff9f0a; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, "Apple SD Gothic Neo", sans-serif; }
+  nav { display:flex; flex-wrap:wrap; gap:4px 16px; padding:12px 16px; border-bottom:1px solid var(--line); }
+  nav a { color:var(--fg); text-decoration:none; }
+  nav a.on { font-weight:600; text-decoration:underline; }
+  main { padding:16px; max-width:1200px; }
+  .placeholder { border:1px dashed var(--warn); color:var(--warn); padding:12px 16px; border-radius:8px; }
+  .muted { color:var(--muted); }
+</style>
+</head>
+<body>
+<nav>
+  {% for href, name in [("/", "D-01 관제판"), ("/graph", "D-02 구성도"), ("/usage", "D-04 작업량"), ("/timeline", "D-05 타임라인"), ("/pipeline", "D-06 파이프라인")] %}
+  <a href="{{ href }}"{% if href == active %} class="on"{% endif %}>{{ name }}</a>
+  {% endfor %}
+</nav>
+<main>
+{% block body %}{% endblock %}
+</main>
+</body>
+</html>

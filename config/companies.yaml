@@ -1,0 +1,15 @@
+# 회사 사전 — spec.md §7.1 표 그대로. 사전에 없는 이름은 칸을 만들지 않고 "미등록 회사 N 건" 으로 보인다.
+# 이름 비교 전에 지우는 것 (법인격이 이름 가운데 있는 회사 대응)
+normalize_strip: [" ", "주식회사", "(주)"]
+companies:
+  - { name: 경동글로벌텍,     aliases: [경동] }
+  - { name: 고려솔더,         aliases: [주식회사 고려솔더] }
+  - { name: 광성정밀,         aliases: [광성] }
+  - { name: 니즈푸드,         aliases: [니즈] }
+  - { name: 브랜뉴머시너리,   aliases: [브랜뉴] }
+  - { name: 송월타월서울상사, aliases: [송월타월 서울상사, 송월타월, 송월] }
+  - { name: 엘컴화인,         aliases: [lcomFine] }
+  - { name: 와이엔프린팅,     aliases: [] }
+  - { name: 원터치,           aliases: [OneTouch] }
+  - { name: 임진강김치,       aliases: [임진강] }
+  - { name: 평창꽃순이김치,   aliases: [평창] }
