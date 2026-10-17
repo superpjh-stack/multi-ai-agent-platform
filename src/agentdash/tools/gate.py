@@ -5,6 +5,8 @@
     uv run python src/agentdash/tools/gate.py --strict   # PASS 아닌 행이 있으면 종료코드 1
 
 판정은 **실제 명령의 출력으로만** 한다.
+  · QA 리포트(outputs/…md)는 표지 `<!-- gate:G-nn -->` 바로 다음 줄 하나만 판정 행으로 읽는다 (DEF-QA2-008). 표지가 없으면
+    `미검증 — QA 재검증 필요(리포트 형식)`. 리포트에 붙인 `make gate` 출력 같은 다른 판정 꼴 줄은 읽지 않는다.
   · 검사기(src/agentdash/tools/check_*.py)가 있으면 돌려서 그 출력의 `G-nn  항목  PASS|FAIL|WARN|BLOCKED|미검증  실측` 행을 읽는다.
     한 게이트에 행이 여럿이면 FAIL > BLOCKED > WARN > 미검증 > PASS.
   · 게이트가 테스트 파일로 정의돼 있으면(goal.md §2 「검증」 열) 그 파일만 pytest 로 돌린다.
@@ -31,6 +33,9 @@ SCRIPTS = ROOT / "scripts"
 PASS, FAIL, WARN, BLOCKED, UNVERIFIED = "PASS", "FAIL", "WARN", "BLOCKED", "미검증"
 _RANK = {FAIL: 4, BLOCKED: 3, WARN: 2, UNVERIFIED: 1, PASS: 0}
 _ROW = re.compile(r"^\s*(G-\d{2})\s+(.*?)\s{2,}(PASS|FAIL|WARN|BLOCKED|미검증)(?=\s|$)\s*(.*)$")
+#: QA 리포트 판정 블록 표지 (DEF-QA2-008, CLAUDE.md 「QA 리포트 형식」) — 이 줄 **바로 다음 줄 하나** 만 판정 행으로 읽는다.
+_QA_MARK = re.compile(r"^\s*<!--\s*gate:(G-\d{2})\s*-->\s*$")
+QA_FORMAT_NOTE = "— QA 재검증 필요(리포트 형식)"
 
 #: (게이트, 항목, 담당, 판정 수단). 수단 = ("tool", 이름) | ("test", 파일) | ("qa", 리포트 경로) 목록 — 전부 통과해야 PASS.
 GATES: list[tuple[str, str, str, list[tuple[str, str]]]] = [
@@ -85,6 +90,23 @@ def rows_of(out: str, gid: str) -> list[tuple[str, str]]:
     return res
 
 
+def qa_rows(text: str, gid: str) -> list[tuple[str, str]]:
+    """QA 리포트 → 그 게이트의 판정 행. 표지 `<!-- gate:G-nn -->` 바로 다음 줄이 같은 G-nn 판정 행일 때만 읽는다.
+    리포트의 다른 판정 꼴 줄(붙여 넣은 `make gate` 출력 · 옛 판정)은 읽지 않는다 (DEF-QA2-008)."""
+    lines = text.splitlines()
+    res = []
+    for i, ln in enumerate(lines):
+        m = _QA_MARK.match(ln)
+        if not m or m.group(1) != gid:
+            continue
+        r = _ROW.match(lines[i + 1]) if i + 1 < len(lines) else None
+        if r and r.group(1) == gid:
+            res.append((r.group(3), r.group(4).strip()))
+        else:
+            res.append((UNVERIFIED, f"{QA_FORMAT_NOTE}: <!-- gate:{gid} --> 다음 줄이 {gid} 판정 행 아님"))
+    return res
+
+
 def combine(items: list[tuple[str, str]]) -> tuple[str, str]:
     st = max((s for s, _ in items), key=lambda s: _RANK[s])
     detail = " ‖ ".join(d for _, d in items if d)
@@ -131,8 +153,8 @@ def judge(gid: str, owner: str, means: list[tuple[str, str]], cache: dict) -> tu
             if not path.exists():
                 results.append((UNVERIFIED, f"{name} 없음 — QA 리포트 대기 (웨이브 C)"))
                 continue
-            rows = rows_of(path.read_text(encoding="utf-8"), gid)
-            results.extend(rows or [(UNVERIFIED, f"{name} 에 {gid} 행 없음")])
+            rows = qa_rows(path.read_text(encoding="utf-8"), gid)
+            results.extend(rows or [(UNVERIFIED, f"{QA_FORMAT_NOTE}: {name} 에 <!-- gate:{gid} --> 표지 판정 행 없음")])
     return combine(results)
 
 

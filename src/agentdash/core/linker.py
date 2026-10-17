@@ -22,7 +22,8 @@
         · 알림은 `<tool-use-id>` = 자식 spawn tool_use 로 잇고, 못 이으면 `<task-id>` = agentId 로 잇는다 — 다시 깨운 뒤 온
           알림은 SendMessage 호출 id 를 달고 온다 (QA2 DEF-QA2-002).
         · "마지막 활동" = `is_activity` 줄(tool_use 를 낸 assistant · 들어온 메시지 user, isMeta 제외)의 마지막 시각. DB 경로는
-          tool_call 과 자식 기록 파일의 반환 뒤 꼬리(읽기만)를 함께 본다 (DEF-QA2-003, `last_activity`).
+          tool_call 과 반환 뒤 `agent.last_event_at`(ingest 가 handback 뒤 꼬리를 뺀 마지막 기록, R8)을 본다 —
+          원천 기록 파일을 다시 읽지 않는다 (DEF-QA2-003, `last_activity`).
 """
 
 from __future__ import annotations
@@ -538,72 +539,12 @@ def signals_from_db(con, key: str | None = None) -> dict[str, list[ReturnSignal]
 
 # ── L-07 마지막 활동 (DEF-QA2-003) ─────────────────────────────────────────────────────
 
-#: 기록 파일 → (크기, mtime_ns, since, 결과). 파일이 자라면 다시 읽는다. 메모리에만.
-_ACT_CACHE: dict[str, tuple[int, int, str, str | None]] = {}
-_TAIL_CHUNK = 1 << 16
-
-
-def record_activity_since(path, since: str) -> str | None:
-    """원천 기록 파일(읽기만, 뒤에서부터)에서 `since` 보다 늦은 마지막 활동 줄(`is_activity`)의 시각. 없으면 None.
-
-    본문은 꺼내지 않는다 — 줄을 dict 로 풀어 종류 · 시각만 본다. 파일이 없으면 None(조용한 끼워 넣기 없음: 호출한 쪽은
-    tool_call 값만으로 판정한다)."""
-    import json
-    import os
-    p = str(path)
-    try:
-        st = os.stat(p)
-    except OSError:
-        return None
-    hit = _ACT_CACHE.get(p)
-    if hit and hit[:3] == (st.st_size, st.st_mtime_ns, since):
-        return hit[3]
-    floor = _norm(since)
-    found: str | None = None
-    with open(p, "rb") as fh:
-        pos, buf, done = st.st_size, b"", False
-        while pos > 0 and not done:
-            n = min(_TAIL_CHUNK, pos)
-            pos -= n
-            fh.seek(pos)
-            buf = fh.read(n) + buf
-            parts = buf.split(b"\n")
-            buf = parts[0] if pos > 0 else b""          # 맨 앞 조각은 줄 중간일 수 있다
-            body = parts[1:] if pos > 0 else parts
-            for raw in reversed(body):
-                if not raw.strip():
-                    continue
-                try:
-                    line = json.loads(raw)
-                except ValueError:
-                    continue
-                if not isinstance(line, dict):
-                    continue
-                ts = line.get("timestamp")
-                if not isinstance(ts, str):
-                    continue
-                if _norm(ts) <= floor and line.get("type") in ("assistant", "user"):
-                    done = True                         # 반환 시각 앞까지 왔다
-                    break
-                if is_activity(line) and _norm(ts) > floor:
-                    found = ts
-                    done = True
-                    break
-    _ACT_CACHE[p] = (st.st_size, st.st_mtime_ns, since, found)
-    return found
-
-
-def _record_path(con, key: str) -> str | None:
-    if not key.startswith("A:"):
-        return None
-    row = con.execute("SELECT path FROM src_file WHERE path LIKE ? ORDER BY path LIMIT 1",
-                      (f"%/agent-{key[2:]}.jsonl",)).fetchone()
-    return row[0] if row else None
-
-
 def _activity(con, key: str, tool_last: str | None, last_event: str | None,
               signals: list[ReturnSignal]) -> str | None:
-    """마지막 활동 = max(tool_call 마지막 시각, 반환 뒤 기록 꼬리의 활동 줄). 반환 뒤 기록이 없으면 파일을 열지 않는다."""
+    """마지막 활동 = max(tool_call 마지막 시각, 반환 뒤 last_event_at). 원천 기록 파일은 열지 않는다 (R8).
+
+    ingest 가 `agent.last_event_at` 에 SubagentHandback 뒤 활동 아닌 꼬리 줄(그 결과 · 첨부 · 마지막 인사)을 넣지 않으므로
+    `last_event_at > 가장 늦은 반환` 이면 그 뒤에 활동(들어온 메시지 · 새 tool_use)이 있었던 것 (DEF-QA2-003)."""
     ends = [s.at for s in signals if s.source != "notification" or s.status in END_STATUSES]
     act = tool_last
     if not ends or not last_event:
@@ -611,15 +552,13 @@ def _activity(con, key: str, tool_last: str | None, last_event: str | None,
     latest = max(ends, key=_norm)
     if _norm(last_event) <= _norm(latest):
         return act
-    path = _record_path(con, key)
-    tail = record_activity_since(path, latest) if path else None
-    if tail and (act is None or _norm(tail) > _norm(act)):
-        act = tail
+    if act is None or _norm(last_event) > _norm(act):
+        act = last_event
     return act
 
 
 def last_activity(con, key: str) -> str | None:
-    """에이전트 하나의 L-07 마지막 활동 시각 (DB tool_call + 기록 꼬리)."""
+    """에이전트 하나의 L-07 마지막 활동 시각 (DB tool_call + 반환 뒤 last_event_at)."""
     t = con.execute("SELECT MAX(at) FROM tool_call WHERE agent_key=?", (key,)).fetchone()
     le = con.execute("SELECT last_event_at FROM agent WHERE agent_key=?", (key,)).fetchone()
     return _activity(con, key, t[0] if t else None, le[0] if le else None, signals_from_db(con, key).get(key, []))
@@ -701,7 +640,7 @@ def resolve_all(con, *, sources_complete: bool = True) -> dict[str, Link]:
     recs, idx = index_from_db(con)
     links: dict[str, Link] = {}
     cur_parent = {r[0]: r[1] for r in con.execute("SELECT agent_key, parent_key FROM agent")}
-    # 마지막 활동 = 마지막 tool_use 시각(handback 자신 포함) + 반환 뒤 기록 꼬리의 들어온 메시지 (`_activity`, DEF-QA2-003)
+    # 마지막 활동 = 마지막 tool_use 시각(handback 자신 포함) + 반환 뒤 last_event_at (`_activity`, DEF-QA2-003 · R8)
     last = {r[0]: r[1] for r in con.execute("SELECT agent_key, MAX(at) FROM tool_call GROUP BY agent_key")}
     last_event = {r[0]: r[1] for r in con.execute("SELECT agent_key, last_event_at FROM agent")}
     for rec in sorted(recs.values(), key=lambda r: r.depth):

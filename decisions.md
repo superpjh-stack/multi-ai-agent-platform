@@ -149,3 +149,10 @@
 - 관찰: spec R-02a 는 pid 생존을 요구하고 R-02b 는 pid 를 말하지 않으며, R-06/R-07 은 「S1 없음(프로세스 소멸)」. S1 있음 · pid 소멸 · 5 분 안은 어느 규칙에도 안 걸리고, 5 분 뒤는 R-02b 글자로 STALE 이 된다. 지금 실제 S1 3 개는 모두 pid 살아 있어 영향 0.
 - 채택 (현재 구현 유지): pid 소멸 = 「S1 없음(프로세스 소멸)」 — R-06(마지막 항목 결과 없는 tool_use → STALE) / R-07(DONE). S1 status · 예약 시각은 보지 않는다. R-01 훅도 SessionEnd 밖에는 쓰지 않는다(Stop 등은 프로세스가 사라진 뒤 의미 없음). 근거 문구 `S1 있음 · pid 소멸 (D-19)`.
 - 테스트: `tests/test_state.py::test_rule_table[D-19 …]` 4 행 + 기존 `R-06 pid 소멸`. 사람이 spec R-02b/R-06 문구를 정한다. 담당 개발2.
+
+## D-20 `agent.last_event_at` = 마지막 기록 (모든 줄 종류) · handback 뒤 꼬리 제외 — L-07 마지막 활동을 기록 꼬리 대신 (R8)
+- 상태: 확정 (웨이브 D2 정리 담당 — 아키텍트 · 개발1 · 개발2 겸, 2026-10-17). 스키마 변경 없음 (spec §3 11 테이블 그대로).
+- 규칙 (`collect/ingest.py` `_ingest_transcript`): timestamp 있는 **모든 줄 종류**(assistant · user · system · attachment …, 포크 사본 제외)의 마지막 시각. 단 `SubagentHandback` tool_use 뒤의 **활동 아닌 줄**(`linker.is_activity` 거짓 — 그 결과 · 첨부 · 마지막 인사 텍스트 · isMeta)은 넣지 않는다; 활동 줄(들어온 메시지 · 새 tool_use)이 오면 다시 모든 줄. 증분 시작 때는 DB 의 가장 늦은 tool_call 이 handback 이고 last_event_at ≤ 그 시각이면 「handback 뒤」로 이어 간다. `started_at` 은 그대로(assistant · user 줄).
+- 그래서 `linker._activity` = max(tool_call 마지막 시각, 반환 뒤 last_event_at) — 원천 기록 파일 꼬리 다시 읽기(`record_activity_since`) 삭제. `state.build_ctx` → `linker.return_of` 도 파일을 열지 않는다.
+- 근거: spec R-02a · R-09 · R-11 「마지막 · 최근 기록」, QA2 `judge.py` `last_at`(모든 줄). 실측: 재백필 기본 DB 전수 326 대조 불일치 1 (D-18 `S:2bee9170…` 그대로).
+- 테스트: `tests/test_model.py` (모든 줄 · handback 뒤 꼬리 · 증분) · `tests/test_linker.py::test_L07_incoming_message_after_handback_wakes_child` · `…ingest_to_linker_rewake_end_to_end`.

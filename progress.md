@@ -25,6 +25,8 @@
 
 | 10 | 2026-10-17 18:55 | 개발2 상태 수정(DEF-QA2-001~007) 보고 재검증 · 개발1+아키텍트 수정 계속 | `tests/test_state.py` + `test_linker.py` 79 passed ‖ `sqlite3 data/agentdash-dev2.db` 상태: DONE 301 · FAILED 12 · STALE 8 · RUNNING 2 · WAITING_INPUT 2 · SLEEPING 1 (= 이 오케스트레이터, D-18) ‖ 보고: judge.py 표본 30 오판 3 → 1 · 전수 325 불일치 14 → 1 (남은 1 = D-18 해석 차이) — QA 재검증 대상 ‖ 미처리 요청: R8 · R9 (개발1) · DEF-QA2-008 (gate.py) |
 
+| 11 | 2026-10-17 19:10 | 개발1+아키텍트 수정(DEF-QA1-001 · 002 · 003 · 006 · 008) 재검증 → 웨이브 D 커밋 `7c45503` → 웨이브 D2(DEF-QA2-008 · R8 · R9 · D-03 D-17 표기) 기동 | `uv run pytest -q` 242 passed ‖ 기본 DB `make gate` PASS 21 · FAIL 1 (G-12 — 수정 전 QA2 리포트를 읽음, 재검증 필요) · G-07 PASS (에이전트별 소유 불일치 0) · G-14 PASS (DB 경로 21 회 거부 · 생긴 항목 0) · G-15 PASS ‖ 직접 재현: 가짜 루트 아래 `newdir/x.db` → RuntimeError · 폴더 미생성 ‖ settings.json sha1 `8641eb22e8f5…` 그대로 |
+
 **사람 확인 대기 (추가):** D-18(busy + ScheduleWakeup 예약 → SLEEPING, DEF-QA2-004 — 이 루프 자신이 그 모양) · D-19(S1 있음 + pid 소멸 → S1 없음으로 판정, DEF-QA2-005).
 
 **사람 확인 대기 (추가):** DEF-QA1-002 → D-17 서브에이전트 출력 토큰이 기록상 과소(스트리밍 시작값, 하한 ≈ 4.1M) — 원천으로 바로잡을 수 없어 표기 방식 결정 필요.

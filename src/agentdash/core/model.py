@@ -260,9 +260,12 @@ def add_edge(con: sqlite3.Connection, src_key: str, dst_key: str, kind: str, at:
                     (src_key, dst_key, kind, at, clip(label, DESC_MAX)))
         _emit("edge.new", {"src": src_key, "dst": dst_key, "kind": kind})
         return True
-    new_at = at if (cur[1] is None or (at is not None and at > cur[1])) else cur[1]
+    newer = cur[1] is None or (at is not None and at >= cur[1])
+    new_at = at if newer and at is not None else cur[1]
+    # label 은 더 늦은(같은) 시각의 값만 바꾼다 — 늦게 읽힌 옛 값 · 시각 없는 값이 덮지 않게 (R9, 엣지 4 종 공통)
+    new_label = clip(label, DESC_MAX) if newer and label is not None else None
     con.execute("UPDATE edge SET count=count+1, at=?, label=COALESCE(?, label) WHERE src_key=? AND dst_key=? AND kind=?",
-                (new_at, clip(label, DESC_MAX), src_key, dst_key, kind))
+                (new_at, new_label, src_key, dst_key, kind))
     return False
 
 

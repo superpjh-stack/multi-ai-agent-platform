@@ -207,3 +207,27 @@ def test_lifespan_backfills_empty_db_then_watches(fake_claude_home_ro, monkeypat
         g = c.get("/api/v1/graph?since=all").json()
         assert g["stats"]["agent_nodes"] > 0
     assert st["watcher"] == "멈춤" and not st["_watcher"][0].is_alive()
+
+
+def _row(page: str, head: str) -> str:
+    i = page.index(f"<tr><td>{head}")
+    return page[i:page.index("</tr>", i)]
+
+
+def test_d03_undercount_note_d17(db):
+    """D-17 임시 ①: API usage.own · with_descendants 의 undercount 가 참인 칸만 출력 · 비용 옆에 「기록상 과소 (D-17)」. 숫자는 그대로."""
+    seed_d01(db)
+    c = client()
+    note = "기록상 과소 (D-17)"
+    k = c.get("/api/v1/agents/A:kid").json()["usage"]
+    assert k["own"]["undercount"] and k["with_descendants"]["undercount"]
+    page = c.get("/agents/A:kid").text
+    assert _row(page, "출력 토큰").count(note) == 2 and _row(page, "추정 비용").count(note) == 2
+    assert "777" in _row(page, "출력 토큰")
+    s = c.get("/api/v1/agents/S:run").json()["usage"]
+    assert not s["own"]["undercount"] and s["with_descendants"]["undercount"]          # 세션 자기 몫은 아님 · 자손 포함은 과소
+    page = c.get("/agents/S:run").text
+    assert _row(page, "출력 토큰").count(note) == 1 and _row(page, "추정 비용").count(note) == 1
+    out = _row(page, "출력 토큰")
+    assert out.index("1,234") < out.index(note)                                         # 자손 포함 칸에만 (자기 칸 뒤)
+    assert note not in c.get("/agents/S:done").text                                     # 자손 없는 세션 — 표기 없음

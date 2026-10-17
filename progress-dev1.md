@@ -218,3 +218,8 @@ ingest_all(con, *, since=None, run_hooks=True, link=True)   # link 이고 state.
 - 개발2: R3 반영(위 표). R2 는 웨이브 A 에서 반영됨. R4(turn_ended)는 이번에 못 했다 — 필요하면 다음 회전.
 - **개발2 (웨이브 D, D-17 임시 표기 ① — 요청)**: D-03 상세(`/agents/{key}`)에서 서브에이전트 · 워크플로 에이전트의 출력 토큰 · 추정 비용 옆, 그리고 세션 합계(자기 + 자손)에 자손이 있으면 그 옆에 **「기록상 과소 (D-17)」** 를 붙여 달라. API 는 이미 준비됨 — `GET /api/v1/agents/{key}` 의 `usage.own` · `usage.with_descendants`(= `usage.totals`) 에 `undercount`(bool) · `undercount_note`(문구, 아니면 null) · `undercount_output`(그 몫의 출력 토큰). 숫자는 바꾸지 말 것. D-01 관제판 · D-02 구성도에 토큰을 보이면 같은 표기를 권한다. 사람이 D-17 을 정하면 바뀔 수 있다.
 
+
+## 2D2. 웨이브 D2 (정리 담당 겸, 2026-10-17 17:58 · 커밋 안 함)
+- **R8 반영** — `agent.last_event_at` = 모든 줄 종류의 마지막 기록(handback 뒤 활동 아닌 꼬리 제외, D-20). `parsers/transcript.parse_line(raw, *, others=False)` — `others=True` 면 세지 않는 줄 종류도 `Record(type, uuid, timestamp)` 만 (ingest 가 씀; 기본 동작 그대로). 새 열 없음. 테스트 `tests/test_model.py` 3 (빨강 → 초록).
+- **R9 반영** — `model.add_edge`: label 은 더 늦은(같은) 시각 값만 바꾼다, 시각 없는 값 · 옛 값은 label 을 안 덮음(엣지 4 종 공통, `at` 도 시각 없는 값으로 안 바뀜). 테스트 `tests/test_model.py` 10 (빨강 8 → 초록).
+- 재백필 기본 DB 4.0 s · 원천 파일 580 · agent 77 / 243 / 6 / 1 · usage_event 27,570 · parse_error 0. `uv run pytest -q` **266 passed**. `make gate` PASS 18 · 미검증 4 (G-12 · G-18 · G-21 · G-22 — QA 리포트 형식, DEF-QA2-008) · FAIL 0. 실제 settings.json sha1 8641eb22e8f5… 그대로.

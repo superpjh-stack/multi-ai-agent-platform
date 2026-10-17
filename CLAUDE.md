@@ -32,6 +32,10 @@
 `make setup`(uv sync · DB · schema) · `backfill` · `run` · **`gate`**(G-01~G-22 판정표) · `test` · `hooks-install` · `hooks-uninstall` · `hooks-check` · `pricing-check` · `reprice` · `export` · `fixtures`(픽스처 재생성 + 검사) · `check-fixtures` · `check-no-payload` · `check-readonly` · `check-hooks` · `check-bind` · `check-routes`.
 미구현 타깃은 `미구현 — 담당 개발N` 을 찍고 **종료코드 2** 로 실패한다. 검사 도구는 `src/agentdash/tools/`(`uv run python src/agentdash/tools/<도구>.py`), 출력 행 형식은 `G-nn  항목  PASS|FAIL|WARN|BLOCKED|미검증  실측` — `gate.py` 가 이 행을 읽는다. 검사기가 없으면 그 게이트는 FAIL(개발 몫) 또는 미검증(QA · 사람 몫).
 
+## QA 리포트 형식
+
+- `gate.py` 는 QA 리포트(`outputs/qa*.md` · `outputs/e2e/self-observe.md`)에서 **표지 줄 `<!-- gate:G-nn -->` 바로 다음 줄 하나**만 그 게이트의 판정 행(`G-nn  항목  PASS|FAIL|WARN|BLOCKED|미검증  실측`)으로 읽는다 — 리포트의 다른 판정 꼴 줄(붙여 넣은 `make gate` 출력 등)은 읽지 않고, 표지가 없으면 `미검증 — QA 재검증 필요(리포트 형식)` (DEF-QA2-008).
+
 ## 규모 (`spec.md` 에서 센 값 — `goal.md` §9 명령)
 
 테이블 **11** · 화면 **6** (D-01~D-06) · API **10** · 상태 **8** · 판정 규칙 **13** · 연결 규칙 **7** · 진척 규칙 **7** · 검증 **11** (V-01~V-11) · 훅 이벤트 **9**.

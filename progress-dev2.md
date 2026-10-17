@@ -194,3 +194,8 @@ Accept: text/event-stream (또는 ?follow=1) 이면 붙잡고 실시간, 그 밖
 ### 3 추가 요청 (웨이브 D)
 - **R8 → 개발1**: L-07 "마지막 활동"(tool_use 를 낸 assistant 줄 · 들어온 메시지 user 줄, `linker.is_activity`) 시각을 ingest 가 남겨 주면 linker 가 원천 기록 꼬리를 다시 읽지 않아도 된다. 지금은 `linker._activity` 가 반환 뒤 기록이 있는 자식만 `src_file` 경로를 `rb` 로 뒤에서부터 읽는다(캐시). 열이 없으므로(스키마 = 아키텍트 · spec) 방법은 개발1 · 아키텍트 판단 — 없어도 동작한다.
 - **R9 → 개발1 (메모)**: `model.add_edge` 는 기존 엣지에 더 이른 `label` 이 와도 덮는다(`COALESCE(?, label)`). handback 알림은 linker 가 직접 "더 늦은 것만" 갱신하게 바꿨다 — 다른 엣지 종류에도 같은 문제가 없는지 확인 부탁.
+
+## 6. 웨이브 D2 (정리 담당 겸, 2026-10-17 17:58 · 커밋 안 함)
+- **R8 → 받음**: `linker._activity` 가 원천 기록 꼬리를 다시 읽지 않는다 — max(tool_call 마지막, 반환 뒤 `last_event_at`), ingest 가 handback 뒤 꼬리를 뺀 마지막 기록을 남긴다(D-20). `record_activity_since` · `_record_path` · `_ACT_CACHE` 삭제. `state.build_ctx` 는 그대로(`return_of` 경유, 파일 안 엶). 테스트 `test_L07_incoming_message_after_handback_wakes_child`(파일 없이) · `test_L07_ingest_to_linker_rewake_end_to_end` 새로.
+- **D-17 D-03 표기**: `templates/agent.html` 작업량 표 — `usage.own` · `usage.with_descendants` 의 `undercount` 가 참인 칸의 출력 토큰 · 추정 비용 옆에 `undercount_note`(「기록상 과소 (D-17)」, title 에 그 몫 출력). 숫자 그대로. 테스트 `tests/test_dashboard.py::test_d03_undercount_note_d17`(빨강 → 초록).
+- judge.py 전수(재백필 기본 DB, WORKFLOW 제외 326): **불일치 1** = `S:2bee9170…` SLEEPING R-03 (D-18) vs spec 글자 STALE — 이전과 같음. pytest 266 passed.

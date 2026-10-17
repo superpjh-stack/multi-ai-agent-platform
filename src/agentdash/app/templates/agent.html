@@ -51,12 +51,13 @@
       <tr><td>입력 토큰</td><td>{{ "{:,}".format(u.own.input_tokens) }}</td><td>{{ "{:,}".format(u.with_descendants.input_tokens) }}</td></tr>
       <tr><td>캐시 읽기</td><td>{{ "{:,}".format(u.own.cache_read) }}</td><td>{{ "{:,}".format(u.with_descendants.cache_read) }}</td></tr>
       <tr><td>캐시 쓰기</td><td>{{ "{:,}".format(u.own.cache_write) }}</td><td>{{ "{:,}".format(u.with_descendants.cache_write) }}</td></tr>
-      <tr><td>출력 토큰 (그중 thinking)</td><td>{{ "{:,}".format(u.own.output_tokens) }} ({{ "{:,}".format(u.own.thinking_tokens) }})</td><td>{{ "{:,}".format(u.with_descendants.output_tokens) }} ({{ "{:,}".format(u.with_descendants.thinking_tokens) }})</td></tr>
+      {%- macro under(t) %}{% if t.undercount %} <span class="warn" data-undercount title="서브에이전트 · 워크플로 몫 출력 {{ '{:,}'.format(t.undercount_output) }} — 원천 기록이 스트리밍 시작값 (decisions.md D-17)">{{ t.undercount_note }}</span>{% endif %}{% endmacro %}
+      <tr><td>출력 토큰 (그중 thinking)</td><td>{{ "{:,}".format(u.own.output_tokens) }} ({{ "{:,}".format(u.own.thinking_tokens) }}){{ under(u.own) }}</td><td>{{ "{:,}".format(u.with_descendants.output_tokens) }} ({{ "{:,}".format(u.with_descendants.thinking_tokens) }}){{ under(u.with_descendants) }}</td></tr>
       <tr><td>캐시 적중률</td><td>{{ "%.1f%%"|format(u.cache_hit_own * 100) if u.cache_hit_own is not none else "—" }}</td><td>{{ "%.1f%%"|format(u.cache_hit_all * 100) if u.cache_hit_all is not none else "—" }}</td></tr>
       <tr><td>요청 (requestId)</td><td>{{ "{:,}".format(u.own.requests) }}</td><td>{{ "{:,}".format(u.with_descendants.requests) }}</td></tr>
       <tr><td>추정 비용 <span class="muted">{{ u.cost_label }}</span></td>
-        <td>{{ "$%.4f"|format(u.own.cost_usd) if u.own.cost_usd is not none else "단가 없음" }}{% if u.own.unpriced %} <span class="warn">단가 없음 {{ u.own.unpriced }} 건</span>{% endif %}</td>
-        <td>{{ "$%.4f"|format(u.with_descendants.cost_usd) if u.with_descendants.cost_usd is not none else "단가 없음" }}{% if u.with_descendants.unpriced %} <span class="warn">단가 없음 {{ u.with_descendants.unpriced }} 건</span>{% endif %}</td></tr>
+        <td>{{ "$%.4f"|format(u.own.cost_usd) if u.own.cost_usd is not none else "단가 없음" }}{% if u.own.unpriced %} <span class="warn">단가 없음 {{ u.own.unpriced }} 건</span>{% endif %}{{ under(u.own) }}</td>
+        <td>{{ "$%.4f"|format(u.with_descendants.cost_usd) if u.with_descendants.cost_usd is not none else "단가 없음" }}{% if u.with_descendants.unpriced %} <span class="warn">단가 없음 {{ u.with_descendants.unpriced }} 건</span>{% endif %}{{ under(u.with_descendants) }}</td></tr>
       <tr><td>도구 호출</td><td colspan="2">{{ "{:,}".format(u.tool_calls) }} —
         {% for t in u.tools_by_name[:12] %}{{ t.tool }} {{ t.n }}{% if t.err %} (<span class="warn">오류 {{ t.err }}</span>){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
       <tr><td>작성 파일</td><td colspan="2">{{ u.files_written }}</td></tr>

@@ -350,29 +350,59 @@ def test_L07_scan_rewake_by_task_id(tmp_path):
 
 
 def test_L07_incoming_message_after_handback_wakes_child(tmp_path):
-    """DEF-QA2-003: 반환 뒤 들어온 메시지(user 텍스트)만 있고 응답이 없어도 '다시 깨어남' — DB 경로가 기록 줄을 본다."""
+    """DEF-QA2-003 · R8: 반환 뒤 들어온 메시지(user 텍스트)만 있고 응답이 없어도 '다시 깨어남'.
+    DB 경로는 기록 파일을 열지 않는다 — ingest 가 `last_event_at` 에 handback 뒤 꼬리(결과 · 인사)를 넣지 않으므로
+    `last_event_at > 가장 늦은 반환` 이면 그 뒤 활동이 있었던 것 (tests/test_model.py 가 ingest 쪽 계약을 본다)."""
     con = _db(tmp_path)
-    jl = tmp_path / "agent-c1.jsonl"
-    rows = [{"type": "assistant", "timestamp": "2026-10-17T07:02:00.000Z", "message": {"content": [
-                {"type": "tool_use", "name": "SubagentHandback", "id": "h1", "input": {}}]}},
-            {"type": "user", "timestamp": "2026-10-17T07:02:02.000Z", "message": {"content": [
-                {"type": "tool_result", "tool_use_id": "h1", "content": "ok"}]}},
-            {"type": "assistant", "timestamp": "2026-10-17T07:02:05.000Z", "message": {"content": [
-                {"type": "text", "text": "bye"}]}}]
-    jl.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
     _seed_child(con, handback_at="2026-10-17T07:02:00.000Z")
-    con.execute("INSERT INTO src_file(path, inode, size, offset, mtime) VALUES (?,?,?,?,?)", (str(jl), 1, 0, 0, 0))
-    con.execute("UPDATE agent SET last_event_at='2026-10-17T07:02:05.000Z' WHERE agent_key='A:c1'")
+    # ingest 계약: handback 뒤 tool_result · 마지막 인사 텍스트는 last_event_at 에 안 들어간다 → handback 시각
+    con.execute("UPDATE agent SET last_event_at='2026-10-17T07:02:00.000Z' WHERE agent_key='A:c1'")
     L.resolve_all(con)
-    # handback 뒤 tool_result · 마지막 인사 텍스트뿐 → 끝 (D-04)
     assert con.execute("SELECT ended_at FROM agent WHERE agent_key='A:c1'").fetchone()[0] == "2026-10-17T07:02:00.000Z"
-    with jl.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps({"type": "user", "timestamp": "2026-10-17T07:20:00.000Z",
-                             "message": {"content": [{"type": "text", "text": "again"}]}}) + "\n")
+    # 들어온 메시지 07:20 → ingest 가 last_event_at 을 그 시각으로 (기록 파일은 없다 — 열지 않는다)
     con.execute("UPDATE agent SET last_event_at='2026-10-17T07:20:00.000Z' WHERE agent_key='A:c1'")
     L.resolve_all(con)
     assert con.execute("SELECT ended_at FROM agent WHERE agent_key='A:c1'").fetchone()[0] is None
     assert L.last_activity(con, "A:c1") == "2026-10-17T07:20:00.000Z"
+    assert not hasattr(L, "record_activity_since")          # 원천 기록 꼬리 다시 읽기 없음 (R8)
+    con.close()
+
+
+def test_L07_ingest_to_linker_rewake_end_to_end(tmp_path, monkeypatch):
+    """R8 끝에서 끝: 가짜 루트 기록 → ingest → resolve_all. handback 뒤 꼬리만 → 끝, 들어온 메시지 증분 → 다시 깨어남."""
+    from agentdash.collect import ingest
+    from agentdash.db import conn
+    home = tmp_path / "home"
+    sid = "11111111-2222-3333-4444-555555555555"
+    proj = home / "projects" / "-tmp-proj"
+    sub = proj / sid / "subagents"
+    sub.mkdir(parents=True)
+    monkeypatch.setenv("AGENTDASH_CLAUDE_HOME", str(home))
+
+    def ln(typ, ts, content, **kw):
+        d = {"type": typ, "uuid": f"{typ}-{ts}", "timestamp": ts, "sessionId": sid, "cwd": "/tmp/proj",
+             "message": {"content": content, **({"model": "claude-opus-5-5"} if typ == "assistant" else {})}}
+        d.update(kw)
+        return json.dumps(d) + "\n"
+
+    (proj / f"{sid}.jsonl").write_text(ln("assistant", "2026-10-17T06:59:00.000Z",
+                                          [{"type": "tool_use", "id": "t1", "name": "Agent", "input": {}}]))
+    (sub / "agent-c1.meta.json").write_text(json.dumps({"agentType": "general-purpose", "toolUseId": "t1",
+                                                        "spawnDepth": 1}))
+    rec = sub / "agent-c1.jsonl"
+    rec.write_text(ln("assistant", "2026-10-17T07:02:00.000Z",
+                      [{"type": "tool_use", "id": "h1", "name": "SubagentHandback", "input": {}}], agentId="c1")
+                   + ln("user", "2026-10-17T07:02:02.000Z", [{"type": "tool_result", "tool_use_id": "h1"}], agentId="c1")
+                   + ln("assistant", "2026-10-17T07:02:05.000Z", [{"type": "text", "text": "bye"}], agentId="c1"))
+    con = conn.connect(conn.init_db(tmp_path / "e.db"))
+    ingest.ingest_all(con, run_hooks=False)
+    L.resolve_all(con)
+    assert con.execute("SELECT ended_at FROM agent WHERE agent_key='A:c1'").fetchone()[0] == "2026-10-17T07:02:00.000Z"
+    with rec.open("a", encoding="utf-8") as fh:
+        fh.write(ln("user", "2026-10-17T07:20:00.000Z", [{"type": "text", "text": "again"}], agentId="c1"))
+    ingest.ingest_all(con, run_hooks=False)
+    L.resolve_all(con)
+    assert con.execute("SELECT ended_at FROM agent WHERE agent_key='A:c1'").fetchone()[0] is None
     con.close()
 
 

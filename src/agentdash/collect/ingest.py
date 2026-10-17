@@ -348,12 +348,20 @@ def _ingest_transcript(con: sqlite3.Connection, path: Path, kind: str) -> set[st
 
     pricing = _pricing()
     on_line = _on_line()
+    from agentdash.core.linker import is_activity
+    # 마지막 기록(last_event_at) = 모든 줄 종류의 마지막 시각 — 단 SubagentHandback 뒤 활동 아닌 꼬리 줄(그 결과 · 첨부 ·
+    # 마지막 인사)은 넣지 않는다. 그래야 linker 가 기록 꼬리를 다시 읽지 않고 「last_event_at > 반환」 = 다시 깨어남 (R8, L-07).
+    after_hb = False
+    if ch.start_offset > 0 and not ch.reset:
+        hb = con.execute("SELECT tool, at FROM tool_call WHERE agent_key=? ORDER BY at DESC LIMIT 1", (key,)).fetchone()
+        le = con.execute("SELECT last_event_at FROM agent WHERE agent_key=?", (key,)).fetchone()
+        after_hb = bool(hb and hb[0] == "SubagentHandback" and hb[1] and (le is None or le[0] is None or le[0] <= hb[1]))
     first_ts = last_ts = None
     cwd = branch = version = agent_name = None
     usage_n = 0
     for raw, ln in zip(ch.lines, ch.line_numbers):
         try:
-            rec = tr_p.parse_line(raw)
+            rec = tr_p.parse_line(raw, others=True)
         except tr_p.LineError as e:
             M.add_parse_error(con, path, ln, str(e))
             continue
@@ -380,8 +388,16 @@ def _ingest_transcript(con: sqlite3.Connection, path: Path, kind: str) -> set[st
                     _fork_pending[pk] = cev
             continue                # 포크 사본 — 부모 몫
         ts = rec.timestamp
+        if rec.type not in tr_p.COUNTED:      # system · attachment … — 마지막 기록 시각만 (본문 · 숫자 없음)
+            if not after_hb:
+                last_ts = ts if last_ts is None or ts > last_ts else last_ts
+            continue
+        act = rec.raw is not None and is_activity(rec.raw)
+        if act:
+            after_hb = any(tu.name == "SubagentHandback" for tu in rec.tool_uses)
+        if act or not after_hb:
+            last_ts = ts if last_ts is None or ts > last_ts else last_ts
         first_ts = ts if first_ts is None or ts < first_ts else first_ts
-        last_ts = ts if last_ts is None or ts > last_ts else last_ts
         cwd = rec.cwd or cwd
         branch = rec.git_branch or branch
         version = rec.version or version

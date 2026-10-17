@@ -144,7 +144,9 @@ def _usage(u: dict) -> Usage:
         speed=u.get("speed") if isinstance(u.get("speed"), str) else None)
 
 
-def parse_line(raw: bytes | str) -> Record | None:
+def parse_line(raw: bytes | str, *, others: bool = False) -> Record | None:
+    """줄 하나 → Record. 세지 않는 줄 종류(D-11)는 None — 단 `others=True` 면 시각이 있는 그런 줄도
+    `Record(type, uuid, timestamp)` 만 채워 돌려준다(마지막 기록 시각용, 웨이브 D2 R8). 본문은 꺼내지 않는다."""
     try:
         d = json.loads(raw)
     except ValueError:
@@ -158,6 +160,10 @@ def parse_line(raw: bytes | str) -> Record | None:
     if t not in COUNTED:
         if t is None:
             raise LineError("type 없음")
+        ts = d.get("timestamp")
+        if others and isinstance(ts, str) and ts:
+            u = d.get("uuid")
+            return Record(type=str(t)[:40], uuid=u if isinstance(u, str) else None, timestamp=ts)
         return None
     miss = [k for k in REQUIRED_TOP if not d.get(k)]
     msg = d.get("message")
