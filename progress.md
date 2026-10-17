@@ -2,6 +2,51 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 최종 보고 — 2026-10-17 21:58 · 루프 종료 (`goal.md` §4.4 EXIT 3 조건 충족)
+
+| EXIT 조건 | 실측 | 검증 |
+|---|---|---|
+| 1. G-01~G-22 전건 PASS | **PASS 22 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0** (회전 17 · 18 · 19 세 번 같음) | `make gate` |
+| 2. QA 리포트 2 종 · 치명 0 · 중대 0 | QA1 r3 · QA2 r3 치명 0 · 중대 0 (남은 경미 2) | `outputs/qa1-데이터안전-r3.md` · `outputs/qa2-상태대조-r3.md` · `outputs/e2e/self-observe-r3.md` |
+| 3. 연속 2 회전 새 실측 변화 없음 | 회전 18 · 19 게이트별 판정 22 개 동일 · pytest 296 passed 동일 · 코드 변경 0 | 회전 기록 표 |
+
+### 게이트 판정표 (회전 19, 기본 DB)
+
+| 묶음 | 게이트 | 판정 |
+|---|---|---|
+| 수집 · 모델 | G-01 골격 · G-02 파서 · G-03 증분 · G-04 전체 수집 · G-05 오류율 · G-06 연결 · G-07 토큰 합 · G-08 비용 | 전부 PASS |
+| 상태 · 관계 | G-09 판정 규칙 13 · G-10 연결 규칙 7 · G-11 실시간 · G-12 상태 대조 (r3 표본 30 가설 기준 오판 0) | 전부 PASS |
+| 안전 | G-13 본문 미저장 · G-14 원천 무접촉 (inode 기준 · 49/49 거부) · G-15 훅 설치 안전 · G-16 로컬 전용 | 전부 PASS |
+| 화면 · 진척 | G-17 화면 6 · API 10 · G-18 구성도 · G-19 진척 (88 칸) · G-20 비용 화면 | 전부 PASS |
+| E2E | G-21 브라우저 (콘솔 앱 오류 0 · 390px) · G-22 자기 관찰 (반환 → DONE ≤ 1 s) | 전부 PASS |
+
+커밋: `faac37c` Phase 0 → `de84747` A → `10cbd18` B → `7c45503` D → `8606bc8` D2 → `4b42f08` D3 → `e141412` C3 (로컬만, push 없음). 실제 `~/.claude/settings.json` sha1 `8641eb22e8f5…` 처음부터 끝까지 같음.
+
+### 사람이 정해야 할 것 (decisions.md)
+
+| D | 내용 | 지금 적용 중인 것 |
+|---|---|---|
+| D-07 | `.gitignore` 범위 (`outputs/e2e/` 스크린샷에 경로 노출) | `data/` 제외 |
+| D-08 | Haiku 5.5 캐시 읽기 단가 | 입력의 0.1 배 `[추정]` (기록에 Haiku 사용 0 건 — 지금 숫자 영향 없음) |
+| D-13 | 세션 이름 2 순위를 첫 사용자 메시지(본문) 대신 `agent-name` 줄로 (spec §3.1 과 다름) | `agent-name` |
+| **D-17 (차단)** | 서브에이전트 · 워크플로 기록의 출력 토큰이 스트리밍 시작값 — 요청 68.6 %, 하한 ≈ 4.1M 과소. ① 표기만 ② 길이 기반 `[추정]` 열 ③ 다른 원천 | ① 「기록상 과소 (D-17)」 표기 (D-03 · D-04 · API · CSV) |
+| D-18 | S1 `busy` + 미래 `ScheduleWakeup` → `SLEEPING` (spec R-03 은 `idle` 만 명시) | 가설 채택 · 화면에 「가설 D-18」 표시 |
+| D-19 | S1 있음 + pid 소멸 → S1 없음으로 판정 (R-06/R-07) | 가설 채택 |
+
+### 남은 경미 결함 (EXIT 를 막지 않음)
+
+- **DEF-QA1-201** — 사람이 `data/` 에 원천 파일의 하드 링크를 미리 만들어 두면 거부하지 못한다(가짜 루트에서 재현). 대응안: DB 파일이 이미 있으면 `st_nlink > 1` 일 때 거부.
+- **DEF-QA2-201** — D-02 노드 패널 · D-03 머리 배지에 「가설 D-18」 표시가 없다(D-01 카드 · D-03 판정 칸에는 있다).
+- (오케스트레이터 관찰) `Makefile` 의 `run` 주석이 아직 "화면 placeholder 만" — 문구만 낡음.
+
+### 사람이 할 일
+
+1. **훅 설치 (선택이지만 권장 — 권한 대기 구분 · 1 초 반영)**: `make hooks-install HOOK_SETTINGS=~/.claude/settings.json` → 보여 주는 diff 확인 → `y`. 기존 `PreToolUse` · `PostToolUse` · `Stop` 훅은 그대로 두고 9 개를 덧붙인다. 되돌리기는 `make hooks-uninstall HOOK_SETTINGS=~/.claude/settings.json`.
+2. 설치 후 **`make hooks-check HOOK_SETTINGS=~/.claude/settings.json`** — 설치 여부 · 최근 수신 시각 · 이벤트별 건수.
+3. 설치 후 실측(지금 `미검증` 인 범위 밖 항목, `goal.md` §2.6): 아무 세션에서 권한 승인 요청을 띄워 D-01 "내 차례" 맨 위에 `WAITING_PERMISSION` 이 1 초 안에 뜨는지 확인. D-05 훅 페이로드 필드도 이때 `decisions.md` 에 확정.
+4. **쓰기**: `make run` → http://127.0.0.1:8095 (빈 DB 면 기동 때 백필). 상시 실행은 macOS LaunchAgent (`~/Library/LaunchAgents/` 에 `uv run python -m agentdash.app` 를 이 폴더에서 실행하는 plist) — 사람이 만든다.
+5. 위 D-목록을 정하면 다음 `/loop goal.md` 회전이 반영한다.
+
 ## 회전 기록 (오케스트레이터)
 
 | 회전 | 시각 | 한 일 | 직접 재검증 |
@@ -37,13 +82,19 @@
 
 | 16 | 2026-10-17 21:00 | QA1 r3 확인 · QA2 r3 계속 | `outputs/qa1-데이터안전-r3.md`: DEF-QA1-101 · 102 · 103 해결 (가짜 루트 생성 시도 16 거부 · 실제 경로 판정 30 기대대로 · `data/` · tmp 통과) · G-04~G-08 · G-13~G-16 · G-19 · G-20 PASS · 토큰 329/329 · 비용 합 $4,527.873066 전 집계 동일 · 새 결함 경미 1 (DEF-QA1-201 사람이 `data/` 에 원천 하드 링크를 미리 만들면 못 막음) · 치명 0 · 중대 0 ‖ `make gate` PASS 21 · 미검증 1 (G-15 — QA2 서버가 8095 점유 중 송신 시험 불가, QA1 8099 로 PASS) |
 
+| 17 | 2026-10-17 21:15 | QA2 r3 확인 → 커밋 `e141412` → **EXIT 조건 1 · 2 충족**, 조건 3(연속 2 회전 새 실측 변화 없음) 확인 회전 시작 | `make gate` **PASS 22 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0** ‖ `uv run pytest -q` 296 passed ‖ QA r3 2 종 치명 0 · 중대 0 (남은 경미: DEF-QA1-201 · DEF-QA2-201) ‖ G-12 r3 표본 30 가설 기준 오판 0 · 글자 기준 1 (D-18) · 전수 331 ‖ 자기 관찰 r3 09:30:09Z 기동 → 09:30:12Z RUNNING → 09:38:47Z DONE ‖ settings.json sha1 `8641eb22e8f5…` · 포트 8095~8099 LISTEN 0 |
+
+| 18 | 2026-10-17 21:37 | EXIT 확인 회전 1/2 — 작업 없음 | `make gate` PASS 22 · FAIL 0 · 미검증 0 (회전 17 과 같음 — 게이트별 판정 22 개 동일) ‖ `uv run pytest -q` 296 passed (같음) ‖ 코드 변경 0 (`git status` progress.md 만) ‖ settings.json sha1 `8641eb22e8f5…` ‖ **새 실측 변화 없음 1/2** |
+
+| 19 | 2026-10-17 21:58 | EXIT 확인 회전 2/2 → **최종 보고 · 루프 종료** | `make gate` PASS 22 · FAIL 0 · 미검증 0 (회전 18 과 같음) ‖ `uv run pytest -q` 296 passed (같음) ‖ 코드 변경 0 ‖ settings.json sha1 `8641eb22e8f5…` ‖ **새 실측 변화 없음 2/2 → EXIT** |
+
 **사람 확인 대기 (추가):** D-18(busy + ScheduleWakeup 예약 → SLEEPING, DEF-QA2-004 — 이 루프 자신이 그 모양) · D-19(S1 있음 + pid 소멸 → S1 없음으로 판정, DEF-QA2-005).
 
 **사람 확인 대기 (추가):** DEF-QA1-002 → D-17 서브에이전트 출력 토큰이 기록상 과소(스트리밍 시작값, 하한 ≈ 4.1M) — 원천으로 바로잡을 수 없어 표기 방식 결정 필요.
 
 **사람 확인 대기 (추가):** D-13 세션 이름을 첫 사용자 메시지(본문) 대신 `agent-name` 줄로 — spec §3.1 과 다름.
 
-## 지금 해야 할 것
+## 지금 해야 할 것 (회전 3 시점 기록 — 최종 보고로 대체됨)
 
 1. **웨이브 A 개발2 진행 중 · 웨이브 B 개발1 진행 중 (회전 3)** — 안전 게이트 G-13 · G-14 · G-16 PASS, G-15 는 설치 스크립트가 없어 `미검증`(정상). 가장 앞선 FAIL 은 웨이브 A 의 G-02~G-11 · G-15.
    - 개발1 (`goal.md` §5 개발1 프롬프트): `collect/tail.py` → `collect/parsers/*` → `core/model.py` → `core/usage.py` · 비용 → `make backfill` · `pricing-check` · `reprice`. G-02 · G-03 · G-04 · G-05 · G-07 · G-08. DB `data/agentdash-dev1.db`. 먼저 볼 결정: D-01 · D-02 · D-03 · D-06 · **D-11**(`api-request-blob` 이중 계산).
