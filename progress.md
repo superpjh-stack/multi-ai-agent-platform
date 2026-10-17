@@ -2,9 +2,20 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 회전 기록 (오케스트레이터)
+
+| 회전 | 시각 | 한 일 | 직접 재검증 |
+|---|---|---|---|
+| 1 | 2026-10-17 15:59 | Phase 0 아키텍트 기동 | — |
+| 2 | 2026-10-17 16:15 | Phase 0 보고 재검증 → 웨이브 A 개발1 · 개발2 병렬 기동 | `make gate` PASS 5 · FAIL 13 · 미검증 4 (G-01 · G-13 · G-14 · G-16 · G-17 PASS — 보고와 일치) · `uv run pytest -q` 30 passed · `git log` `faac37c` · `stat ~/.claude/settings.json` 수정 시각 2026-10-16 15:15 (변경 없음) |
+
+| 3 | 2026-10-17 16:40 | 개발1 웨이브 A 보고 재검증 → 개발1 웨이브 B 기동 (개발2 웨이브 A 계속) | `AGENTDASH_DB=data/agentdash-dev1.db make gate`: G-02~G-08 PASS · G-06 PASS (연결 241/241 = 100%) · G-13 PASS (행 62,100 · 위반 0) · G-14 PASS (pytest 161 · 트리 변경 0) · 합계 PASS 16 · FAIL 3 · 미검증 3 ‖ `sqlite3 … agent` SESSION 77 · SUBAGENT 235 · WORKFLOW_AGENT 6 · WORKFLOW 1 · usage_event 27,010 ‖ `stat ~/.claude/settings.json` 2026-10-16 15:15 (변경 없음) ‖ 커밋은 개발2 웨이브 A 종료 후 |
+
+**사람 확인 대기 (추가):** D-13 세션 이름을 첫 사용자 메시지(본문) 대신 `agent-name` 줄로 — spec §3.1 과 다름.
+
 ## 지금 해야 할 것
 
-1. **웨이브 A 기동 (병렬 2)** — 안전 게이트 G-13 · G-14 · G-16 PASS, G-15 는 설치 스크립트가 없어 `미검증`(정상). 가장 앞선 FAIL 은 웨이브 A 의 G-02~G-11 · G-15.
+1. **웨이브 A 개발2 진행 중 · 웨이브 B 개발1 진행 중 (회전 3)** — 안전 게이트 G-13 · G-14 · G-16 PASS, G-15 는 설치 스크립트가 없어 `미검증`(정상). 가장 앞선 FAIL 은 웨이브 A 의 G-02~G-11 · G-15.
    - 개발1 (`goal.md` §5 개발1 프롬프트): `collect/tail.py` → `collect/parsers/*` → `core/model.py` → `core/usage.py` · 비용 → `make backfill` · `pricing-check` · `reprice`. G-02 · G-03 · G-04 · G-05 · G-07 · G-08. DB `data/agentdash-dev1.db`. 먼저 볼 결정: D-01 · D-02 · D-03 · D-06 · **D-11**(`api-request-blob` 이중 계산).
    - 개발2 (`goal.md` §5 개발2 프롬프트): `core/linker.py` → `core/state.py` → `collect/hooks_rx.py` → `scripts/{hook_send.sh,hooks_install.py}` → `app/sse.py`. G-06 · G-09 · G-10 · G-11 · G-15. DB `data/agentdash-dev2.db`. 먼저 볼 결정: D-04 · D-05 · **D-09**(S1 `status: shell`) · **D-10**(워크플로 · 손자 메타).
 2. 훅 설치 계약은 `CLAUDE.md` 「코드 규약」 · `src/agentdash/tools/check_hooks.py` docstring 대로 (`--settings <경로> --yes` · `--uninstall --yes`). 실제 `~/.claude/settings.json` 에는 사람만.

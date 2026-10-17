@@ -13,8 +13,8 @@ setup:            ## uv sync · DB 생성 · schema.sql 적용 (G-01)
 	uv sync
 	uv run python -m agentdash.db.conn
 
-backfill:         ## 과거 기록 전체 읽기 [SINCE=2026-08-01] — 개발1 (collect/)
-	$(call NOTYET,개발1)
+backfill:         ## 과거 기록 전체 읽기 [SINCE=2026-08-01] — 개발1 (collect/). DB 는 AGENTDASH_DB
+	uv run python -m agentdash.collect.backfill $(if $(SINCE),--since $(SINCE),)
 
 run:              ## 감시기 + 웹 (127.0.0.1:8095). 지금은 화면 placeholder 만 — 감시기는 개발1
 	uv run python -m agentdash.app
@@ -25,20 +25,24 @@ gate:             ## 판정표 G-01~G-22 (goal.md §2)
 test:
 	uv run pytest -q
 
-hooks-install:    ## ~/.claude/settings.json 에 덧붙임 — 사람이 직접 실행한다 (goal.md §0.2). 개발2
-	$(call NOTYET,개발2)
+# 훅 — 담당 개발2. 기본 대상은 settings.claude_home/settings.json (AGENTDASH_CLAUDE_HOME 로 바꿀 수 있다), SETTINGS=경로 로 직접 지정.
+# 실제 파일에는 사람이 직접 돌린다 (goal.md §0.2) — diff 를 보고 y 를 입력해야 저장한다(--yes 는 실제 파일에 거부된다).
+HOOK_SETTINGS = $${SETTINGS:-$$(uv run python -c "from agentdash import settings; print(settings.get().claude_home / 'settings.json')")}
 
-hooks-uninstall:  ## 식별 표시 붙은 훅 항목만 제거 — 사람이 직접. 개발2
-	$(call NOTYET,개발2)
+hooks-install:    ## settings.json 에 덧붙임 (백업 · diff · y 확인 · 문법 검사 · 실패 시 되돌림) — 사람이 직접 실행한다
+	uv run python scripts/hooks_install.py --settings "$(HOOK_SETTINGS)"
 
-hooks-check:      ## 설치 여부 · 최근 수신 시각 · 이벤트별 건수 — 개발2
-	$(call NOTYET,개발2)
+hooks-uninstall:  ## 식별 표시(hook_send.sh) 붙은 훅 항목만 제거 — 사람이 직접
+	uv run python scripts/hooks_install.py --settings "$(HOOK_SETTINGS)" --uninstall
+
+hooks-check:      ## 설치 여부 · 최근 수신 시각 · 이벤트별 건수 (읽기만)
+	uv run python scripts/hooks_install.py --settings "$(HOOK_SETTINGS)" --check
 
 pricing-check:    ## 기록의 모델 중 단가표에 없는 것 — 개발1
-	$(call NOTYET,개발1)
+	uv run python -m agentdash.core.usage pricing-check
 
 reprice:          ## 단가표 바뀐 뒤 전 기간 비용 재계산 — 개발1
-	$(call NOTYET,개발1)
+	uv run python -m agentdash.core.usage reprice
 
 export:           ## 작업량 CSV → outputs/ [FROM=… TO=…] — 개발1
 	$(call NOTYET,개발1)
