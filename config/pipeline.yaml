@@ -8,6 +8,15 @@ exclude:                         # 세지 않는 것 (spec.md §7.1)
   - "tour/"
 version_pick: "highest_v_then_latest_run"   # 같은 산출물이 여러 버전이면 가장 높은 v · 가장 최근 실행
 run_company_order: ["run.json", "output_filename"]   # 실행 폴더의 회사 판정 순서
+# ── 개발1 웨이브 B (decisions.md D-15) — 실제 폴더 구조에 맞춘 판정용 값. 위 spec 표(patterns)는 그대로 두고 core/pipeline.py 는
+#    단계마다 아래 match.items 를 쓴다. {회사} = companies.yaml 표준 이름 · 별칭, {사업} = business_labels 중 하나.
+business_labels: ["제조AI", "스마트공장"]          # 03 · 04 파일명 둘째 칸 — 니즈푸드 · 임진강김치는 "스마트공장" (D-15)
+run_json_company_keys: ["company", "company_name", "facts"]   # run.json 에서 회사를 찾는 키 (값에 사전 이름이 든 것). notes 등 본문 키는 읽지 않는다
+upstream:                        # 뒤처짐 ↻ 비교 대상 (spec §7.1 「앞 단계」). 00 은 01 · 02 결과를 읽는다 (spec §7 D-06)
+  "02": ["01"]
+  "03": ["02"]
+  "04": ["03"]
+  "00": ["01", "02"]
 stages:
   "01":
     label: 분석
@@ -15,12 +24,22 @@ stages:
     need: 3
     artifacts: [SF-AD1, SF-AD2, SF-AD3]
     patterns: ["outputs/*-all/*SF-AD{1,2,3}_*_{회사}_v*.docx"]
+    match:
+      - { id: SF-AD1, dir: "outputs/*-all", run: true, file: "*SF-AD1_*_{회사}_v*.docx" }
+      - { id: SF-AD2, dir: "outputs/*-all", run: true, file: "*SF-AD2_*_{회사}_v*.docx" }
+      - { id: SF-AD3, dir: "outputs/*-all", run: true, file: "*SF-AD3_*_{회사}_v*.docx" }
   "02":
     label: 설계
     folder: "02 Design Agent"
     need: 5
     artifacts: [SF-TD1, SF-TD2, SF-TD3, SF-TD4, SF-TD5]
     patterns: ["outputs/*-all/*SF-TD{1..5}_*_{회사}_v*.docx"]
+    match:
+      - { id: SF-TD1, dir: "outputs/*-all", run: true, file: "*SF-TD1_*_{회사}_v*.docx" }
+      - { id: SF-TD2, dir: "outputs/*-all", run: true, file: "*SF-TD2_*_{회사}_v*.docx" }
+      - { id: SF-TD3, dir: "outputs/*-all", run: true, file: "*SF-TD3_*_{회사}_v*.docx" }
+      - { id: SF-TD4, dir: "outputs/*-all", run: true, file: "*SF-TD4_*_{회사}_v*.docx" }
+      - { id: SF-TD5, dir: "outputs/*-all", run: true, file: "*SF-TD5_*_{회사}_v*.docx" }
   "03":
     label: 화면
     folder: "03 UI Agent"
@@ -28,18 +47,36 @@ stages:
     artifacts: [화면설명서 html, 화면정의서 pptx, 영상 mp4]
     note: "영상은 4 벌 중 1 개 이상"
     patterns: ["outputs/{회사}_제조AI_화면{설명서,정의서}*_v*.*"]
+    match:
+      - { id: 화면설명서, dir: "outputs", file: "{회사}_{사업}_화면설명서*_v*.html" }
+      - { id: 화면정의서, dir: "outputs", file: "{회사}_{사업}_화면정의서*_v*.pptx" }
+      - { id: 영상, dir: "outputs", file: "{회사}_{사업}_화면설명서_영상*_v*.mp4" }      # 4 벌 중 1 개 이상
   "04":
     label: 시험 · 인수
     folder: "04 QA Agent"
     need: 7
     artifacts: [단위테스트결과서, 통합테스트결과서, 시스템전환결과서, 메뉴얼, 사용자테스트결과서, 운영지원계획서, 운영현황보고서]
     patterns: ["outputs/{회사}_제조AI_{문서명}_v*.docx"]
+    match:
+      - { id: 단위테스트결과서, dir: "outputs", file: "{회사}_{사업}_단위테스트결과서_v*.docx" }
+      - { id: 통합테스트결과서, dir: "outputs", file: "{회사}_{사업}_통합테스트결과서_v*.docx" }
+      - { id: 시스템전환결과서, dir: "outputs", file: "{회사}_{사업}_시스템전환결과서_v*.docx" }
+      - { id: 메뉴얼, dir: "outputs", file: "{회사}_{사업}_메뉴얼_v*.docx" }
+      - { id: 사용자테스트결과서, dir: "outputs", file: "{회사}_{사업}_사용자테스트결과서_v*.docx" }
+      - { id: 운영지원계획서, dir: "outputs", file: "{회사}_{사업}_운영지원계획서_v*.docx" }
+      - { id: 운영현황보고서, dir: "outputs", file: "{회사}_{사업}_운영현황보고서_v*.docx" }
   "00":
     label: 관리
     folder: "00 PM Agent"
     need: 5
     artifacts: [중간보고서, SF-PM1, SF-PM2, SF-PM3, SF-PM4]
     patterns: ["outputs/*-midterm/ 의 run.json 회사", "outputs/pm-{회사}/*SF-PM{1..4}*"]
+    match:
+      - { id: 중간보고서, dir: "outputs/*-midterm", run: true, file: "*중간보고서_{회사}_v*.docx" }
+      - { id: SF-PM1, dir: "outputs/pm-{회사}", file: "*SF-PM1_*_{회사}_v*.docx" }
+      - { id: SF-PM2, dir: "outputs/pm-{회사}", file: "*SF-PM2_*_{회사}_v*.docx" }
+      - { id: SF-PM3, dir: "outputs/pm-{회사}", file: "*SF-PM3_*_{회사}_v*.docx" }
+      - { id: SF-PM4, dir: "outputs/pm-{회사}", file: "*SF-PM4_*_{회사}_v*.docx" }
   "05":
     label: Open
     folder: "05 Open Agent"
@@ -51,6 +88,7 @@ stages:
     need: null
     rule: null          # 규칙 미정 → UNKNOWN. 대상 회사 칸에 웨이브 표시(✅ 🔄 ⏸)만
     wave_marks: ["✅", "🔄", "⏸"]
+    wave_company: 고려솔더   # spec §7.1 「06 Coding Agent 는 회사 하나(고려솔더)의 웨이브 상태」
   "08":
     label: AI Agent Making
     folder: "08 AI Agent Making Agent"

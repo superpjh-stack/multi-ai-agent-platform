@@ -113,6 +113,27 @@ def reprice(con) -> dict                               # 전 기간 cost 재계�
 def unpriced_models(con) -> list[tuple[model, n]]
 ```
 
+### 웨이브 B 공표 (2026-10-17)
+
+```python
+# agentdash.core.pipeline (spec §7.1)
+evaluate(con=None, now=None, root=None) -> Result   # 원천 읽기만. Result.cells: [Cell(company, stage, status, base_status, rule, base_rule,
+                                                    #   have, need, version, run_id, last_file_at, last_session, lag, lag_note, note, src,
+                                                    #   files, progress, missing, wave)] · .unregistered · .next_stage() · .as_dict()
+refresh(con, now=None) -> Result                    # evaluate + pipeline_cell 통째 교체 (커밋 안 함)
+cached(con, max_age=None) -> Result                 # API 용 — 원천 signature 변경 또는 pipeline_tick_sec(300 s) 경과 때만 refresh + commit
+load_dictionary().lookup(slot) / .find_in(text)     # 회사 이름 정규화(NFC · 공백 · 주식회사 · (주)) — 개발2 가 회사 이름을 찾을 때 그대로 쓴다
+# agentdash.core.usage (D-04)
+table(con, frm=None, to=None, group="agent"|"project"|"type"|"model"|"day") -> dict   # rows · total · trend · unpriced · estimate_label
+to_csv(table) -> str ;  ESTIMATE_LABEL = "[추정] API 정가 환산"
+# agentdash.collect.ingest — R3
+ingest_all(con, *, since=None, run_hooks=True, link=True)   # link 이고 state.post_hook 미등록이면 끝에 state.post_hook(=linker.resolve_all + 바뀐 키 판정)
+```
+
+- **공용 템플릿 블록**: `app/templates/base.html` 에 `{% block head %}{% endblock %}` 하나만 더했다(`</head>` 바로 앞). 화면별 `<style>` · `<script>` 를 여기 넣는다 — 개발2 도 그대로 쓰면 된다(지금 개발2 는 body 안 include 를 쓴다, 바꿀 필요 없음). 그 밖의 base.html 은 그대로.
+- 개발1 화면 전용: `templates/{usage,timeline,pipeline}.html` · `templates/_dev1_style.html`(상태 색 `--st-*` 는 `_dev2_style.html` 과 같은 값) · `app/routers/_svg.py`(서버 SVG 막대 · 면적).
+- API: `GET /api/v1/usage?from=&to=&group=&format=csv` (format=csv 는 화면 「CSV 내보내기」) · `GET /api/v1/timeline?from=&to=` (lanes[segments] · concurrency) · `GET /api/v1/pipeline` (stages · companies · cells · next_stage · unregistered · counts).
+
 ## 2. 진행 — 웨이브 A 실측 (2026-10-17 16:38, DB `data/agentdash-dev1.db`)
 
 | 항목 | 실측 | 검증 방법 |
@@ -146,7 +167,33 @@ def unpriced_models(con) -> list[tuple[model, n]]
 - `make gate` 기본 DB 는 `data/agentdash.db`(빈 DB) — 웨이브 A 수치 게이트는 `AGENTDASH_DB=data/agentdash-dev1.db make gate` 또는 기본 DB 에 `make backfill` 뒤 잰다.
 - check_counts · check_usage_sum 은 같은 시각 비교를 위해 먼저 증분 수집(DB 에만 씀)을 한 번 돈다 (`--no-sync` 로 끔).
 
+## 2B. 진행 — 웨이브 B 실측 (2026-10-17 16:59, DB `data/agentdash-dev1.db` · 원천 `~/Desktop/AI Coding` 읽기만)
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| G-19 진척 판정 | **PASS** — 칸 88/88 · 근거(src) 없는 칸 0 · 표본 10 칸 have/need = `find` 독립 재계산 10/10 (시드 11 · 1 · 2 · 3 모두 일치) · 고려솔더 01 `DONE` v1.0 `20261016-151506-all` · 02 `DONE` v1.0 `20261016-154028-all` · 05 · 08 `UNKNOWN` · `tests/test_pipeline.py` 16 passed (P-01~P-07 각 ≥ 1 · 정규화 · NFD · 미등록 · 제외 폴더 · 최고 버전 · run.json 회사 · 뒤처짐 · 저장 ≤ 300 자 · 읽기 전용 원천) | `AGENTDASH_DB=data/agentdash-dev1.db uv run python src/agentdash/tools/check_pipeline.py [--seed N]` · `uv run pytest -q tests/test_pipeline.py` |
+| G-20 비용 화면 | **PASS** — D-04 카드 · 추이 · 표 머리 · CSV 머리에 `[추정] API 정가 환산` · 「단가 없음 N 건」(모델별) · reprice 뒤 화면 합계 = usage_event 합 = usage_daily 합 (묶음 5 종 모두) · `make reprice` CLI 합계 = 화면 합계 · KST 일자 경계 · 빈 DB 200 — 7 passed | `uv run pytest -q tests/test_usage_page.py` |
+| 실제 파이프라인 표 | 11 개사 × 8 단계 = 88 칸: DONE 53 · NEEDS_DECISION 2 (기저 DONE) · UNKNOWN 33 · PARTIAL 0 · NOT_STARTED 0 · IN_PROGRESS 0. 단계별 01 DONE 11 · 02 DONE 9 + 판단 필요 2(니즈푸드 progress.md:946 · 임진강김치 :913 · :921) · 03 DONE 11 (↻ 7) · 04 DONE 11 (↻ 2: 고려솔더 · 송월타월서울상사) · 00 DONE 11 · 05 · 06 · 08 UNKNOWN 각 11 (06 고려솔더 칸에 웨이브 Phase 0 ✅ · A ✅ · B 🔄 · C ✅ · D ✅). 미등록 회사 0 건(이름 없음). UNKNOWN 칸 33. 마지막 손댄 에이전트: 88 칸 모두 「대시보드 수집 이전」(산출물이 Write/Edit 가 아니라 스크립트로 만들어져 file_touch 에 없음) | `AGENTDASH_DB=data/agentdash-dev1.db uv run python -m agentdash.core.pipeline` |
+| D-15 (새) 패턴 차이 | 가설 — 실제에 맞춰 config 로: `{사업}` = 제조AI · 스마트공장(니즈푸드 · 임진강김치), NFD 파일 이름 NFC 비교, run.json 회사 키 = facts, 산출물별 `match`, upstream, 미등록은 파일 · 폴더 · run.json 자리만, P-01 글자 그대로, 06 wave_company. NFC 없으면 경동 00 · 니즈푸드 04 PARTIAL 오판 + 미등록 1 이었음 | `decisions.md` D-15 |
+| D-16 (새) 간트 | 가설 — state_log 첫 기록 앞 구간 = 「판정 기록 없음」, 막대 끝 4 px = 지금 상태 | `tests/test_usage_page.py::test_timeline_segments` |
+| D-04 화면 | `/usage` 기간(KST) · 묶음 5 종 · 순위 표(요청 · 입력 · 캐시 읽기/쓰기 · 출력 · 적중률 · 도구 · 파일 · 실행 시간 · 추정 비용) · 일별 출력 · 비용 SVG 2 개(단일 축) · CSV. 실측 30 일: 출력 20.1M · 적중률 97.6% · $4,115.89 [추정] · 단가 없음 0 건 · 응답 0.05~0.15 s | 브라우저 스크린샷(스크래치, 커밋 안 함) · TestClient |
+| D-05 화면 | `/timeline` 기본 지난 24 시간 · 부모 아래 자식 들여쓰기(최대 200 줄) · state_log 색 구간 · 동시 실행 면적(120 칸) | 같음 |
+| D-06 화면 | `/pipeline` 단계 순서 01 → 02 → 03 → 04 → 00 → 05 · 06 · 08 · 칸 색 + have/need + 버전 + 날짜 · 판단 배지 · ↻ · ⚠ · 펼치면 규칙 · 근거 파일 · progress.md 줄 · 마지막 에이전트 · 다음 단계 열 | 같음 |
+| CSV `make export` | `outputs/usage_<from>_<to>_<group>.csv` (UTF-8 BOM, 비용 열 이름에 `[추정] API 정가 환산 (단가표 …)`, 끝 줄 합계 · 단가 없음 N 건). 저장소 밖 경로 거부 | `AGENTDASH_DB=… make export [FROM= TO= GROUP=]` |
+| R3 (개발2 요청) | `ingest_all` 끝에 `state.post_hook` (미등록일 때만) → 기본 DB `make gate` G-06 **PASS** (agentdash.db 부모 있음 243/243 = 100%, 이전 0/241). backfill 은 `link=False` 로 부르고 끝에서 resolve_all · evaluate_all | `make gate` (기본 `data/agentdash.db`) |
+| G-17 | PASS — 화면 6 + API 10 = 16 HTTP 200 (빈 DB) · placeholder 0 | `uv run python src/agentdash/tools/check_routes.py` |
+| G-13 · G-14 | PASS — dev1 DB 행 62,545 TEXT 위반 0 · 정적 쓰기 원천 대상 0 · 읽기 전용 pytest 198 passed 트리 변경 0 | `make gate` |
+| pytest 전체 | 198 passed | `uv run pytest -q` |
+| make gate | dev1 DB · 기본 DB 둘 다 PASS 18 · FAIL 0 · 미검증 4 (G-12 · G-18 · G-21 · G-22 QA) | `AGENTDASH_DB=data/agentdash-dev1.db make gate` · `make gate` |
+| 원천 무변경 | `~/.claude/settings.json` 수정 시각 2026-10-16 15:15 그대로 · 파이프라인 판정은 이름 · mtime · run.json 회사 키 · progress.md 표제/표 행만 읽음 | `stat -f %Sm ~/.claude/settings.json` · `tests/test_pipeline.py::test_pipeline_never_writes_source` |
+
+참고
+- 390 px 확인은 못 했다 — 헤드리스 Chrome 창 최소 폭(약 500 px)이라 스크린샷이 잘린다. 표는 `.tablewrap`(가로 스크롤 안쪽), SVG 는 `width:100%` viewBox. G-21 은 QA2 몫.
+- 파이프라인 갱신: `/pipeline` · `/api/v1/pipeline` 요청 때 원천 signature(단계 outputs/ · 그 아래 폴더 · progress.md mtime)가 바뀌었거나 300 s 가 지났으면 다시 판정해 pipeline_cell 에 저장. 감시기 스레드에는 붙이지 않았다.
+
 ## 3. 요청 (다른 사람에게)
 
 - 개발2 → 반영함: R1 `linker.on_line` 을 ingest 가 줄마다 부른다 · Workflow `tool_call.target` = runId. (progress-dev2.md 가 아직 없어 linker.py 주석의 R1 · §3 요청을 보고 반영)
 - 아키텍트: 없음. (gate.py 수정 요청 없음 — 도구 · 테스트 이름은 gate.py 그대로)
+- 아키텍트 (웨이브 B — 이미 반영, 확인 요청): ① `config/pipeline.yaml` 에 `business_labels` · `run_json_company_keys` · `upstream` · 단계별 `match` · `stages.06.wave_company` 를 **덧붙였다**(spec 표 키 `patterns` · `need` 는 그대로 — `tests/test_config.py` 통과). 오케스트레이터 지시(「config/pipeline.yaml 로 표현」). ② `Makefile` `export` 타깃을 구현으로 바꿨다(NOTYET → `python -m agentdash.core.usage export`). ③ `base.html` 에 `{% block head %}` 한 줄.
+- 개발2: R3 반영(위 표). R2 는 웨이브 A 에서 반영됨. R4(turn_ended)는 이번에 못 했다 — 필요하면 다음 회전.

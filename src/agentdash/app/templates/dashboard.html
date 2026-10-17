@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block body %}
+{% include "_dev2_style.html" %}
+<h1>D-01 관제판 <span class="sse" id="sse">실시간: 연결 전</span></h1>
+<div id="d01">{% include "_d01_body.html" %}</div>
+<h2>최근 상태 변화</h2>
+<ul class="feed" id="feed">
+  {% for f in feed %}
+  <li><span class="muted">{{ f.at_kst }}</span> <span class="pill" style="--c:var(--st-{{ f.state }})">{{ state_ko.get(f.state, f.state) }}</span>
+    <a href="/agents/{{ f.agent_key }}">{{ f.name or f.agent_key }}</a> <span class="ev">{{ f.reason }}</span></li>
+  {% else %}
+  <li class="muted">상태 변화 기록 없음.</li>
+  {% endfor %}
+</ul>
+<script>
+(function () {
+  var root = document.getElementById("d01"), feed = document.getElementById("feed"), timer = null;
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest("button.copy"); if (b && !b.disabled) copyText(b, b.getAttribute("data-copy"));
+  });
+  function refresh() {
+    fetch("/?part=body", {headers: {accept: "text/html"}}).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status); return r.text();
+    }).then(function (h) { root.innerHTML = h; }).catch(function (err) {
+      document.getElementById("sse").textContent = "새로고침 실패: " + err.message;
+    });
+  }
+  function soon() { if (timer) return; timer = setTimeout(function () { timer = null; refresh(); }, 1500); }
+  function addFeed(d) {
+    var li = document.createElement("li"); li.className = "new";
+    var t = new Date().toLocaleTimeString("ko-KR", {hour12: false});
+    var a = document.createElement("a"); a.href = "/agents/" + encodeURIComponent(d.agent_key); a.textContent = d.agent_key;
+    var p = document.createElement("span"); p.className = "pill"; p.style.setProperty("--c", stColor(d.state));
+    p.textContent = STATE_KO[d.state] || d.state;
+    var ev = document.createElement("span"); ev.className = "ev"; ev.textContent = " " + (d.reason || "");
+    var m = document.createElement("span"); m.className = "muted"; m.textContent = t + " ";
+    li.append(m, p, " ", a, ev); feed.insertBefore(li, feed.firstChild);
+    while (feed.children.length > 100) feed.removeChild(feed.lastChild);
+  }
+  openStream({"agent.state": function (d) { addFeed(d); soon(); }, "agent.new": soon}, document.getElementById("sse"));
+  setInterval(refresh, 15000);   // 경과 · 기다린 시간 갱신
+})();
+</script>
+{% endblock %}

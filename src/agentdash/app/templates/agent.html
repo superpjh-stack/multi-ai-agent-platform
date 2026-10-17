@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block body %}
+{% include "_dev2_style.html" %}
+{% if not d.found %}
+<h1>D-03 에이전트 상세</h1>
+<p class="warn">에이전트 없음: <code>{{ d.key }}</code> — {{ d.reason }}</p>
+<p><a href="/">관제판으로</a> · <a href="/graph">구성도로</a></p>
+{% else %}
+{% set a = d.agent %}{% set u = d.usage %}
+<p class="crumbs">
+  {% for x in d.ancestors %}
+    {% if x.missing %}<span class="warn">{{ x.agent_key }} (DB 에 없는 부모)</span>{% else %}<a href="/agents/{{ x.agent_key }}">{{ x.name or x.agent_key }}</a>{% endif %} ›
+  {% endfor %}
+  {% if d.link_note %}<span class="warn">부모 미확인</span> › {% endif %}
+  <b>{{ a.name or a.agent_key }}</b>
+</p>
+<h1>{{ a.name or a.agent_key }} <span class="pill" style="--c:var(--st-{{ a.state }})">{{ state_ko.get(a.state, a.state) }}</span>
+  <span class="sse" id="sse">실시간: 연결 전</span></h1>
+<div class="grid2">
+<div>
+  <dl class="kv">
+    <dt>키</dt><dd><code>{{ a.agent_key }}</code></dd>
+    <dt>종류 · 유형</dt><dd>{{ a.kind }}{% if a.agent_type %} · {{ a.agent_type }}{% endif %}{% if a.request_shape %} · {{ a.request_shape }}{% endif %} · 깊이 {{ a.depth }}</dd>
+    <dt>프로젝트</dt><dd>{{ a.project }} <span class="muted">{{ a.project_path or a.project_key }}</span></dd>
+    <dt>모델 · 버전</dt><dd>{{ a.model or "—" }} · {{ a.cc_version or "—" }}{% if a.git_branch %} · {{ a.git_branch }}{% endif %}</dd>
+    <dt>시작 · 끝 · 마지막 기록</dt><dd>{{ d.started_kst }} · {{ d.ended_kst }} · {{ d.last_kst }}</dd>
+    <dt>벽시계 · 실행 시간</dt><dd>{{ u.wall }} · {{ u.active }} <span class="muted">(간격 ≤ 5 분 구간 합, D-06)</span></dd>
+    <dt>판정 (저장)</dt><dd><code>{{ d.state.rule }}</code> · 상태가 된 시각 {{ d.state.since or "—" }}<br><span class="ev">{{ d.state.evidence or "근거 기록 없음" }}</span></dd>
+    <dt>판정 (지금)</dt><dd><span class="pill" style="--c:var(--st-{{ d.state.now.state }})">{{ state_ko.get(d.state.now.state, d.state.now.state) }}</span>
+      <code>{{ d.state.now.rule }}</code>{% if not d.state.now.matches_db %} <span class="warn">저장값과 다름 — 다음 판정(10 초)에서 반영</span>{% endif %}<br>
+      <span class="ev">{{ d.state.now.evidence }}</span></dd>
+    <dt>부모</dt><dd>{% if d.parent %}{% if d.parent.missing %}<span class="warn">{{ d.parent.agent_key }} (DB 에 없음)</span>{% else %}<a href="/agents/{{ d.parent.agent_key }}">{{ d.parent.name or d.parent.agent_key }}</a> <span class="muted">{{ d.parent.kind }}</span>{% endif %}{% elif d.link_note %}<span class="warn">{{ d.link_note }}</span>{% else %}<span class="muted">없음 (세션)</span>{% endif %}</dd>
+  </dl>
+
+  <h2>직계 자식 {{ d.children|length }} <span class="muted" style="font-weight:400">(전체 자손 {{ u.descendants_all }})</span></h2>
+  {% if d.children %}
+  <div class="tablewrap"><table>
+    <thead><tr><th>이름</th><th>종류</th><th>상태</th><th>시작</th><th>출력 토큰</th></tr></thead>
+    <tbody>{% for c in d.children %}
+      <tr><td><a href="/agents/{{ c.agent_key }}">{{ c.name or c.agent_key }}</a></td><td>{{ c.kind }}{% if c.agent_type %} · {{ c.agent_type }}{% endif %}</td>
+        <td><span class="pill" style="--c:var(--st-{{ c.state }})">{{ state_ko.get(c.state, c.state) }}</span> <code>{{ c.state_reason }}</code></td>
+        <td>{{ c.started_kst }}</td><td>{{ "{:,}".format(c.output_tokens) }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted">자식 없음.</p>{% endif %}
+
+  <h2>작업량 <span class="muted" style="font-weight:400">— 비용은 {{ u.cost_label }}</span></h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>지표</th><th>자기</th><th>자손 포함</th></tr></thead>
+    <tbody>
+      <tr><td>입력 토큰</td><td>{{ "{:,}".format(u.own.input_tokens) }}</td><td>{{ "{:,}".format(u.with_descendants.input_tokens) }}</td></tr>
+      <tr><td>캐시 읽기</td><td>{{ "{:,}".format(u.own.cache_read) }}</td><td>{{ "{:,}".format(u.with_descendants.cache_read) }}</td></tr>
+      <tr><td>캐시 쓰기</td><td>{{ "{:,}".format(u.own.cache_write) }}</td><td>{{ "{:,}".format(u.with_descendants.cache_write) }}</td></tr>
+      <tr><td>출력 토큰 (그중 thinking)</td><td>{{ "{:,}".format(u.own.output_tokens) }} ({{ "{:,}".format(u.own.thinking_tokens) }})</td><td>{{ "{:,}".format(u.with_descendants.output_tokens) }} ({{ "{:,}".format(u.with_descendants.thinking_tokens) }})</td></tr>
+      <tr><td>캐시 적중률</td><td>{{ "%.1f%%"|format(u.cache_hit_own * 100) if u.cache_hit_own is not none else "—" }}</td><td>{{ "%.1f%%"|format(u.cache_hit_all * 100) if u.cache_hit_all is not none else "—" }}</td></tr>
+      <tr><td>요청 (requestId)</td><td>{{ "{:,}".format(u.own.requests) }}</td><td>{{ "{:,}".format(u.with_descendants.requests) }}</td></tr>
+      <tr><td>추정 비용 <span class="muted">{{ u.cost_label }}</span></td>
+        <td>{{ "$%.4f"|format(u.own.cost_usd) if u.own.cost_usd is not none else "단가 없음" }}{% if u.own.unpriced %} <span class="warn">단가 없음 {{ u.own.unpriced }} 건</span>{% endif %}</td>
+        <td>{{ "$%.4f"|format(u.with_descendants.cost_usd) if u.with_descendants.cost_usd is not none else "단가 없음" }}{% if u.with_descendants.unpriced %} <span class="warn">단가 없음 {{ u.with_descendants.unpriced }} 건</span>{% endif %}</td></tr>
+      <tr><td>도구 호출</td><td colspan="2">{{ "{:,}".format(u.tool_calls) }} —
+        {% for t in u.tools_by_name[:12] %}{{ t.tool }} {{ t.n }}{% if t.err %} (<span class="warn">오류 {{ t.err }}</span>){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+      <tr><td>작성 파일</td><td colspan="2">{{ u.files_written }}</td></tr>
+      <tr><td>하위 에이전트</td><td colspan="2">직계 {{ u.children_direct }} · 전체 {{ u.descendants_all }}</td></tr>
+    </tbody>
+  </table></div>
+  <h2>시간대별 출력 토큰 <span class="muted" style="font-weight:400">(KST, 기록 있는 마지막 {{ u.hourly_output|length }} 시간)</span></h2>
+  {% if u.hourly_output %}
+  {% set mx = u.hourly_output|map(attribute=1)|max %}
+  <div class="bars" role="img" aria-label="시간대별 출력 토큰">
+    {% for h, n in u.hourly_output %}<div title="{{ h }} — {{ '{:,}'.format(n) }}" style="height:{{ (4 + 86 * n / mx)|int if mx else 4 }}px; width:{{ [6, (600 / u.hourly_output|length)|int]|max }}px"></div>{% endfor %}
+  </div>
+  <p class="muted" style="font-size:12px">{{ u.hourly_output[0][0] }} ~ {{ u.hourly_output[-1][0] }} · 최대 {{ "{:,}".format(mx) }}</p>
+  {% else %}<p class="muted">토큰 기록 없음.</p>{% endif %}
+</div>
+<aside>
+  <h2>상태 이력</h2>
+  <ul class="feed">{% for l in d.state_log %}<li><span class="muted">{{ l.at }}</span> <span class="pill" style="--c:var(--st-{{ l.state }})">{{ state_ko.get(l.state, l.state) }}</span> <span class="ev">{{ l.reason }}</span></li>{% else %}<li class="muted">없음</li>{% endfor %}</ul>
+  <h2>작성 파일 {{ d.files|length }}</h2>
+  <ul class="feed">{% for f in d.files %}<li><code>{{ f.op }}</code> {{ f.path }} <span class="muted">{{ f.at_kst }}</span></li>{% else %}<li class="muted">없음</li>{% endfor %}</ul>
+</aside>
+</div>
+
+<h2>도구 타임라인 {{ tools.total }}{% if tools.total > tools.tools|length %} <span class="muted" style="font-weight:400">(처음 {{ tools.tools|length }} 개 — 전체는 <a href="/api/v1/agents/{{ a.agent_key }}/tools?limit=5000">API</a>)</span>{% endif %}</h2>
+{% if tools.tools %}
+<div class="tablewrap" style="max-height:480px; overflow:auto"><table>
+  <thead><tr><th>#</th><th>시각</th><th>도구</th><th>대상</th><th>결과</th><th>걸린 시간</th></tr></thead>
+  <tbody>{% for t in tools.tools %}
+    <tr><td>{{ loop.index }}</td><td>{{ t.at_kst }}</td><td>{{ t.tool }}</td><td class="ev">{{ t.target or "" }}</td>
+      <td class="{{ 'warn' if t.ok == 0 else '' }}">{{ t.result }}</td><td>{{ "%.1f초"|format(t.seconds) if t.seconds is not none else "—" }}</td></tr>
+  {% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">도구 호출 없음.</p>{% endif %}
+
+<h2>원본 보기</h2>
+<p class="muted" style="font-size:13px">누르면 그때 원천 .jsonl 을 읽기 전용으로 읽어 보여 준다. 저장 · 캐시하지 않는다. 메시지는 접힌 채로, 도구 입력은 경로와 첫 줄 120 자, 도구 결과 · thinking 은 크기만.</p>
+<p><button type="button" class="copy" id="rawbtn" data-src="/agents/{{ a.agent_key }}/raw">원본 보기 (마지막 200 메시지)</button>
+   <button type="button" class="copy" id="rawall" data-src="/agents/{{ a.agent_key }}/raw?offset=0&limit=1000">처음부터 1000</button></p>
+<div id="raw"></div>
+<script>
+(function () {
+  var raw = document.getElementById("raw");
+  function get(btn) {
+    raw.innerHTML = "<p class='muted'>읽는 중…</p>";
+    fetch(btn.getAttribute("data-src"), {cache: "no-store"}).then(function (r) {
+      return r.text().then(function (t) { if (!r.ok) throw new Error("HTTP " + r.status + " " + t.slice(0, 200)); return t; });
+    }).then(function (h) { raw.innerHTML = h; }).catch(function (e) { raw.textContent = "원본을 읽지 못했다: " + e.message; });
+  }
+  document.getElementById("rawbtn").onclick = function () { get(this); };
+  document.getElementById("rawall").onclick = function () { get(this); };
+  var key = {{ a.agent_key|tojson }}, t = null;
+  openStream({"agent.state": function (d) { if (d.agent_key === key && !t) t = setTimeout(function () { location.reload(); }, 1500); }},
+             document.getElementById("sse"));
+})();
+</script>
+{% endif %}
+{% endblock %}

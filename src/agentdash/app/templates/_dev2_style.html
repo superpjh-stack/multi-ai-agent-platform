@@ -1,0 +1,83 @@
+<style>
+  :root {
+    --st-RUNNING:#1f9d55; --st-WAITING_INPUT:#d4a400; --st-WAITING_PERMISSION:#e8710a; --st-SLEEPING:#2f6fdb;
+    --st-WAITING_CHILD:#36a9d6; --st-DONE:#8e8e93; --st-FAILED:#d93025; --st-STALE:#8e44ad; --st-UNKNOWN:#b0b0b0;
+    --card:#ffffff; --soft:#f0f0f3; --accent:#2f6fdb;
+  }
+  @media (prefers-color-scheme: dark) { :root { --card:#1f1f21; --soft:#2a2a2d; --accent:#6ea0ff; } }
+  main { max-width: 1400px; }
+  h1 { font-size: 20px; margin: 4px 0 12px; }
+  h2 { font-size: 16px; margin: 18px 0 8px; }
+  .row { display:flex; flex-wrap:wrap; gap:12px; }
+  .cards { display:grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap:8px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; min-width:0; }
+  .card .n { font-size:24px; font-weight:600; }
+  .card .k { color:var(--muted); font-size:13px; }
+  .card.st { border-left:6px solid var(--c, var(--line)); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; color:#fff; font-size:12px; white-space:nowrap;
+          background:var(--c, #999); }
+  .grid2 { display:grid; grid-template-columns: minmax(0, 3fr) minmax(0, 1fr); gap:16px; }
+  @media (max-width: 900px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+  table { border-collapse: collapse; width:100%; font-size:13px; }
+  th, td { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; }
+  .tablewrap { overflow-x:auto; max-width:100%; }
+  .live { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap:8px; }
+  .agent { background:var(--card); border:1px solid var(--line); border-left:6px solid var(--c, var(--line));
+           border-radius:10px; padding:8px 10px; font-size:13px; min-width:0; overflow-wrap:anywhere; }
+  .agent a.name { font-weight:600; color:var(--fg); text-decoration:none; }
+  .agent .meta { color:var(--muted); }
+  .agent.slow { outline:2px dashed var(--muted); outline-offset:-3px; }
+  button.copy { font-size:12px; padding:1px 6px; border:1px solid var(--line); background:var(--soft); color:var(--fg);
+                border-radius:6px; cursor:pointer; }
+  .feed { list-style:none; padding:0; margin:0; font-size:13px; max-height:320px; overflow:auto; }
+  .feed li { padding:3px 0; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+  .feed li.new { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .ev { color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+  .warn { color:var(--warn); }
+  code { font-size:12px; overflow-wrap:anywhere; }
+  .crumbs { font-size:13px; overflow-wrap:anywhere; }
+  .crumbs a { color:var(--accent); }
+  a { color: var(--accent); }
+  .kv { display:grid; grid-template-columns: max-content minmax(0, 1fr); gap:2px 12px; font-size:13px; }
+  .kv dt { color:var(--muted); } .kv dd { margin:0; overflow-wrap:anywhere; }
+  .bars { display:flex; align-items:flex-end; gap:2px; height:90px; border-bottom:1px solid var(--line); overflow-x:auto; }
+  .bars div { background:var(--accent); min-width:6px; flex:0 0 auto; }
+  details.msg { border:1px solid var(--line); border-radius:8px; margin:4px 0; padding:4px 8px; background:var(--card); }
+  details.msg summary { cursor:pointer; font-size:13px; }
+  details.msg pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; margin:4px 0; }
+  .sse { font-size:12px; color:var(--muted); }
+</style>
+<script>
+  window.STATE_KO = {RUNNING:"실행", WAITING_INPUT:"입력 대기", WAITING_PERMISSION:"권한 대기", SLEEPING:"잠듦",
+                     WAITING_CHILD:"자식 대기", DONE:"끝남", FAILED:"실패", STALE:"멈춤 의심", UNKNOWN:"판정 전"};
+  window.stColor = function (s) {
+    var v = getComputedStyle(document.documentElement).getPropertyValue("--st-" + s).trim();
+    return v || "#b0b0b0";
+  };
+  window.copyText = function (btn, text) {
+    function done(ok) { var o = btn.textContent; btn.textContent = ok ? "복사됨" : "복사 실패"; setTimeout(function () { btn.textContent = o; }, 1200); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+    } else {
+      var ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+      document.body.removeChild(ta); done(ok);
+    }
+  };
+  // SSE — 끊기면 브라우저가 Last-Event-ID 로 다시 잇는다. 상태 표시를 숨기지 않는다.
+  window.openStream = function (handlers, statusEl) {
+    var es = new EventSource("/api/v1/stream?follow=1");
+    function st(t) { if (statusEl) statusEl.textContent = "실시간: " + t; }
+    es.onopen = function () { st("연결됨"); };
+    es.onerror = function () { st("끊김 — 다시 연결 중"); };
+    ["agent.new", "agent.state", "agent.usage", "edge.new"].forEach(function (name) {
+      es.addEventListener(name, function (e) {
+        var d = {}; try { d = JSON.parse(e.data); } catch (err) { d = {}; }
+        if (handlers[name]) handlers[name](d);
+        if (handlers["*"]) handlers["*"](name, d);
+      });
+    });
+    return es;
+  };
+</script>

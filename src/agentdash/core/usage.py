@@ -266,6 +266,139 @@ def unpriced_models(con: sqlite3.Connection, pricing: Pricing | None = None) -> 
     return out
 
 
+# ── D-04 작업량 표 (spec §6 · §7 D-04) ─────────────────────────────────
+GROUPS = ("agent", "project", "type", "model", "day")
+ESTIMATE_LABEL = "[추정] API 정가 환산"
+
+
+def kst_today() -> str:
+    return datetime.now(KST).strftime("%Y-%m-%d")
+
+
+def default_range(days: int = 30) -> tuple[str, str]:
+    to = datetime.now(KST)
+    return (to - timedelta(days=days - 1)).strftime("%Y-%m-%d"), to.strftime("%Y-%m-%d")
+
+
+def _utc_bounds(frm: str, to: str) -> tuple[str, str]:
+    a = datetime.strptime(frm, "%Y-%m-%d").replace(tzinfo=KST).astimezone(timezone.utc)
+    b = (datetime.strptime(to, "%Y-%m-%d").replace(tzinfo=KST) + timedelta(days=1)).astimezone(timezone.utc)
+    return a.strftime("%Y-%m-%dT%H:%M:%S"), b.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _group_key(group: str, day: str, model: str | None, a: dict) -> tuple[str, str]:
+    """(키, 표시 이름)."""
+    if group == "agent":
+        return a["agent_key"], a.get("name") or a["agent_key"]
+    if group == "project":
+        pk = a.get("project_key") or "(프로젝트 없음)"
+        pp = a.get("project_path")
+        return pk, (pp.rstrip("/").rsplit("/", 1)[-1] if pp else pk)
+    if group == "type":
+        t = a.get("agent_type") or a.get("kind") or "(유형 없음)"
+        return t, t
+    if group == "model":
+        return model or "", model or "(모델 없음 — 도구 · 시간만)"
+    return day, day
+
+
+def table(con: sqlite3.Connection, frm: str | None = None, to: str | None = None, group: str | None = None) -> dict:
+    """usage_daily(KST 일자) 를 묶음 기준으로 합친 순위 표 + 일별 추이 + 단가 없음 건수.
+
+    비용은 usage_event.cost_usd 합(같은 값을 usage_daily 가 들고 있다) — 단가 없는 모델은 NULL 로 두고 건수만 센다.
+    """
+    group = group if group in GROUPS else "agent"
+    d0, d1 = default_range()
+    frm, to = (frm or d0)[:10], (to or d1)[:10]
+    if frm > to:
+        frm, to = to, frm
+    agents = {r[0]: {"agent_key": r[0], "name": r[1], "kind": r[2], "agent_type": r[3], "project_key": r[4],
+                     "project_path": r[5]}
+              for r in con.execute("SELECT agent_key, name, kind, agent_type, project_key, project_path FROM agent")}
+    rows: dict[str, dict] = {}
+    days: dict[str, dict] = {}
+    tot = dict(input_tokens=0, cache_read=0, cache_write=0, output_tokens=0, tool_calls=0, files_written=0,
+               active_seconds=0, cost_usd=None, unpriced=0, requests=0)
+    for day, k, mdl, i, cr, cw, o, tc, fw, act, c in con.execute(
+            "SELECT day, agent_key, model, input_tokens, cache_read, cache_write, output_tokens, tool_calls, "
+            "files_written, active_seconds, cost_usd FROM usage_daily WHERE day BETWEEN ? AND ?", (frm, to)):
+        a = agents.get(k) or {"agent_key": k}
+        gk, label = _group_key(group, day, mdl, a)
+        r = rows.setdefault(gk, dict(key=gk, label=label, input_tokens=0, cache_read=0, cache_write=0, output_tokens=0,
+                                     tool_calls=0, files_written=0, active_seconds=0, cost_usd=None, unpriced=0,
+                                     requests=0, kind=a.get("kind") if group == "agent" else None))
+        dd = days.setdefault(day, dict(day=day, output_tokens=0, cost_usd=None, input_tokens=0, cache_read=0,
+                                       cache_write=0))
+        for tgt in (r, tot):
+            tgt["input_tokens"] += i or 0
+            tgt["cache_read"] += cr or 0
+            tgt["cache_write"] += cw or 0
+            tgt["output_tokens"] += o or 0
+            tgt["tool_calls"] += tc or 0
+            tgt["files_written"] += fw or 0
+            tgt["active_seconds"] += act or 0
+            if c is not None:
+                tgt["cost_usd"] = (tgt["cost_usd"] or 0.0) + c
+        dd["output_tokens"] += o or 0
+        dd["input_tokens"] += i or 0
+        dd["cache_read"] += cr or 0
+        dd["cache_write"] += cw or 0
+        if c is not None:
+            dd["cost_usd"] = (dd["cost_usd"] or 0.0) + c
+    # 요청 수 · 단가 없음 건수 — usage_event 에서 (KST 일자 경계)
+    ua, ub = _utc_bounds(frm, to)
+    unpriced_models: dict[str, int] = {}
+    for k, at, mdl, c in con.execute("SELECT agent_key, at, model, cost_usd FROM usage_event WHERE at >= ? AND at < ?",
+                                     (ua, ub)):
+        if not at:
+            continue
+        a = agents.get(k) or {"agent_key": k}
+        gk, label = _group_key(group, kst_day(at), mdl, a)
+        r = rows.get(gk)
+        tot["requests"] += 1
+        if r is not None:
+            r["requests"] += 1
+        if c is None:
+            tot["unpriced"] += 1
+            unpriced_models[mdl or ""] = unpriced_models.get(mdl or "", 0) + 1
+            if r is not None:
+                r["unpriced"] += 1
+    for r in [*rows.values(), tot, *days.values()]:
+        den = r["input_tokens"] + r["cache_read"] + r["cache_write"]
+        r["cache_hit"] = (r["cache_read"] / den) if den else None
+    ranked = sorted(rows.values(), key=lambda r: (-(r["output_tokens"]), r["key"])) if group != "day" \
+        else sorted(rows.values(), key=lambda r: r["key"], reverse=True)
+    trend = [days[d] for d in sorted(days)]
+    ver = con.execute("SELECT pricing_ver, COUNT(*) FROM usage_event GROUP BY pricing_ver ORDER BY 2 DESC").fetchall()
+    return {"from": frm, "to": to, "group": group, "groups": list(GROUPS), "rows": ranked, "total": tot,
+            "trend": trend, "unpriced": tot["unpriced"], "unpriced_models": sorted(unpriced_models.items()),
+            "pricing_ver": ver[0][0] if ver else None, "pricing_versions": [v[0] for v in ver],
+            "estimate_label": ESTIMATE_LABEL}
+
+
+CSV_COLS = ("key", "label", "requests", "input_tokens", "cache_read", "cache_write", "output_tokens", "cache_hit",
+            "tool_calls", "files_written", "active_seconds", "cost_usd", "unpriced")
+
+
+def to_csv(t: dict) -> str:
+    """순위 표 CSV — 비용 열 이름에 [추정] 표기를 붙인다 (spec §6.1 운용 규칙)."""
+    import csv
+    import io
+
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    head = list(CSV_COLS)
+    head[head.index("cost_usd")] = f"cost_usd {ESTIMATE_LABEL} (단가표 {t.get('pricing_ver')})"
+    w.writerow(head)
+    for r in t["rows"]:
+        w.writerow([("" if r.get(c) is None else (round(r[c], 6) if isinstance(r[c], float) else r[c])) for c in CSV_COLS])
+    tt = t["total"]
+    w.writerow(["합계", f"{t['from']}~{t['to']} · group={t['group']} · 단가 없음 {t['unpriced']} 건"]
+               + [("" if tt.get(c) is None else (round(tt[c], 6) if isinstance(tt[c], float) else tt[c]))
+                  for c in CSV_COLS[2:]])
+    return buf.getvalue()
+
+
 def main(argv: list[str] | None = None) -> int:
     """`make pricing-check` · `make reprice` — DB 는 AGENTDASH_DB (원천은 건드리지 않는다)."""
     import argparse
@@ -273,8 +406,12 @@ def main(argv: list[str] | None = None) -> int:
     from agentdash.db import conn
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["pricing-check", "reprice"])
+    ap.add_argument("cmd", choices=["pricing-check", "reprice", "export"])
     ap.add_argument("--db", default=None)
+    ap.add_argument("--from", dest="frm", default=None)
+    ap.add_argument("--to", default=None)
+    ap.add_argument("--group", default="agent")
+    ap.add_argument("--out", default=None, help="CSV 경로 (기본 outputs/usage_<from>_<to>_<group>.csv)")
     a = ap.parse_args(argv)
     db = a.db or settings.get().db_path
     con = conn.connect(conn.init_db(db))
@@ -289,6 +426,16 @@ def main(argv: list[str] | None = None) -> int:
                 print("  단가 없는 모델 0 종 (비용 NULL 0 건)")
             for mdl, n in rows:
                 print(f"  단가 없음: {mdl}  {n} 건 → 비용 NULL (config/pricing.yaml 에 추가 후 make reprice)")
+            return 0
+        if a.cmd == "export":
+            t = table(con, a.frm, a.to, a.group)
+            out = settings.ROOT / (a.out or f"outputs/usage_{t['from']}_{t['to']}_{t['group']}.csv")
+            if settings.get().is_source_path(out) or settings.ROOT not in out.resolve().parents:
+                raise SystemExit(f"내보내기 경로가 저장소 밖: {out}")
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(to_csv(t), encoding="utf-8-sig")
+            print(f"export — {out.relative_to(settings.ROOT)} · 행 {len(t['rows'])} · {t['from']}~{t['to']} · "
+                  f"group={t['group']} · 비용 {ESTIMATE_LABEL} ${t['total']['cost_usd'] or 0:.4f} · 단가 없음 {t['unpriced']} 건")
             return 0
         r = reprice(con, pricing)
         con.commit()

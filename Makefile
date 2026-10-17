@@ -44,8 +44,8 @@ pricing-check:    ## 기록의 모델 중 단가표에 없는 것 — 개발1
 reprice:          ## 단가표 바뀐 뒤 전 기간 비용 재계산 — 개발1
 	uv run python -m agentdash.core.usage reprice
 
-export:           ## 작업량 CSV → outputs/ [FROM=… TO=…] — 개발1
-	$(call NOTYET,개발1)
+export:           ## 작업량 CSV → outputs/ [FROM=… TO=… GROUP=agent|project|type|model|day] — 개발1
+	uv run python -m agentdash.core.usage export $(if $(FROM),--from $(FROM),) $(if $(TO),--to $(TO),) $(if $(GROUP),--group $(GROUP),)
 
 # ── 검사 도구 (gate 가 부르는 것과 같다) ─────────────────────────────
 fixtures:         ## 실제 기록(읽기만)에서 본문 지운 픽스처 다시 만들기 → tests/fixtures/<ver>/

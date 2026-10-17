@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block head %}{% include "_dev1_style.html" %}
+<style>
+  svg.gantt .lane { fill:var(--fg); font-size:11px; }
+  svg.gantt a:hover .lane { fill:var(--accent); text-decoration:underline; }
+  svg.gantt .seg:hover { opacity:.75; }
+</style>{% endblock %}
+{% block body %}
+<h1>D-05 타임라인</h1>
+<form class="filters" method="get" action="/timeline">
+  <label>시작 (KST 날짜 또는 ISO 시각)<input name="from" value="{{ from_v }}" placeholder="기본: 끝 − 24 시간"></label>
+  <label>끝<input name="to" value="{{ to_v }}" placeholder="기본: 지금"></label>
+  <button type="submit">보기</button>
+</form>
+<p class="muted">{{ range_kst }} (KST) · 에이전트 {{ d.lanes | length }}{% if d.truncated %} (앞 200 만 — 나머지 {{ d.truncated }}){% endif %} · state_log {{ d.state_log_rows }} 행</p>
+<h2>동시 실행 수</h2>
+{{ svg_area | safe }}
+<h2>간트 — 부모 아래 자식 들여쓰기</h2>
+<div class="legend">{% for s in states %}<span><i style="--c:var(--st-{{ s }})"></i>{{ '판정 기록 없음' if s == 'NONE' else s }}</span>{% endfor %}</div>
+<div class="tablewrap">{{ svg_gantt | safe }}</div>
+<p class="muted">막대 색은 그 시점의 상태(<code>state_log</code>)다. 대시보드가 처음 판정하기 전 구간은 「판정 기록 없음」으로 칠하고, 막대 끝 4 px 에 지금 상태를 붙인다. 이름을 누르면 D-03.</p>
+{% endblock %}

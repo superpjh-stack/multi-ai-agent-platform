@@ -23,6 +23,16 @@ def test_pages_and_apis_200_on_empty_db():
 
 
 def test_placeholder_names_owner():
+    """남은 placeholder 는 담당을 밝힌다 (웨이브 B 에서 화면이 하나씩 구현되며 줄어든다 — 개발2 가 D-01~D-03 구현 뒤 고침)."""
+    conn.init_db()
     c = TestClient(app)
-    assert "미구현 — 담당 개발2" in c.get("/").text
-    assert c.get("/api/v1/usage").json()["_placeholder"] == "미구현 — 담당 개발1"
+    for p in PAGES:
+        t = c.get(p, headers={"accept": "text/html"}).text
+        if "data-placeholder" in t:
+            assert "미구현 — 담당 개발" in t, p
+    for p in APIS[:-1]:
+        j = c.get(p).json()
+        if "_placeholder" in j:
+            assert j["_placeholder"].startswith("미구현 — 담당 개발"), p
+    for p in ("/", "/graph", "/agents/S:fixture"):          # D-01 · D-02 · D-03 은 구현됨 (개발2 웨이브 B)
+        assert "data-placeholder" not in c.get(p).text, p

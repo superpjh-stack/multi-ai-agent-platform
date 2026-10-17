@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block body %}
+{% include "_dev2_style.html" %}
+<style>
+  .gwrap { display:grid; grid-template-columns: minmax(0, 1fr) 300px; gap:12px; }
+  @media (max-width: 900px) { .gwrap { grid-template-columns: minmax(0, 1fr); } }
+  #cy { width:100%; height:70vh; min-height:420px; border:1px solid var(--line); border-radius:10px; background:var(--card); }
+  .filters { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; font-size:13px; margin-bottom:8px; }
+  .filters label { white-space:nowrap; }
+  .filters select, .filters input { font-size:13px; max-width:220px; }
+  .views button { font-size:13px; padding:3px 10px; border:1px solid var(--line); background:var(--soft); color:var(--fg); border-radius:6px; cursor:pointer; }
+  .views button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
+  #panel { font-size:13px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px; min-width:0; overflow-wrap:anywhere; }
+  .legend span { display:inline-block; margin-right:8px; font-size:12px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:3px; vertical-align:middle; }
+  #gerr { color:var(--warn); }
+</style>
+<h1>D-02 네트워크 구성도 <span class="sse" id="sse">실시간: 연결 전</span></h1>
+<form class="filters" id="filters" onsubmit="return false">
+  <span class="views" id="views">
+    <button type="button" data-view="tree">계층</button>
+    <button type="button" data-view="collab">협업</button>
+    <button type="button" data-view="pipeline">파이프라인</button>
+  </span>
+  <label>기간 <select name="since">
+    <option value="1h">1 시간</option><option value="24h">24 시간</option><option value="7d">7 일</option>
+    <option value="30d">30 일</option><option value="all">전체</option></select></label>
+  <label>프로젝트 <select name="project"><option value="">전체</option></select></label>
+  <label>유형 <select name="kind"><option value="">전체</option><option value="SESSION">세션</option>
+    <option value="SUBAGENT">서브에이전트</option><option value="WORKFLOW_AGENT">워크플로 에이전트</option>
+    <option value="WORKFLOW">워크플로</option></select></label>
+  <label>상태 <select name="state"><option value="">전체</option>
+    {% for s in states %}<option value="{{ s }}">{{ state_ko[s] }}</option>{% endfor %}</select></label>
+  <label>최소 출력 토큰 <input name="min_tokens" type="number" min="0" step="1000" value="0" style="width:90px"></label>
+  <label><input name="handback" type="checkbox"> handback 보기</label>
+</form>
+<div class="legend">
+  {% for s in states %}<span><i style="background:var(--st-{{ s }})"></i>{{ state_ko[s] }}</span>{% endfor %}
+  <span>(!) 사람 행동 필요 · (?) 확인 · 점선 = 부모 미확인/외부 · "+N" = 접힌 DONE 서브에이전트</span>
+</div>
+<p class="muted" id="gstat" style="font-size:12px">불러오는 중…</p>
+<p id="gerr"></p>
+<div class="gwrap">
+  <div id="cy" role="img" aria-label="에이전트 구성도"></div>
+  <aside id="panel"><p class="muted">노드를 누르면 요약, 두 번 누르면 상세(D-03).</p></aside>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+<script>
+(function () {
+  var err = document.getElementById("gerr"), stat = document.getElementById("gstat"), panel = document.getElementById("panel");
+  if (typeof cytoscape === "undefined") {
+    err.textContent = "Cytoscape.js 3.30.2 를 불러오지 못했다 (cdn.jsdelivr.net) — 구성도를 그릴 수 없다. /api/v1/graph 는 그대로 쓸 수 있다.";
+    stat.textContent = "";
+    return;
+  }
+  var form = document.getElementById("filters");
+  var q = new URLSearchParams(location.search);
+  var view = q.get("view") || "tree";
+  var expand = (q.get("expand") || "").split(",").filter(Boolean);
+  ["since", "project", "kind", "state", "min_tokens"].forEach(function (n) {
+    if (q.get(n) !== null) form.elements[n].value = q.get(n);
+  });
+  if (!q.get("since")) form.elements.since.value = "24h";
+  form.elements.handback.checked = q.get("handback") === "1";
+
+  var C = {}; Object.keys(STATE_KO).forEach(function (s) { C[s] = stColor(s); });
+  var css = getComputedStyle(document.documentElement);
+  var fg = css.getPropertyValue("--fg").trim() || "#222", muted = css.getPropertyValue("--muted").trim() || "#888",
+      accent = css.getPropertyValue("--accent").trim() || "#2f6fdb";
+  var style = [
+    {selector: "node", style: {"label": "data(display)", "font-size": 10, "color": fg, "text-valign": "bottom",
+      "text-margin-y": 3, "text-wrap": "ellipsis", "text-max-width": 140, "width": "data(size)", "height": "data(size)",
+      "background-color": "#b0b0b0", "border-width": 1, "border-color": muted,
+      "transition-property": "border-width, border-color", "transition-duration": "0.6s"}},
+    {selector: "node[kind='PROJECT']", style: {"shape": "round-rectangle", "background-opacity": 0.06,
+      "background-color": accent, "border-width": 1, "border-color": muted, "label": "data(label)",
+      "text-valign": "top", "font-size": 12, "font-weight": 600, "padding": 14}},
+    {selector: "node[kind='SESSION']", style: {"border-width": 4, "border-color": fg}},
+    {selector: "node[kind='WORKFLOW']", style: {"shape": "hexagon", "width": 40, "height": 36}},
+    {selector: ".unresolved", style: {"border-style": "dashed", "border-width": 2, "background-opacity": 0, "border-color": muted}},
+    {selector: ".slow", style: {"border-style": "dashed", "border-color": muted, "border-width": 3}},
+    {selector: ".ctx", style: {"opacity": 0.45}},
+    {selector: ".pulse", style: {"border-width": 7, "border-color": C.RUNNING}},
+    {selector: ":selected", style: {"overlay-color": accent, "overlay-opacity": 0.2}},
+    {selector: "edge", style: {"width": 1.5, "curve-style": "bezier", "line-color": muted, "target-arrow-color": muted,
+      "target-arrow-shape": "triangle", "arrow-scale": 0.7, "opacity": 0.8}},
+    {selector: ".e-message", style: {"line-style": "dashed", "width": "data(width)", "line-color": accent, "target-arrow-color": accent}},
+    {selector: ".e-handback", style: {"width": 0.7, "display": "none"}},
+    {selector: ".e-workflow", style: {"line-color": C.WAITING_CHILD, "target-arrow-color": C.WAITING_CHILD}},
+    {selector: "edge.unresolved", style: {"line-style": "dashed"}}
+  ];
+  Object.keys(C).forEach(function (s) { style.push({selector: "node[state='" + s + "']", style: {"background-color": C[s]}}); });
+  style.push({selector: "node[kind='PROJECT']", style: {"background-color": accent}});
+  var cy = cytoscape({container: document.getElementById("cy"), style: style, wheelSensitivity: 0.3,
+                      minZoom: 0.05, maxZoom: 3, textureOnViewport: true, hideEdgesOnViewport: true});
+
+  function display(d) {
+    var b = d.badge ? "(" + d.badge + ") " : "";
+    return b + (d.label || d.id);
+  }
+  function qs() {
+    var p = new URLSearchParams();
+    p.set("view", view);
+    ["since", "project", "kind", "state"].forEach(function (n) { if (form.elements[n].value) p.set(n, form.elements[n].value); });
+    if (+form.elements.min_tokens.value > 0) p.set("min_tokens", form.elements.min_tokens.value);
+    if (form.elements.handback.checked) p.set("handback", "1");
+    if (expand.length) p.set("expand", expand.join(","));
+    return p;
+  }
+  function treeEdges(kids) {
+    return kids.connectedEdges().filter(function (e) {
+      var k = e.data("kind");
+      return (k === "spawn" || k === "workflow") && kids.contains(e.source()) && kids.contains(e.target());
+    });
+  }
+  function packProjects(columns) {
+    // 1) 프로젝트마다 원점에서 breadthfirst → 2) 실제 크기(boundingBox)로 줄/열에 겹치지 않게 옮긴다
+    var boxes = [];
+    cy.nodes("[kind='PROJECT']").forEach(function (p) {
+      var kids = p.children(); if (!kids.length) return;
+      var lv = {}; kids.forEach(function (n) { var d = n.data("depth") || 0; lv[d] = (lv[d] || 0) + 1; });
+      var counts = Object.keys(lv).map(function (k) { return lv[k]; });
+      var w = Math.max(160, Math.max.apply(null, counts) * 70), h = Math.max(70, counts.length * 95);
+      var te = treeEdges(kids);
+      var roots = kids.filter(function (n) { return te.filter(function (e) { return e.target().same(n); }).length === 0; });
+      kids.union(te).layout({name: "breadthfirst", directed: true, roots: roots, animate: false, fit: false,
+        avoidOverlap: true, spacingFactor: 1, boundingBox: {x1: 0, y1: 0, w: w, h: h}}).run();
+      var bb = kids.boundingBox({includeLabels: true});
+      boxes.push({kids: kids, bb: bb, w: bb.w + 40, h: bb.h + 50, col: p.data("col")});
+    });
+    var gap = 50, x = 0, y = 0, rowH = 0;
+    function place(b, px, py) { b.kids.shift({x: px - b.bb.x1, y: py - b.bb.y1}); }
+    if (columns) {
+      var cols = {}; boxes.forEach(function (b) { var c = (b.col === null || b.col === undefined) ? 99 : b.col; (cols[c] = cols[c] || []).push(b); });
+      Object.keys(cols).map(Number).sort(function (a, b) { return a - b; }).forEach(function (c) {
+        var cw = 0; y = 0;
+        cols[c].forEach(function (b) {          // 열이 너무 길면 같은 단계 안에서 옆 칸으로 감는다
+          if (y > 0 && y + b.h > 1200) { x += cw + gap; cw = 0; y = 0; }
+          place(b, x, y); y += b.h + gap; cw = Math.max(cw, b.w);
+        });
+        x += cw + gap * 3;
+      });
+    } else {
+      var area = boxes.reduce(function (s, b) { return s + (b.w + gap) * (b.h + gap); }, 0);
+      var maxW = Math.max(1400, Math.sqrt(area) * 1.6);
+      boxes.sort(function (a, b) { return b.kids.length - a.kids.length; });
+      boxes.forEach(function (b) {
+        if (x > 0 && x + b.w > maxW) { x = 0; y += rowH + gap; rowH = 0; }
+        place(b, x, y); x += b.w + gap; rowH = Math.max(rowH, b.h);
+      });
+    }
+  }
+  function runLayout() {
+    if (view === "collab") {
+      cy.edges(".e-spawn,.e-workflow").style("opacity", 0.25);
+      cy.edges(".e-message").style({"width": "mapData(count, 1, 20, 2, 10)", "opacity": 1});
+      cy.layout({name: "cose", animate: false, randomize: true, numIter: 800, gravity: 80, nestingFactor: 1.2,
+                 nodeRepulsion: function () { return 8000; }, idealEdgeLength: function () { return 50; },
+                 componentSpacing: 80, nodeOverlap: 10, nodeDimensionsIncludeLabels: false}).run();
+    } else {
+      cy.edges().removeStyle("opacity width");
+      packProjects(view === "pipeline");
+    }
+    cy.fit(undefined, 30);
+  }
+  function fmt(n) { return (n || 0).toLocaleString("ko-KR"); }
+  var first = true, loading = false, again = false;
+  function load(relayout) {
+    if (loading) { again = true; return; }
+    loading = true;
+    var t0 = performance.now(), p = qs();
+    history.replaceState(null, "", "/graph?" + p.toString());
+    document.querySelectorAll("#views button").forEach(function (b) { b.classList.toggle("on", b.dataset.view === view); });
+    fetch("/api/v1/graph?" + p.toString()).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ("HTTP " + r.status)); return j; });
+    }).then(function (g) {
+      err.textContent = "";
+      var sel = form.elements.project;
+      if (sel.options.length <= 1) {
+        g.projects.forEach(function (pr) { var o = document.createElement("option"); o.value = pr.key; o.textContent = pr.label; sel.appendChild(o); });
+        if (q.get("project")) sel.value = q.get("project");
+      }
+      var t1 = performance.now();
+      var want = {}; g.nodes.forEach(function (n) { n.data.display = display(n.data); want[n.data.id] = 1; });
+      g.edges.forEach(function (e) { want[e.data.id] = 1; });
+      var added = 0;
+      cy.batch(function () {
+        cy.elements().forEach(function (el) { if (!want[el.id()]) el.remove(); });
+        g.nodes.forEach(function (n) {
+          var el = cy.getElementById(n.data.id);
+          if (el.length) { el.data(n.data); el.classes(n.classes); } else { cy.add({group: "nodes", data: n.data, classes: n.classes}); added++; }
+        });
+        g.edges.forEach(function (e) {
+          var el = cy.getElementById(e.data.id);
+          if (el.length) { el.data(e.data); } else if (cy.getElementById(e.data.source).length && cy.getElementById(e.data.target).length) {
+            cy.add({group: "edges", data: e.data, classes: e.classes}); added++;
+          }
+        });
+        cy.edges(".e-handback").style("display", form.elements.handback.checked ? "element" : "none");
+      });
+      if (relayout || added) runLayout();
+      var drawn = performance.now();
+      var s = g.stats;
+      var msg = "노드 " + s.nodes + " (에이전트 " + s.agent_nodes + " / 전체 " + s.agents_total + ") · 엣지 " + s.edges +
+        (s.folded ? " · 접힘 " + s.folded + " (접기 전 노드 " + s.nodes_before_fold + " > " + s.limit + ")" : "") +
+        (s.external ? " · 외부 " + s.external : "") + " · 서버 " + s.ms + " ms · 받기 " + Math.round(t1 - t0) +
+        " ms · 그리기 " + Math.round(drawn - t1) + " ms";
+      if (first) { window.__graphFirstDrawMs = Math.round(drawn - t0); msg += " · 첫 그림 " + window.__graphFirstDrawMs + " ms"; first = false; }
+      stat.textContent = msg;
+    }).catch(function (e) { err.textContent = "구성도 데이터를 받지 못했다: " + e.message; })
+      .finally(function () { loading = false; if (again) { again = false; load(false); } });
+  }
+  form.addEventListener("change", function () { load(true); });
+  document.getElementById("views").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-view]"); if (!b) return; view = b.dataset.view; load(true);
+  });
+
+  function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+  cy.on("tap", "node", function (e) {
+    var d = e.target.data();
+    if (d.kind === "PROJECT") { panel.innerHTML = "<b>" + esc(d.label) + "</b><p class='muted'>프로젝트 " + esc(d.project) + " · 열 " + esc(d.col_label) + "</p>"; return; }
+    var foldBtn = d.folded ? "<p><button type='button' id='unfold'>접힌 " + d.folded + " 개 펼치기</button></p>" : "";
+    if (d.kind === "UNRESOLVED" || d.kind === "EXTERNAL") {
+      panel.innerHTML = "<b>" + esc(d.label) + "</b><p class='muted'>" + (d.kind === "EXTERNAL" ? "L-06 SendMessage 대상을 에이전트와 맞추지 못함" : "L-05 부모를 끝까지 못 찾은 서브에이전트 묶음") + "</p>" + foldBtn;
+    } else {
+      panel.innerHTML = "<b>" + esc(d.label) + "</b><p class='muted'>불러오는 중…</p>" + foldBtn;
+      fetch("/api/v1/agents/" + encodeURIComponent(d.id)).then(function (r) { return r.json(); }).then(function (a) {
+        if (!a.found) { panel.innerHTML = "<b>" + esc(d.id) + "</b><p class='warn'>" + esc(a.reason) + "</p>"; return; }
+        var u = a.usage, ag = a.agent;
+        panel.innerHTML = "<b><a href='/agents/" + encodeURIComponent(ag.agent_key) + "'>" + esc(ag.name || ag.agent_key) + "</a></b>" +
+          "<p><span class='pill' style='--c:" + stColor(ag.state) + "'>" + esc(STATE_KO[ag.state] || ag.state) + "</span> <code>" + esc(ag.state_reason) + "</code></p>" +
+          "<p class='ev'>" + esc(a.state.evidence || "근거 기록 없음") + "</p>" +
+          "<p class='ev'>지금 판정: " + esc(a.state.now.evidence) + "</p>" +
+          "<dl class='kv'><dt>종류</dt><dd>" + esc(ag.kind) + (ag.agent_type ? " · " + esc(ag.agent_type) : "") + "</dd>" +
+          "<dt>프로젝트</dt><dd>" + esc(ag.project) + "</dd>" +
+          "<dt>부모</dt><dd>" + (a.parent ? "<a href='/agents/" + encodeURIComponent(a.parent.agent_key) + "'>" + esc(a.parent.name || a.parent.agent_key) + "</a>" : esc(a.link_note || "없음 (세션)")) + "</dd>" +
+          "<dt>자식</dt><dd>직계 " + u.children_direct + " · 전체 " + u.descendants_all + "</dd>" +
+          "<dt>출력 토큰</dt><dd>" + fmt(u.own.output_tokens) + " (자손 포함 " + fmt(u.with_descendants.output_tokens) + ")</dd>" +
+          "<dt>도구 호출</dt><dd>" + fmt(u.tool_calls) + "</dd>" +
+          "<dt>비용</dt><dd>" + (u.with_descendants.cost_usd == null ? "단가 없음" : "$" + u.with_descendants.cost_usd.toFixed(2)) + " <span class='muted'>" + esc(u.cost_label) + "</span></dd></dl>" + foldBtn;
+      }).catch(function (e2) { panel.innerHTML = "<p class='warn'>요약을 받지 못했다: " + esc(e2.message) + "</p>"; });
+    }
+    setTimeout(function () {
+      var b = document.getElementById("unfold");
+      if (b) b.onclick = function () { if (expand.indexOf(d.id) < 0) expand.push(d.id); load(true); };
+    }, 0);
+  });
+  cy.on("dbltap", "node", function (e) {
+    var d = e.target.data();
+    if (d.kind === "SESSION" || d.kind === "SUBAGENT" || d.kind === "WORKFLOW") location.href = "/agents/" + encodeURIComponent(d.id);
+  });
+
+  // RUNNING 맥박
+  var on = false;
+  setInterval(function () { on = !on; cy.nodes("[state='RUNNING']").toggleClass("pulse", on); }, 800);
+
+  // SSE — 상태 바뀜은 그 자리에서 색만, 새 노드 · 엣지는 다시 받아 붙인다
+  var tm = null;
+  function soon() { if (tm) return; tm = setTimeout(function () { tm = null; load(false); }, 1500); }
+  openStream({
+    "agent.state": function (d) {
+      var n = cy.getElementById(d.agent_key);
+      if (n.length) {
+        n.data("state", d.state);
+        n.data("badge", (d.state === "WAITING_INPUT" || d.state === "WAITING_PERMISSION") ? "!" : ((d.state === "FAILED" || d.state === "STALE") ? "?" : ""));
+        n.data("display", display(n.data()));
+      } else { soon(); }
+    },
+    "agent.new": soon, "edge.new": soon
+  }, document.getElementById("sse"));
+  load(true);
+})();
+</script>
+{% endblock %}

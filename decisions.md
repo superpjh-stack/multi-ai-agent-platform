@@ -96,3 +96,21 @@
 - 관찰: 오케스트레이터 세션(이 루프)의 S1 은 `status: busy` · `updatedAt` 15:58 그대로인데, 기록 마지막 줄은 16:16 의 `system/turn_duration`(턴 끝)이고 그 뒤 새 줄이 없었다. 그동안 그 세션이 띄운 백그라운드 서브에이전트 2(개발1 · 개발2)가 실행 중이었다. 즉 S1 `busy` 는 "모델이 지금 생각 중" 이 아니라 백그라운드 자식 작업까지 포함해 남는다 — spec §4.2 R-02b 를 그대로 쓰면 자식을 기다리는 세션이 5 분 뒤 `STALE` 로 오판된다.
 - 대안 규칙 (`core/state.py` `_session`): S1 `busy` · 5 분 넘게 기록 없음 · 훅 도구 실행 중 아님이어도 **미종료 백그라운드 자식(RUNNING · WAITING_* — STALE 자식은 빼고) ≥ 1** 이면 `WAITING_CHILD`(규칙 코드 R-04, 근거에 `S1 status=busy · 미종료 백그라운드 자식 N · D-14`). 자식이 없으면 spec 대로 R-02b `STALE`.
 - 테스트: `tests/test_state.py::test_rule_table[R-04 busy · 턴 끝 · 자식 (D-14)]` 외 1. 실측: 개발2 백필 DB 에서 그 세션 = WAITING_CHILD R-04. 사람이 spec R-02b 를 고칠지 정한다. 담당 개발2.
+
+## D-15 파이프라인 파일 패턴 — spec §7.1 과 실제 폴더의 차이 (G-19)
+- 상태: 가설 (개발1, 2026-10-17 실측 — `~/Desktop/AI Coding/0{0,1,2,3,4,5,6,8} *Agent/outputs` 이름 · mtime 만 읽음) → 실제에 맞춰 `config/pipeline.yaml` 로 표현 (코드에 박지 않음)
+- 관찰 1 — `{사업}` 칸: 03 · 04 파일명 둘째 칸이 `제조AI` 만이 아니다. 니즈푸드 · 임진강김치는 `스마트공장` (03 각 6 파일 · 04 각 7 파일). spec 패턴 `{회사}_제조AI_…` 그대로면 두 회사 03 · 04 가 have 0 → NOT_STARTED 오판. 채택: `business_labels: [제조AI, 스마트공장]`, 패턴 `{회사}_{사업}_…`.
+- 관찰 2 — macOS 파일 이름 NFD: 일부 파일(예: 00 `pm-경동글로벌텍/12.SF-PM3_…` · 04 니즈푸드 단위테스트결과서)이 한글 자모 분리(NFD)로 저장돼 NFC 사전 이름과 바이트가 다르다. 정규화 없이 세면 경동 00 PARTIAL 4/5 · 니즈푸드 04 PARTIAL 6/7 + 「미등록 회사 1 (경동글로벌텍)」 오판. 채택: 이름 비교 전에 NFC (`core/pipeline.py nfc`). `check_pipeline` 의 find 는 NFC · NFD 두 벌 패턴.
+- 관찰 3 — run.json 에 `company` 키가 없다. 01 · 02 run.json 은 run_id · scope · notes(본문) · started(+02 analysis 경로), 00 midterm 은 `facts: notes/<회사>_확정값.yaml`. 채택: `run_json_company_keys: [company, company_name, facts]` (값에 사전 이름이 든 것) → 없으면 폴더 안 산출물 파일명 {회사} 칸(최빈). notes 는 읽지 않는다.
+- 관찰 4 — spec 패턴을 산출물 단위로 펼쳤다(`stages.NN.match`: id · dir · run · file). 03 은 화면설명서 html · 화면정의서 pptx · 영상 mp4(`화면설명서_영상*` 4 벌 중 하나) 3 칸, 00 은 `*-midterm` 실행의 `*중간보고서_{회사}_v*.docx` 1 + `pm-{회사}/` 의 SF-PM1~4. `11-1.중간보고서_검수의견_*` 은 세지 않는다. `pm-고려솔더_20261016` · `pm-임진강김치_20261004` · `납품_*` 은 spec 패턴(`pm-{회사}/`) 밖이라 세지 않는다 — 그래서 고려솔더 00 의 SF-PM 근거는 `pm-고려솔더/`(09-13 mtime).
+- 관찰 5 — 뒤처짐 비교 대상(`upstream`): 02←01 · 03←02 · 04←03 · 00←01·02 (spec §7 D-06 「00 PM 이 01 · 02 결과를 읽는다」). 앞 단계가 실행 폴더면 그 회사 최신 run.json `started`(KST), 아니면 산출물 최신 mtime.
+- 관찰 6 — 미등록 회사는 구조화된 자리(파일명 · 폴더명의 {회사} 칸, run.json 회사 키)에서만 센다. progress.md 표제에서 사전 밖 이름을 골라내는 규칙은 spec 에 없어(자유 서술) 표제는 사전 이름만 찾는다. 실측: 미등록 0 건(두손푸드는 00 progress.md 표제에만 나오고 파일 · 폴더 이름에는 없다).
+- 관찰 7 — P-01 키워드는 글자 그대로(`판단 필요` · `사용자 판단` · `확인 필요`). 02 progress.md 의 「고객 확인이 필요한 항목」 표제 3 개는 `확인 필요` 와 글자가 달라 걸리지 않는다. 실측 P-01: 02 니즈푸드(progress.md:946) · 임진강김치(:913 · :921).
+- 관찰 8 — 06 Coding Agent 대상 회사: 표제 · 표 행에 회사 이름이 없다(줄 3 의 인용 줄에만). spec §7.1 문장(「회사 하나(고려솔더)」)대로 `stages.06.wave_company: 고려솔더` 로 두고 웨이브 표시는 `## ` 표제의 ✅ 🔄 ⏸ 만 읽는다 → 「Phase 0 ✅ · 웨이브 A ✅ · 웨이브 B 🔄 · 웨이브 C ✅ · 웨이브 D ✅」.
+- 확인 방법: `uv run python src/agentdash/tools/check_pipeline.py` (V-11 — find 독립 재계산 표본 10 칸 일치) · `tests/test_pipeline.py`. 사람이 spec §7.1 패턴을 고칠지 정한다. 담당 개발1.
+
+## D-16 D-05 간트의 `state_log` 이전 구간
+- 상태: 가설 (개발1, 2026-10-17)
+- 관찰: `state_log` 은 대시보드가 판정한 순간에만 쌓인다. 백필 DB 의 state_log 319 행은 전부 백필 시각(2026-10-17 07:38Z) — 과거 에이전트 막대의 끝보다 뒤다. 그 시점 상태를 지어낼 근거가 없다.
+- 채택: 막대 = started_at → ended_at(없으면 last_event_at, 살아 있으면 지금). state_log 첫 기록 앞 구간은 「판정 기록 없음」(NONE, 연회색), 그 뒤는 기록된 상태 색. 막대 끝 4 px 에 지금 상태 색. 대시보드를 켜 둔 동안의 새 에이전트부터 상태 색이 채워진다.
+- 확인 방법: `tests/test_usage_page.py::test_timeline_segments`. 담당 개발1.

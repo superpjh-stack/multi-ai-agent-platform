@@ -11,6 +11,10 @@
 
 | 3 | 2026-10-17 16:40 | 개발1 웨이브 A 보고 재검증 → 개발1 웨이브 B 기동 (개발2 웨이브 A 계속) | `AGENTDASH_DB=data/agentdash-dev1.db make gate`: G-02~G-08 PASS · G-06 PASS (연결 241/241 = 100%) · G-13 PASS (행 62,100 · 위반 0) · G-14 PASS (pytest 161 · 트리 변경 0) · 합계 PASS 16 · FAIL 3 · 미검증 3 ‖ `sqlite3 … agent` SESSION 77 · SUBAGENT 235 · WORKFLOW_AGENT 6 · WORKFLOW 1 · usage_event 27,010 ‖ `stat ~/.claude/settings.json` 2026-10-16 15:15 (변경 없음) ‖ 커밋은 개발2 웨이브 A 종료 후 |
 
+| 4 | 2026-10-17 17:05 | 개발2 웨이브 A 보고 재검증 → 웨이브 A 커밋 `de84747` → 개발1 에 R3 전달 · 개발2 웨이브 B 기동(R5 포함) | dev2 테스트 4 파일 70 passed ‖ `AGENTDASH_DB=data/agentdash-dev1.db make gate`: G-06 PASS (원천 242/242 · DB 241/242 = 99.6%, 부모 미확인 1 — 방금 생긴 서브에이전트) · G-09 39 · G-10 17 · G-11 4 passed · G-15 PASS (덧붙임 9 · 송신 0.01s · stdout 0B) · 합계 PASS 16 · FAIL 3 · 미검증 3 ‖ 기본 DB `make gate` G-06 FAIL (부모 0/241, R3) · 합계 PASS 15 · FAIL 4 ‖ `stat ~/.claude/settings.json` mtime 1792131308 (변경 없음) ‖ 커밋에 DB 파일 0 |
+
+| 5 | 2026-10-17 17:25 | 개발1 웨이브 B (+R3) 보고 재검증 · 개발2 웨이브 B 계속 | 기본 DB `make gate`: PASS 18 · FAIL 0 · 미검증 4 (G-12 · G-18 · G-21 · G-22) · G-06 243/243 (R3 해결) · G-17 placeholder 0 · G-19 칸 88/88 근거 · 표본 10/10 · G-20 7 passed ‖ `sqlite3 data/agentdash.db pipeline_cell`: DONE 53 · NEEDS_DECISION 2 · UNKNOWN 33 · 고려솔더 01 DONE v1.0 `20261016-151506-all` · 02 DONE v1.0 `20261016-154028-all` · 05 · 08 UNKNOWN ‖ settings.json mtime 1792131308 (변경 없음) ‖ 미처리: R4(선택, 개발1 미처리) · D-15 · D-16 가설 |
+
 **사람 확인 대기 (추가):** D-13 세션 이름을 첫 사용자 메시지(본문) 대신 `agent-name` 줄로 — spec §3.1 과 다름.
 
 ## 지금 해야 할 것

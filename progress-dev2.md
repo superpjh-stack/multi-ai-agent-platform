@@ -119,3 +119,31 @@ Accept: text/event-stream (또는 ?follow=1) 이면 붙잡고 실시간, 그 밖
 - **R4 → 개발1 (선택)**: R-06 · D-14 정확도용으로 세션 마지막 줄이 `system/turn_duration` 인지(턴 끝) 알 수 있으면 `Ctx.turn_ended` 에 쓴다. 테이블 열이 없으므로 방법은 개발1 판단(없어도 동작 — 근거 문구만 달라짐).
 - **R5 → 아키텍트**: `app/main.py` 에 lifespan 추가 — 기동 때 `collect.watcher.start()` · `core.state.start_ticker()` · `app.sse.attach_model()`, 종료 때 stop 이벤트 set. 지금 `make run` 은 감시기 · 10 초 판정을 띄우지 않는다(라우터 import 때 attach_model 만 된다).
 - **R6 → 아키텍트 (메모)**: CLAUDE.md 소유 표의 개발2 테스트 목록에 `tests/test_hooks_install.py` 가 빠져 있다(오케스트레이터 지시로 개발2 소유).
+
+## 4. 웨이브 B (2026-10-17 17:05, DB `data/agentdash-dev2.db`)
+
+새/바꾼 파일: `core/graph.py`(새) · `app/routers/{pages,agents,graph}.py` · `app/main.py`(R5 lifespan — 오케스트레이터 지시) · 템플릿 `dashboard.html` · `_d01_body.html` · `graph.html` · `agent.html` · `agent_raw.html` · `_dev2_style.html`(전부 새, 공용 `base.html` 은 손대지 않음 — `{% block body %}` 만 씀) · `tests/test_graph.py` · `tests/test_dashboard.py`(새, 개발2 소유로 둔다) · `tests/test_routes.py::test_placeholder_names_owner`(D-01 이 placeholder 라고 단정하던 줄을 "남은 placeholder 는 담당을 밝힌다" 로 고침 — 아키텍트 파일, §3 R7).
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| G-17 화면 6 + API 10 | PASS — 16/16 HTTP 200 (빈 DB) · placeholder 0 | `uv run python src/agentdash/tools/check_routes.py` |
+| G-18 API 300 노드 | PASS — 합성 300 노드(프로젝트 4 · 세션 48 · 서브에이전트 240 · 워크플로 1+3 · 부모 미확인 · 외부) `/api/v1/graph` tree 7.3 · collab 7.4 · pipeline 7.2 ms (≤ 300) | `uv run pytest -q tests/test_graph.py -s` (6 passed) |
+| G-18 접기 "+N" | PASS — 노드 402 → 접힘 390 · 세션마다 "+195" (DONE 자식 194 + DONE 손자 1, 살아 있는 손자를 품은 DONE 자식 · RUNNING 은 남김) · `expand=<키>` 로 펼침 | `test_graph.py::test_fold_over_300_and_expand` |
+| G-18 보기 3 종 | PASS — tree=breadthfirst(프로젝트 묶음마다) · collab=cose(message 강조) · pipeline=`NN` 열 고정(`data.col`) · 잘못된 view/since → 422 | `test_300_nodes_under_300ms_each_view` · `test_filters` |
+| G-18 브라우저 첫 그림 (300 노드 합성, Chrome) | tree 98 ms · collab 262 ms · pipeline 118 ms (≤ 2 초) · 앱 콘솔 오류 0 (확장 프로그램 경고만) | 8097 + 합성 DB(`AGENTDASH_NO_WATCH=1`) → `/graph?view=…` 의 `window.__graphFirstDrawMs` |
+| 브라우저 실제 데이터 | D-01 · D-02(3 보기) · D-03 · 원본 보기 정상, SSE "연결됨", 노드 색이 SSE 로 바뀜(WAITING_CHILD→RUNNING) 확인, 앱 콘솔 오류 0 | `AGENTDASH_DB=data/agentdash-dev2.db AGENTDASH_PORT=8097 uv run python -m agentdash.app` (확인 뒤 정지) |
+| 관제판 실제 숫자 (17:04) | 실행 2 · 입력 대기 2 · 권한 대기 0 · 잠듦 0 · 자식 대기 0 · 멈춤 의심 8 · 오늘 끝남 5 · 누적 끝남 308 · 에이전트 320 · 내 차례 2 · 파싱 오류 0 | `Q.summary_data` (dev2 DB) |
+| 구성도 실제 숫자 | 기본(24 h + 살아 있음) 노드 33 · 엣지 28 · 에이전트 노드 24 ‖ 전체 노드 357 → 접힘 233 → 124 · 엣지 20 · 3.4 ms | `graph.build(con, since=…)` |
+| D-01 · D-03 · 원본 보기 | 8 passed — 내 차례 순서(권한 먼저 · 오래 기다린 순) · cwd/이름 복사 · 지금 도구 · R-12 응답 느림 · 파싱 오류 · 피드 · 조상 빵부스러기 · 부모 미확인 표시 · `[추정] API 정가 환산` · 없는 키 200 found=false · 원본 보기: thinking · 도구 결과 · 명령 둘째 줄 · Write content 미노출, 요청 전후 DB 행 수 동일 · 본문 문자열 DB 0 · 원천 루트 밖 거부 · `Cache-Control: no-store` | `uv run pytest -q tests/test_dashboard.py` |
+| R5 lifespan | 기동: init_db → attach_model → start_ticker → (빈 DB 면 backfill.run) → watcher.start / 종료: stop + join. `AGENTDASH_NO_WATCH=1` 이면 끔. 가짜 원천(읽기 전용)에서 빈 DB 백필 → 감시기 실행 → 종료 후 스레드 멈춤 확인 | `test_dashboard.py::test_lifespan_*` · 서버 로그 "Application shutdown complete" |
+| pytest 전체 | 198 passed | `uv run pytest -q` |
+| make gate (dev2 DB) | PASS 18 · FAIL 0 · 미검증 4 (G-12 · G-18 브라우저/QA 몫 · G-21 · G-22) | `AGENTDASH_DB=data/agentdash-dev2.db make gate` |
+| 실제 `~/.claude/settings.json` | 수정 시각 작업 전 1792131308 = 작업 후 1792131308 | `stat -f '%m %Sm' ~/.claude/settings.json` |
+
+비고
+- Cytoscape.js `3.30.2` (cdn.jsdelivr.net/npm 고정). 못 불러오면 화면에 이유를 적는다. cose-bilkent 대신 내장 `cose`(추가 CDN 0).
+- 원본 보기는 요청마다 원천 `.jsonl` 을 `rb` 로 읽어 응답만 — 도구 입력은 경로 + description(없으면 command/prompt) 첫 줄 120 자, thinking · 도구 결과는 크기만.
+- 같은 Chrome 탭 묶음을 다른 에이전트(개발1 추정)와 같이 써서 탭이 서로 옮겨 다녔다 — 내 탭을 따로 만들어 쟀다.
+
+### 3 추가 요청
+- **R7 → 아키텍트 (메모)**: `tests/test_routes.py::test_placeholder_names_owner` 를 고쳤다(D-01 이 placeholder 라는 단정 → 남은 placeholder 는 담당을 밝힌다 + D-01~03 은 placeholder 아님). `app/main.py` 에 R5 lifespan 을 넣었다.

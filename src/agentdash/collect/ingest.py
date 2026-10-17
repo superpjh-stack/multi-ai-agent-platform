@@ -65,6 +65,19 @@ def _on_line():
     return _on_line_cache["fn"]
 
 
+def _state_post_hook():
+    """개발2 state.post_hook(con, changed) — linker.resolve_all + 바뀐 키 재판정 (progress-dev2 §3 R3). 없으면 None."""
+    if "post" not in _on_line_cache:
+        import importlib
+        import importlib.util
+
+        fn = None
+        if importlib.util.find_spec("agentdash.core.state") is not None:
+            fn = getattr(importlib.import_module("agentdash.core.state"), "post_hook", None)
+        _on_line_cache["post"] = fn
+    return _on_line_cache["post"]
+
+
 def _pricing() -> U.Pricing:
     p = settings.CONFIG_DIR / "pricing.yaml"
     m = p.stat().st_mtime
@@ -428,7 +441,11 @@ def source_files(home: Path | None = None) -> list[tuple[str, Path]]:
     return out
 
 
-def ingest_all(con: sqlite3.Connection, *, since: str | None = None, run_hooks: bool = True) -> Report:
+def ingest_all(con: sqlite3.Connection, *, since: str | None = None, run_hooks: bool = True,
+               link: bool = True) -> Report:
+    """전체 스캔. run_hooks 면 등록된 post hook 을 부르고, link 이고 state.post_hook 이 등록돼 있지 않으면
+    그것을 직접 부른다(R3 — check_counts · 감시기 재스캔 경로에서도 연결 · 판정이 돈다). backfill 은 link=False 로
+    부르고 끝에 resolve_all · evaluate_all 을 따로 돈다."""
     t0 = time.time()
     rep = Report()
     since_ts = None
@@ -443,5 +460,8 @@ def ingest_all(con: sqlite3.Connection, *, since: str | None = None, run_hooks: 
     if run_hooks:
         for fn in list(_post_hooks):
             fn(con, rep.changed)
+        post = _state_post_hook()
+        if link and post is not None and post not in _post_hooks:
+            post(con, rep.changed)
     rep.seconds = time.time() - t0
     return rep
