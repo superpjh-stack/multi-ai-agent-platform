@@ -2,7 +2,11 @@
 
 > 관련 문서: `intro.md`(소개 · 근거 숫자 · 경계), `problem.md`(문제 · 목표 G1~G10 · 확정 필요 사항 Q1~Q10)
 > 근거: 이 컴퓨터의 `~/.claude/` 기록 (2026-08-01 ~ 2026-10-17, Claude Code 2.1.x)
-> 버전: v0.2 (2026-10-17, Q1 훅 연동 · Q2 멈춤 5 분 · Q4 비용 단가표 · Q5 진척 규칙 확정 반영)
+> 버전: **v0.3 초안** (2026-10-20, 2차-A — 결정 D-07 · D-08 · D-13 · D-14 · D-17 · D-18 · D-19 확정 반영 · 추정 출력 열 · 예산 · 추세 · 캐시 적중률 · WAITING 알림 · 디자인 · 화면 D-07 · API 13)
+> 이전: v0.2 (2026-10-17, Q1 훅 연동 · Q2 멈춤 5 분 · Q4 비용 단가표 · Q5 진척 규칙 확정 반영)
+> 설계: `docs/superpowers/specs/2026-10-20-agentdash-v2a-design.md`
+
+**v0.3 에서 바뀐 곳** — §1.1 · §1.2 · §2.3 · §3(`usage_event` · `usage_daily` 열) · §3.1 · §4.2(R-02b · R-03 · R-04 · R-06 · R-07 · 평가 순서) · §6 · §6.1(D-08) · §6.2 · §6.3 · §7(D-01 · D-04 · D-07 · §7.2 · §7.3 — §7.1 번호 유지) · §8 · §10(V-05 · V-12~V-16) · §11 · §12(M7) · §13(10~14). 그 밖은 v0.2 와 글자까지 같다.
 
 **표기 규칙**
 - `[실측]`: 2026-10-17 에 이 컴퓨터 기록에서 직접 확인한 형식 · 값. 그대로 따른다.
@@ -16,9 +20,9 @@
 ### 1.1 계층
 
 ```
-┌──────────────────────────── 화면 6 · 읽기 API · SSE ─────────────────────────────┐
+┌──────────────────────────── 화면 7 · 읽기 API · SSE ─────────────────────────────┐
 │ D-01 관제판 · D-02 네트워크 구성도 · D-03 에이전트 상세 · D-04 작업량 · D-05 타임라인 │
-│ D-06 파이프라인                                                                  │
+│ D-06 파이프라인 · D-07 비용 · 효율                                                │
 └──────────────────────────────────────┬─────────────────────────────────────────┘
                                        │ Jinja2 서버 렌더 + static/*.js · /api/v1/* · /api/v1/stream
 ┌──────────────────────────────────────▼─────────────────────────────────────────┐
@@ -26,6 +30,7 @@
 │ src/agentdash/collect/  watcher(파일 감시) · tail(증분 읽기) · parsers/* · hooks_rx  │
 │ src/agentdash/core/     model · linker(부모 연결) · state(상태 판정) · usage(집계)   │
 │                         graph(구성도 데이터) · pipeline(progress.md 읽기)            │
+│                         budget(예산 · 추세 · 캐시 적중률)                           │
 │ src/agentdash/db/       conn · schema.sql                                         │
 └──────────────────────────────────────┬─────────────────────────────────────────┘
                                        │ sqlite3 (WAL)
@@ -43,7 +48,8 @@
 | 언어 · 도구 | Python 3.12 · `uv` · Makefile | 다른 저장소(Standard Data Hub · Standard MES Platform)와 같게 |
 | 웹 | FastAPI · Jinja2 · SSE(`sse-starlette`) | 서버 하나로 화면 · API · 실시간 스트림 |
 | 그래프 | Cytoscape.js 3.x (CDN 고정 버전) + `cose-bilkent` 배치 | 노드 수백 개 · 접기 · 계층 배치 |
-| 차트 | 서버 SVG(막대 · 추이) | JS 의존 최소 |
+| 차트 | 서버 SVG(막대 · 추이, D-03~D-05) · Chart.js 4.x (CDN 고정 버전, D-07) | D-07 의 전환 · 쌓은 막대 · 두 선 비교는 JS 차트가 낫다. CDN 은 Cytoscape 와 같은 jsdelivr |
+| 화면 틀 | `base.html` 의 색 · 간격 · 글꼴 토큰 (CSS 변수), 밝은 기본 + 다크 (§7.3) | 화면 7 을 한 틀로 |
 | DB | SQLite (WAL) | 단일 사용자 · 로컬. 별도 서버 불필요 |
 | 파일 감시 | `watchfiles` | macOS FSEvents |
 | 테스트 | pytest · `tests/fixtures/`(실제 기록에서 본문을 지운 사본) | 형식 변화 회귀 |
@@ -92,6 +98,7 @@
 
 - `message.content` 의 텍스트 · thinking · 도구 결과 본문.
 - 도구 입력 중 `command` · `prompt` · `content` 본문. 남기는 것은 도구 이름 · `file_path` · `description` 첫 120 자뿐이다.
+- 추정 출력(§6.2)을 위해 수집기는 text · 도구 입력의 **길이(글자 수)만** 재고 버린다. 길이 숫자도 DB 에 남기지 않고 `output_est` 계산에만 쓴다.
 - 상세 화면의 "원본 보기"는 요청 시점에 원천 파일을 읽어 보여 주고 저장하지 않는다.
 
 ---
@@ -138,6 +145,8 @@ CREATE TABLE usage_event (           -- assistant 메시지 한 건의 토큰 (r
   output_tokens INTEGER, thinking_tokens INTEGER, web_search INTEGER, web_fetch INTEGER,
   cost_usd REAL,                     -- §6.1 로 계산. 단가표에 없는 모델이면 NULL
   pricing_ver TEXT,                  -- 계산에 쓴 단가표 버전
+  output_est INTEGER,                -- §6.2 하한 추정 출력 토큰. 의심 요청만, 아니면 NULL
+  cost_est_usd REAL,                 -- output_est 를 출력에 쓴 §6.1 비용. 의심 아니면 cost_usd 와 같다
   PRIMARY KEY (agent_key, request_id)
 );
 
@@ -156,6 +165,8 @@ CREATE TABLE usage_daily (           -- 집계 (KST 일자)
   day TEXT, agent_key TEXT, model TEXT,
   input_tokens INTEGER, cache_read INTEGER, cache_write INTEGER, output_tokens INTEGER,
   tool_calls INTEGER, files_written INTEGER, active_seconds INTEGER, cost_usd REAL,
+  output_est INTEGER,                -- 그날 의심 요청의 output_est 합 (없으면 0)
+  cost_est_usd REAL,                 -- cost_est_usd 합
   PRIMARY KEY (day, agent_key, model)
 );
 
@@ -179,7 +190,7 @@ CREATE TABLE hook_event (agent_key TEXT, at TEXT, event TEXT, detail TEXT);  -- 
 
 | 종류 | 이름 (앞에서부터 있는 것) |
 |---|---|
-| 세션 | S1 `name` → 첫 사용자 메시지 앞 40 자 → 프로젝트 폴더 마지막 이름 |
+| 세션 | S1 `name` → 그 세션 기록의 마지막 `agent-name` 줄의 `agentName` → `cwd` 마지막 이름 → 프로젝트 폴더 마지막 이름. 첫 사용자 메시지는 본문이므로 읽지 않는다 (D-13) |
 | 서브에이전트 | S4 `description` → `agentType` + `agentId` 앞 6 자 |
 | 워크플로 | S6 의 `meta.name` → `wf_<id>` |
 | 워크플로 에이전트 | 워크플로 `label` → `description` |
@@ -217,16 +228,22 @@ CREATE TABLE hook_event (agent_key TEXT, at TEXT, event TEXT, detail TEXT);  -- 
 
 기준 시간 `STALE_AFTER = 5 분` (Q2 확정, `config/settings.yaml` 의 `stale_after_sec: 300`). 응답 느림 경계 `SLOW_AFTER = 90 초`.
 
+**세션 평가 순서** (v0.3): R-01 → R-02a → (훅 도구 실행 중이면 `RUNNING`) → R-03 → R-04 → R-02b → R-05 → R-06 → R-07. S1 `busy` 는 턴이 끝난 뒤에도 남으므로(D-14) R-03 · R-04 를 R-02b 보다 먼저 본다. 아래 표는 코드 번호 순이다.
+
+- **S1 살아 있음** = S1 파일 있음 · pid 살아 있음. **S1 없음** = S1 파일 없음 **또는 pid 소멸** (D-19).
+- **잠잠한 busy** = S1 살아 있음 · `status = busy` · 5 분 넘게 기록 없음 · 훅으로 도구 실행 중이 아님.
+- "마지막 assistant" 는 마지막 `tool_use` 로 본다 — 예약 뒤 인사 텍스트 줄은 활동이 아니다 (D-18).
+
 | 코드 | 대상 | 조건 | 상태 |
 |---|---|---|---|
 | R-01 | 모두 | 훅 이벤트가 최근 상태를 알려 줌 (§9.2 표) — 단, 그 뒤에 더 새로운 기록이 있으면 기록이 이긴다 | 이벤트대로 |
-| R-02a | 세션 | S1 있음 · pid 살아 있음 · `status = busy` · 마지막 기록 < 5 분 | `RUNNING` |
-| R-02b | 세션 | S1 있음 · `status = busy` · 5 분 넘게 기록 없음 · 훅으로 도구 실행 중(PreToolUse 후 PostToolUse 없음)이 아님 | `STALE` (긴 Bash 실행 중이면 `RUNNING` 유지, 상세에 "도구 실행 N 분째") |
-| R-03 | 세션 | S1 있음 · `status = idle` · 마지막 assistant 가 `ScheduleWakeup` 을 호출하고 예약 시각이 미래 | `SLEEPING` (깰 시각 표시) |
-| R-04 | 세션 | S1 있음 · `status = idle` · 아직 안 끝난 백그라운드 자식 ≥ 1 | `WAITING_CHILD` |
-| R-05 | 세션 | S1 있음 · `status = idle` | `WAITING_INPUT` |
-| R-06 | 세션 | S1 없음(프로세스 소멸) · 마지막 항목이 결과 없는 `tool_use` | `STALE` |
-| R-07 | 세션 | S1 없음 | `DONE` |
+| R-02a | 세션 | S1 살아 있음 · `status = busy` · 마지막 기록 < 5 분 | `RUNNING` |
+| R-02b | 세션 | 잠잠한 busy 이고 R-03 · R-04 에 안 걸림 | `STALE` (훅으로 도구 실행 중 — PreToolUse 후 PostToolUse 없음 — 이면 `RUNNING` 유지, 상세에 "도구 실행 N 분째") |
+| R-03 | 세션 | S1 살아 있음 · (`status = idle` 또는 잠잠한 busy) · 마지막 assistant 가 `ScheduleWakeup` 을 호출하고 예약 시각이 미래 (D-18) | `SLEEPING` (깰 시각 표시) |
+| R-04 | 세션 | S1 살아 있음 · (`status = idle` 또는 잠잠한 busy) · 아직 안 끝난 백그라운드 자식(`RUNNING` · `WAITING_*`, `STALE` 제외) ≥ 1 (D-14) | `WAITING_CHILD` |
+| R-05 | 세션 | S1 살아 있음 · `status = idle` | `WAITING_INPUT` |
+| R-06 | 세션 | S1 없음(파일 없음 또는 pid 소멸, D-19) · 마지막 항목이 결과 없는 `tool_use` | `STALE` |
+| R-07 | 세션 | S1 없음(파일 없음 또는 pid 소멸, D-19) | `DONE` |
 | R-08 | 서브에이전트 | 부모 기록에 결과 반환 있음 (L-07) | `DONE` (결과 `is_error` 면 `FAILED`) |
 | R-09 | 서브에이전트 | 최근 기록 < 90 초 | `RUNNING` |
 | R-10 | 서브에이전트 | 자기 자식 중 미종료 있음 | `WAITING_CHILD` |
@@ -283,6 +300,7 @@ CREATE TABLE hook_event (agent_key TEXT, at TEXT, event TEXT, detail TEXT);  -- 
 | 입력 토큰 | `usage.input_tokens` 합 | S2 · S3 |
 | 캐시 읽기 · 쓰기 | `cache_read_input_tokens` · `cache_creation_input_tokens` 합 | S2 · S3 |
 | 출력 토큰 | `output_tokens` 합 (그중 `thinking_tokens` 따로) | S2 · S3 |
+| 추정 출력 토큰 | 의심 요청은 `output_est`, 나머지는 `output_tokens` 를 쓴 합 (§6.2) `[추정]` | 계산 |
 | 캐시 적중률 | 캐시 읽기 ÷ (입력 + 캐시 읽기 + 캐시 쓰기) | 계산 |
 | 도구 호출 | `tool_use` 수, 도구별 · 성공/오류별 | S2 · S3 |
 | 작성 파일 | `Write` · `Edit` · `NotebookEdit` 의 서로 다른 `file_path` 수 | S2 · S3 |
@@ -290,12 +308,14 @@ CREATE TABLE hook_event (agent_key TEXT, at TEXT, event TEXT, detail TEXT);  -- 
 | 벽시계 시간 | `ended_at`(또는 지금) − `started_at` | 타임스탬프 |
 | 하위 에이전트 | 직계 · 전체 자손 수 | `edge` |
 | 추정 비용 | §6.1 공식 (API 단가 환산) | 계산 `[추정]` |
+| 추정 보정 비용 | `cost_est_usd` 합 — 예산 · 추세의 기준 (§6.3) | 계산 `[추정]` |
 
 규칙
 - `requestId` 가 같은 줄은 한 번만 센다(A3).
 - **자기 작업량**과 **자손 포함 작업량**을 따로 보여 준다. 세션 합계 = 자기 + 자손 합(G7). 서브에이전트 기록을 부모 합계에 다시 더하지 않는다(A4).
 - 일자는 KST 기준으로 자른다.
 - `model = "<synthetic>"` 줄(109 건 `[실측]`)은 Claude Code 가 만든 가짜 응답이므로 토큰 · 비용에서 뺀다.
+- 캐시 적중률의 분모가 0 이면 `NULL`("—") 이다. 0 % 로 쓰지 않는다.
 
 ### 6.1 비용 단가표 (Q4 확정)
 
@@ -327,7 +347,7 @@ cost = ( input_tokens   × in
 | `claude-sonnet-5-5` | 2.00 | 10.00 | 0.20 | — | — |
 | `claude-sonnet-5` | 2.00 | 10.00 | 0.20 | — | 8,862 |
 | `claude-sonnet-4-6` | 3.00 | 15.00 | 0.30 | — | — |
-| `claude-haiku-5-5` | 0.10 (≤100K) · 0.50 (>100K) | 0.50 · 2.50 | 0.01 · 0.05 `[추정: 입력의 0.1 배]` | — | — |
+| `claude-haiku-5-5` | 0.10 (≤100K) · 0.50 (>100K) | 0.50 · 2.50 | 0.01 · 0.05 `[추정: 입력의 0.1 배 — 공식 단가 페이지 대조 후 확정 (D-08)]` | — | — |
 | `claude-haiku-4-5` | 1.00 | 5.00 | 0.10 | — | — |
 
 ```yaml
@@ -352,6 +372,47 @@ aliases:                         # 날짜 · 접미사가 붙은 ID 를 위 키�
 - 화면의 비용은 항상 `[추정] API 정가 환산` 표시를 붙인다. Claude Code 구독 요금제로 쓴 경우 실제 청구와 다르다.
 - 단가 원본: https://platform.claude.com/docs/en/about-claude/pricing — 분기마다 대조해 `version` 을 올린다.
 
+### 6.2 추정 출력 (D-17 확정, v0.3)
+
+`[실측]` 서브에이전트 · 워크플로 에이전트 기록의 `output_tokens` 는 스트리밍 시작값만 남은 경우가 많다 — 2026-10-17 서브에이전트 요청 17,492 중 11,999 (68.6 %), 워크플로 에이전트 85 중 60, 메인 세션 10,186 중 13. 원천에 최종값이 없으므로 기록값은 그대로 두고 하한 추정을 따로 둔다.
+
+| 항목 | 규칙 |
+|---|---|
+| 요청 | 같은 기록 · 같은 `requestId` 의 assistant 줄 묶음 (A3 중복 제거와 같은 단위) |
+| 의심 | 묶음의 기록 `output_tokens` 최대 **< 30** 이고, 묶음 `content` 블록을 JSON 으로 쓴 길이 합 **> 400** 자 |
+| 추정 | `output_est = ceil((text 블록 글자 수 + tool_use 입력 JSON 글자 수) / 4)`. thinking 블록은 세지 않는다. `output_est < output_tokens` 이면 `output_tokens` 를 쓴다 (하한) |
+| 비용 | `cost_est_usd` = §6.1 공식에서 `output_tokens` 자리에 `output_est` 를 넣은 값. 의심 아니면 `cost_usd` 와 같다. 단가 없는 모델이면 둘 다 `NULL` |
+| 범위 | 모든 종류(세션 · 서브에이전트 · 워크플로 에이전트)에 같은 규칙. 종류로 거르지 않는다 |
+| 표기 | 화면 · API · CSV 에 「기록」 과 「추정 보정 (D-17)」 을 나란히. 추정 쪽은 늘 `[추정]` |
+
+- 길이는 수집 때 재고 버린다(§2.3). 본문을 다시 읽어 재계산하지 않으며, 규칙을 바꾸면 백필을 다시 돈다.
+- 검사 V-12 는 QA1 `outputs/qa1/stream_heuristic.py` 와 같은 정의로 원천을 다시 재서 의심 비율을 대조한다.
+
+### 6.3 예산 · 추세 (v0.3)
+
+**예산** — `config/budget.yaml`
+
+```yaml
+warn_ratio: 0.8                  # 이 비율부터 주황, 1.0 부터 빨강
+total:    { daily_usd: null, monthly_usd: null }
+projects: {}                     # "<project_path 마지막 이름>": { daily_usd: …, monthly_usd: … }
+```
+
+- 금액은 사람이 넣는다. `null` 이면 그 칸은 「한도 미설정」 이고 경고를 내지 않는다. 코드에 금액을 쓰지 않는다.
+- 기준 금액 = 기간 안 `cost_est_usd` 합 (추정 보정 포함). 기록 기준 `cost_usd` 합을 함께 보여 준다. 단가 없음 `NULL` 은 0 으로 더하지 않고 「단가 없음 N 건」 을 붙인다.
+- 기간: 일 = KST 오늘 00:00 ~ 지금, 월 = KST 이번 달 1 일 00:00 ~ 지금.
+- 프로젝트 = `agent.project_path` 의 마지막 이름 (없으면 `project_key`). 자손의 비용은 그 자손의 `project_path` 로 센다.
+- 단계: `ok` (< warn_ratio) · `warn` (≥ warn_ratio) · `over` (≥ 1.0) · `unset`.
+- 경고는 화면 표시만 한다(D-01 띠 · D-07 게이지). 알림(§7.2)은 보내지 않는다.
+
+**추세**
+- 단위: 일 (KST) · 주 (KST 월요일 00:00 시작) · 월 (KST 1 일).
+- 값: `cost_usd` 합 · `cost_est_usd` 합 · 출력 토큰 · 추정 출력 토큰, 묶음 `total` 또는 `project`.
+- 원천: `usage_daily`. 합은 같은 기간 `usage_event` 직접 합과 같아야 한다 (V-14).
+
+**캐시 적중률 순위**
+- 묶음: 프로젝트 · 세션(자손 포함) · 에이전트(자기만). 정렬 기본값 = `(1 − 적중률) × cost_est_usd` 큰 순 — 절감 여지가 큰 곳이 위.
+
 ---
 
 ## 7. 화면
@@ -362,6 +423,7 @@ aliases:                         # 날짜 · 접미사가 붙은 ID 를 위 키�
 - 가운데: 살아 있는 에이전트 카드 (상태 · 이름 · 프로젝트 · 지금 쓰는 도구와 대상 · 경과 시간 · 출력 토큰 · 자식 수).
 - 오른쪽: 오늘 출력 토큰 · 도구 호출 · 작성 파일 · 상위 5 에이전트.
 - 아래: 최근 상태 변화 피드 (SSE), 파싱 오류 건수.
+- 맨 위 (v0.3): 예산 단계가 `warn` · `over` 인 칸이 하나라도 있으면 경고 띠 (「오늘 전체 82 % · Standard MES 이번 달 104 %」 꼴) → D-07 링크.
 
 ### D-02 네트워크 구성도 `/graph`
 §5 그대로. 노드를 누르면 오른쪽 패널에 요약(상태 · 근거 규칙 · 작업량 · 부모 · 자식), 두 번 누르면 D-03.
@@ -375,13 +437,18 @@ aliases:                         # 날짜 · 접미사가 붙은 ID 를 위 키�
 - "원본 보기": 원천 `.jsonl` 을 그때 읽어 사용자 · assistant 메시지를 접힌 상태로 보여 준다(저장 안 함).
 
 ### D-04 작업량 `/usage`
-기간 선택 · 묶음 기준(에이전트 / 프로젝트 / 유형 / 모델 / 일자) · 순위 표 · 일별 추이 · 캐시 적중률 · 추정 비용 열(단가표 있을 때). CSV 내보내기.
+기간 선택 · 묶음 기준(에이전트 / 프로젝트 / 유형 / 모델 / 일자) · 순위 표 · 일별 추이 · 캐시 적중률 · 추정 비용 열(단가표 있을 때) · 추정 출력 · 추정 보정 비용 열 (§6.2). CSV 내보내기 (같은 열).
 
 ### D-05 타임라인 `/timeline`
 가로축 시간, 세로축 에이전트(부모 아래 자식 들여쓰기)의 간트 막대. 막대 색 = 그 시점 상태(`state_log`). 동시에 몇 개가 돌았는지 위쪽 면적 그래프.
 
 ### D-06 파이프라인 `/pipeline`
 행 = 회사, 열 = 단계(`01 Analyze` → `02 Design` → `03 UI` → `04 QA` → `00 PM` 순으로 보여 준다. 00 PM 이 01 · 02 결과를 읽어 관리산출물을 만들기 때문이다. 그 뒤에 `05 Open` · `06 Coding` · `08 AI Agent Making`). 칸 = §7.1 상태 색 + `have/need` + 버전(v1.x) + 마지막 산출물 날짜. 칸을 누르면 판정 규칙 코드 · 근거 파일 목록 · `progress.md` 해당 줄 · 마지막으로 손댄 에이전트(D-03 링크)가 펼쳐진다. 오른쪽 끝 열은 회사별 "다음 단계" (첫 번째 미완료 단계).
+
+### D-07 비용 · 효율 `/insights` (v0.3)
+- 위: 예산 게이지 — 전체 오늘 · 이번 달, 그 아래 한도가 있는 프로젝트마다 오늘 · 이번 달. 게이지 = `cost_est_usd` / 한도, 옆에 기록 기준 금액. `unset` 은 「한도 미설정 — config/budget.yaml」.
+- 가운데: 비용 추세 — 일 · 주 · 월 전환, 기간 선택. 선 2 (기록 · 추정 보정) + 프로젝트별 쌓은 막대 (추정 보정 기준). 모든 금액에 `[추정] API 정가 환산`.
+- 아래: 캐시 적중률 — 묶음(프로젝트 · 세션 · 에이전트) 전환 순위 표 (적중률 · 캐시 읽기 · 입력 · 캐시 쓰기 · 추정 보정 비용, §6.3 정렬) + 전체 일별 적중률 선. 행을 누르면 D-03 (세션 · 에이전트) 또는 D-04 프로젝트 필터.
 
 ### 7.1 파이프라인 진척 규칙 (Q5 확정)
 
@@ -440,6 +507,21 @@ aliases:                         # 날짜 · 접미사가 붙은 ID 를 위 키�
 - **마지막 손댄 에이전트**: 그 칸의 산출물 경로를 `file_touch` 에서 찾아 가장 최근 에이전트를 링크한다. 못 찾으면 "대시보드 수집 이전".
 - 갱신: `outputs/` · `progress.md` 변경 감시 + 5 분마다 재판정.
 
+### 7.2 WAITING 알림 (v0.3)
+- 서버 변경 없음. 모든 화면의 공통 스크립트(`base.html`)가 SSE `agent.state` 를 받는다.
+- 알리는 때: 상태가 `WAITING_INPUT` 또는 `WAITING_PERMISSION` 으로 **바뀌는 순간**만. 그 밖의 상태 · 예산은 알리지 않는다.
+- 내용: 제목 「권한 대기」 / 「입력 대기」, 본문 = 프로젝트 · 이름. 누르면 그 에이전트의 D-03.
+- 한 번만: 같은 `(agent_key, state_since)` 는 한 번. 화면을 처음 열 때 이미 대기 중이던 것은 알리지 않는다. 탭이 여럿이면 BroadcastChannel 로 한 탭만 알린다.
+- 배지: 탭 제목 앞 `(N) ` 과 파비콘 점 — N = 지금 `WAITING_*` 수.
+- 권한: 머리글 「알림 켜기」 버튼(사용자 동작)으로 `Notification.requestPermission()`. 켜짐/꺼짐은 브라우저 localStorage 에만 둔다. 거부 · 미지원이면 버튼에 그 사실을 적고 배지만 쓴다.
+- 훅 미설치면 권한 대기를 구분하지 못하므로(§9.3) 「입력 대기」 로 알린다.
+
+### 7.3 화면 틀 (v0.3)
+- 깔끔한 대시보드형: 넓은 여백 · 카드 · 차트 중심. 밝은 테마 기본, `prefers-color-scheme: dark` 를 따르고 머리글 토글로 바꾼다(선택은 localStorage).
+- 색 · 간격 · 글꼴은 `base.html` 의 CSS 변수 토큰만 쓴다. 화면별 스타일 조각을 따로 두지 않는다.
+- §4.1 상태 색 8 은 이름(초록 · 노랑 …)을 그대로 두고, 두 테마 각각 배경 대비 ≥ 3:1 (도형) · 상태 글자 ≥ 4.5:1 이 되게 값을 정한다.
+- 화면 7 모두 390 px 폭에서 가로 스크롤 0, 표는 칸 안에서만 가로로 민다.
+
 ---
 
 ## 8. API
@@ -456,6 +538,9 @@ aliases:                         # 날짜 · 접미사가 붙은 ID 를 위 키�
 | `GET /api/v1/usage?from=&to=&group=` | 집계 표 |
 | `GET /api/v1/timeline?from=&to=` | 간트 데이터 |
 | `GET /api/v1/pipeline` | 회사 × 단계 표 |
+| `GET /api/v1/budget` | 예산 칸별 기준 금액 · 기록 금액 · 한도 · 비율 · 단계 (§6.3) |
+| `GET /api/v1/trend?grain=day\|week\|month&from=&to=&group=total\|project` | 비용 · 출력 추세 (기록 · 추정 보정) |
+| `GET /api/v1/efficiency?group=project\|session\|agent&from=&to=` | 캐시 적중률 순위 |
 | `GET /api/v1/stream` | SSE: `agent.new` · `agent.state` · `agent.usage` · `edge.new` |
 | `POST /hooks/event` | 훅 이벤트 수신 (로컬 · 본문 1 MB 제한 · 필요한 필드만 남기고 버림) |
 
@@ -516,13 +601,18 @@ aliases:                         # 날짜 · 접미사가 붙은 ID 를 위 키�
 | V-02 `check_link_rate` | 서브에이전트 중 `parent_key` 있는 비율 | ≥ 95% | G5 |
 | V-03 `check_usage_sum` | 표본 세션 10 개의 토큰을 원천에서 직접 합산 ↔ DB | 일치 (requestId 중복 제거 후) | G7 |
 | V-04 `check_no_payload` | DB 의 모든 TEXT 열 길이 ≤ 300, 본문 저장 열 없음 | 0 건 위반 | G10 |
-| V-05 `check_readonly` | 실행 중 `~/.claude/` 쓰기 시도 0 (파일 열기 모드 감사 · 테스트에서 읽기 전용 마운트) | 0 건 | G10 |
+| V-05 `check_readonly` | 실행 중 `~/.claude/` 쓰기 시도 0 (파일 열기 모드 감사 · 테스트에서 읽기 전용 마운트) · DB 경로가 원천 파일의 하드 링크(이미 있는 파일 `st_nlink > 1`)면 거부 | 0 건 | G10 |
 | V-06 `check_bind` | 서버 바인드 주소 `127.0.0.1` | 통과 | G10 |
 | V-07 `check_parse_errors` | 파싱 오류율 | ≤ 0.1% 줄 | P1 |
 | V-08 `check_fixtures` | 버전별 픽스처 파싱 회귀 테스트 | pytest 통과 | R1 |
 | V-09 `check_cost` | 표본 메시지 20 건의 비용을 §6.1 공식으로 손계산 ↔ DB, 단가 없는 모델 목록 | 차이 0, 목록 출력 | G8 |
 | V-10 `check_hooks` | 설치 후 기존 훅 항목이 설치 전과 같은지(바이트 비교), 송신 스크립트가 서버 꺼짐에서도 exit 0 · 1 초 안에 끝나는지 | 통과 | G10 · P5 |
 | V-11 `check_pipeline` | 회사 × 단계 칸마다 근거(`src`)가 있고, 표본 10 칸을 손으로 센 `have/need` 와 대조 | 근거 없는 칸 0, 대조 일치 | G9 |
+| V-12 `check_usage_est` | 원천을 §6.2 정의로 다시 재서 의심 요청 비율 ↔ DB `output_est` 있는 행 비율 · 의심 행 `output_est ≥ output_tokens` · 비의심 행 `NULL` | 비율 차 ≤ 0.5 %p · 위반 0 | G8 |
+| V-13 `check_budget` | 칸마다 `/api/v1/budget` 기준 금액 ↔ `usage_event` 직접 합 (KST 일 · 월) | 차이 ≤ $0.01 | G8 |
+| V-14 `check_trend` | 일 · 주 · 월 추세 합 ↔ `usage_daily` 합 ↔ `usage_event` 합 (기록 · 추정 각각) | 일치 | G7 · G8 |
+| V-15 `check_efficiency` | 표본 10 행의 캐시 적중률을 §6 공식으로 손계산 ↔ API | 차이 ≤ 0.001 | G7 |
+| V-16 `check_contrast` | 두 테마 토큰의 상태 색 글자 대비 · 도형 대비 | 글자 ≥ 4.5:1 · 도형 ≥ 3:1 | — |
 
 ---
 
@@ -537,11 +627,12 @@ Multi-agent Dashboard/
 │  ├─ settings.yaml        원천 경로 · 포트 · stale_after_sec: 300 (Q2) · 백필 범위(Q6)
 │  ├─ pricing.yaml         모델별 단가 · 캐시 쓰기 배수 · 빠른 모드 배수 (Q4, §6.1)
 │  ├─ pipeline.yaml        단계 폴더 · 필요한 산출물 · 파일 패턴 (Q5, §7.1)
-│  └─ companies.yaml       회사 표준 이름 · 별칭 (§7.1)
+│  ├─ companies.yaml       회사 표준 이름 · 별칭 (§7.1)
+│  └─ budget.yaml          예산 한도 · 경고 비율 (§6.3, v0.3)
 ├─ src/agentdash/
 │  ├─ app/        main.py · settings.py · sse.py · routers/{pages,api,hooks}.py · templates/ · static/
 │  ├─ collect/    watcher.py · tail.py · hooks_rx.py · parsers/{session_file,transcript,meta,workflow,progress}.py
-│  ├─ core/       model.py · linker.py · state.py · usage.py · graph.py · pipeline.py
+│  ├─ core/       model.py · linker.py · state.py · usage.py · graph.py · pipeline.py · budget.py
 │  └─ db/         conn.py · schema.sql
 ├─ scripts/       hook_send.sh · hooks_install.py · gate/*.py
 ├─ tests/         fixtures/<cc_version>/ · test_*.py
@@ -561,6 +652,7 @@ Multi-agent Dashboard/
 | M4 | D-04 작업량 · 비용 · D-05 타임라인 · CSV | G7 · G8 |
 | M5 | D-06 파이프라인 (회사 · 단계 사전, 진척 판정) | V-11 통과 (G9) |
 | M6 | `make gate` 전체 · LaunchAgent(선택) | V-01 ~ V-11 전부 통과 |
+| M7 (v0.3) | 결정 반영 · 추정 출력 · 예산 · 추세 · 캐시 적중률 · D-07 · 알림 · 화면 틀 | V-01 ~ V-16 전부 통과 |
 
 ---
 
@@ -574,4 +666,9 @@ Multi-agent Dashboard/
 6. D-04 에서 임의 세션의 출력 토큰 합이 원천 직접 합산과 같고, 세션 합계 = 자기 + 자손 합이다. 같은 세션의 추정 비용이 §6.1 손계산과 같다. (G7 · G8)
 7. D-06 에 11 개사 × 단계 표가 뜨고, 고려솔더의 `01` · `02` 칸이 `DONE` v1.0 (실행 `20261016-151506-all` · `20261016-154028-all`) 으로, `05` · `08` 열이 `UNKNOWN` 으로 나온다. (G9)
 8. `make hooks-install` → `make hooks-uninstall` 뒤 `~/.claude/settings.json` 이 설치 전과 바이트 단위로 같다. (G10)
-9. `make gate` 가 V-01 ~ V-11 을 모두 통과한다. (G10)
+9. `make gate` 가 V-01 ~ V-16 을 모두 통과한다. (G10)
+10. 서브에이전트 기록이 있는 세션의 D-04 · D-07 에 「기록」 과 「추정 보정 (D-17)」 이 나란히 나오고, 추정 보정 ≥ 기록이다. (G8)
+11. `config/budget.yaml` 에 전체 일 한도를 오늘 쓴 금액의 0.9 배로 넣으면 D-01 에 경고 띠가 뜨고 D-07 게이지가 주황(또는 빨강)이다. `null` 로 되돌리면 「한도 미설정」. (G8)
+12. D-07 의 일 · 주 · 월 추세 합이 D-04 같은 기간 합과 같다. (G7 · G8)
+13. 알림을 켠 상태에서 다른 터미널의 세션이 입력 대기가 되면 브라우저 알림이 한 번 뜨고, 탭 제목에 `(N)` 이 붙는다. 새로 고침해도 다시 뜨지 않는다. (G3)
+14. D-01 ~ D-07 이 밝은 · 다크 두 테마에서 390 px 가로 스크롤 0 · 콘솔 오류 0 이다.
