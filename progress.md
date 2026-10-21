@@ -2,6 +2,21 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 2차-T — 웨이브 A (개발1 Task 2 · 5, 개발2 Task 3 · 4, 2026-10-21) — 오케스트레이터 재검증
+
+### 지금 해야 할 것
+- 웨이브 B 진행 중 — 개발2 Task 6 (D-01 공장 평면도 화면). 끝나면 웨이브 C (QA1 Task 7 · QA2 Task 8).
+- 사람 확인 대기: D-25 · D-26 · D-27 (트윈 배치 해석) · D-23 · D-24.
+
+| 항목 | 실측 | 검증 명령 |
+|---|---|---|
+| 커밋 | `5f916b1` usage.spark · `2f942e1` core/twin T-01~T-07 · `b6e3746` /api/v1/twin · `791c33c` check_twin (V-17) · `3dda2b2` D-25~D-27 | `git log` |
+| 전체 테스트 | **407 passed** (2차-A 375 → +32) | `uv run pytest -q` |
+| G-31 배치 규칙 | `tests/test_twin.py` 24 passed (T-01~T-07 · Review Focus 5 · 300 설비 겹침 0 · ≤ 300 ms · API 4) | `uv run pytest tests/test_twin.py -q` |
+| G-32 트윈 API (새 DB) | 설비 12 · 라인 5 · 접힘 10 · 칸+접힘 22 = 응답 22 = DB 직접 22 · 누적 · 스파크 불일치 0 · 겹침 0 · TEXT>300 0 · 1.4 ms · `--since all` 설비 83 · 범위 322 · 4.5 ms | `AGENTDASH_DB=data/agentdash-v2a-verify.db uv run python src/agentdash/tools/check_twin.py` |
+| G-17 | 화면 7 + API 14 = 21/21 · placeholder 0 | `check_routes` |
+| 사람 개발 서버 | 8095 그대로 (2차-T 이전 코드라 `/api/v1/twin` 404 — 화면 완성 뒤 사람 확인 후 재시작) | `lsof -iTCP:8095` |
+
 ## 2차-T — Phase 0 (아키텍트 · 계획 Task 1, 2026-10-21)
 
 ### 지금 해야 할 것
