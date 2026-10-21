@@ -86,6 +86,45 @@ def cost(ev: M.UsageEvent, pricing: Pricing) -> tuple[float | None, str]:
     return c, pricing.version
 
 
+# ── D-17 추정 출력 (spec §6.2, v0.3) ──────────────────────────────────
+SUSPECT_MAX_OUTPUT = 30      # 요청의 기록 output 최대가 이보다 작고
+SUSPECT_MIN_JSON = 400       # content 블록 json.dumps 길이 합이 이보다 크면 의심
+
+
+def estimate(max_output: int, json_len: int, est_chars: int) -> int | None:
+    """의심 요청이면 하한 추정 출력 = max(ceil(est_chars / 4), 기록 output 최대), 아니면 None.
+    길이 숫자는 이 계산에만 쓰고 저장하지 않는다 (spec §2.3)."""
+    if not (max_output < SUSPECT_MAX_OUTPUT and json_len > SUSPECT_MIN_JSON):
+        return None
+    return max(-(-est_chars // 4), max_output)
+
+
+def cost_est(ev: M.UsageEvent, pricing: Pricing) -> float | None:
+    """§6.1 공식에서 output_tokens 자리에 output_est 를 넣은 비용. output_est 가 없으면 ev.cost_usd (단가 없으면 None)."""
+    if ev.output_est is None:
+        return ev.cost_usd
+    from dataclasses import replace
+
+    c, _ = cost(replace(ev, output_tokens=ev.output_est), pricing)
+    return c
+
+
+def refresh_est(con: sqlite3.Connection, agent_key: str, request_id: str, pricing: Pricing) -> None:
+    """저장된 행 기준으로 추정 두 칸을 다시 맞춘다 — 포크 사본 반영(output 이 커짐) · reprice 뒤.
+    output_est 가 있으면 하한 = 기록 output, 없으면 cost_est_usd = cost_usd."""
+    r = con.execute("SELECT at, model, speed, input_tokens, cache_read, cache_write_5m, cache_write_1h, output_tokens, "
+                    "cost_usd, output_est FROM usage_event WHERE agent_key=? AND request_id=?",
+                    (agent_key, request_id)).fetchone()
+    if r is None:
+        return
+    est = None if r[9] is None else max(r[9], r[7] or 0)
+    ev = M.UsageEvent(agent_key=agent_key, request_id=request_id, at=r[0], model=r[1], speed=r[2], input_tokens=r[3],
+                      cache_read=r[4], cache_write_5m=r[5], cache_write_1h=r[6], output_tokens=r[7], cost_usd=r[8],
+                      output_est=est)
+    con.execute("UPDATE usage_event SET output_est=?, cost_est_usd=? WHERE agent_key=? AND request_id=?",
+                (est, cost_est(ev, pricing), agent_key, request_id))
+
+
 # ── 합계 ─────────────────────────────────────────────────────────────
 _SUM = ("SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(cache_read),0), "
         "COALESCE(SUM(cache_write_5m),0)+COALESCE(SUM(cache_write_1h),0), COALESCE(SUM(output_tokens),0), "

@@ -41,6 +41,12 @@ fork_copied: dict[str, int] = {}      # 포크 jsonl 경로 → 사본으로 뺀
 #: (DB 파일, session_id, requestId) → 사본 줄 중 output 최대 UsageEvent — 소유 행이 생기면 반영 (DEF-QA1-001)
 _fork_pending: dict[tuple[str, str, str], M.UsageEvent] = {}
 _pricing_cache: dict = {}
+#: D-17 요청 누적기 (spec §6.2) — (DB 파일, agent_key) → {requestId: [기록 output 최대, content json 길이 합, text+도구 입력 글자 수]}.
+#: 한 요청이 두 번의 증분 읽기에 걸쳐 들어와도 한 번에 읽은 것과 같게 프로세스 수명 동안 유지한다. 숫자만 · 메모리만 (DB 에 안 남김).
+#: 기록을 처음부터 읽을 때(offset 0 · reset) 그 에이전트 몫을 비운다. 에이전트마다 최근 REQ_ACC_KEEP 요청만 남긴다
+#: (한 요청의 줄은 이어서 적힌다 — 오래된 요청은 다시 오지 않는다).
+_req_acc: dict[tuple[str, str], dict[str, list[int]]] = {}
+REQ_ACC_KEEP = 64
 
 
 def add_post_hook(fn: Callable[[sqlite3.Connection, set[str]], None]) -> None:
@@ -297,8 +303,28 @@ def _apply_fork_pending(con: sqlite3.Connection) -> set[str]:
         if r is not None:
             del _fork_pending[k]
             if r:
+                U.refresh_est(con, r, k[2], _pricing())     # output 이 커졌다 → 추정 하한 · 추정 비용 다시
                 changed.add(r)
     return changed
+
+
+def _acc(con: sqlite3.Connection, key: str, fresh: bool) -> dict[str, list[int]]:
+    k = (_db_id(con), key)
+    if fresh or k not in _req_acc:
+        _req_acc[k] = {}
+    return _req_acc[k]
+
+
+def _accumulate(acc: dict[str, list[int]], rid: str, rec: tr_p.Record) -> int | None:
+    """요청 누적 → output_est (의심 아니면 None). 길이는 rec 에서 숫자로만 받는다."""
+    a = acc.pop(rid, None) or [0, 0, 0]
+    a[0] = max(a[0], rec.usage.output_tokens if rec.usage else 0)
+    a[1] += rec.content_json_len
+    a[2] += rec.est_chars
+    acc[rid] = a                        # 맨 뒤로 (최근)
+    while len(acc) > REQ_ACC_KEEP:
+        acc.pop(next(iter(acc)))
+    return U.estimate(*a)
 
 
 def _fork_parent_file(jsonl: Path, extra: M.AgentExtra) -> Path:
@@ -347,6 +373,7 @@ def _ingest_transcript(con: sqlite3.Connection, path: Path, kind: str) -> set[st
     copied = 0
 
     pricing = _pricing()
+    acc = _acc(con, key, fresh=ch.start_offset == 0 or ch.reset)
     on_line = _on_line()
     from agentdash.core.linker import is_activity
     # 마지막 기록(last_event_at) = 모든 줄 종류의 마지막 시각 — 단 SubagentHandback 뒤 활동 아닌 꼬리 줄(그 결과 · 첨부 ·
@@ -410,12 +437,15 @@ def _ingest_transcript(con: sqlite3.Connection, path: Path, kind: str) -> set[st
         if rec.type == "assistant":
             if rec.usage is not None and rec.model not in pricing.exclude:
                 u = rec.usage
-                ev = M.UsageEvent(agent_key=key, request_id=rec.request_id or f"uuid:{rec.uuid}", at=ts, model=rec.model,
+                rid = rec.request_id or f"uuid:{rec.uuid}"
+                ev = M.UsageEvent(agent_key=key, request_id=rid, at=ts, model=rec.model,
                                   speed=u.speed, input_tokens=u.input_tokens, cache_read=u.cache_read,
                                   cache_write_5m=u.cache_write_5m, cache_write_1h=u.cache_write_1h,
                                   output_tokens=u.output_tokens, thinking_tokens=u.thinking_tokens,
                                   web_search=u.web_search, web_fetch=u.web_fetch)
                 ev.cost_usd, ev.pricing_ver = U.cost(ev, pricing)
+                ev.output_est = _accumulate(acc, rid, rec)          # D-17 (spec §6.2) — 요청 누적 길이로
+                ev.cost_est_usd = U.cost_est(ev, pricing)
                 M.add_usage(con, ev)
                 usage_n += 1
             for tu in rec.tool_uses:

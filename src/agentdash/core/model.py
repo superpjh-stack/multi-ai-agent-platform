@@ -101,6 +101,8 @@ class UsageEvent:
     web_fetch: int = 0
     cost_usd: float | None = None
     pricing_ver: str | None = None
+    output_est: int | None = None       # spec §6.2 하한 추정 출력 — 의심 요청만, 아니면 None
+    cost_est_usd: float | None = None   # output_est 를 출력에 쓴 비용. 의심 아니면 cost_usd 와 같다
 
 
 @dataclass
@@ -274,8 +276,9 @@ _USAGE_COLS = [f.name for f in fields(UsageEvent)]
 
 
 def add_usage(con: sqlite3.Connection, ev: UsageEvent) -> bool:
-    """같은 (agent_key, requestId) 는 한 행 (D-01). 스트리밍 중간본보다 output_tokens 가 큰 최종본으로 바꾼다."""
-    cur = con.execute("SELECT output_tokens FROM usage_event WHERE agent_key=? AND request_id=?",
+    """같은 (agent_key, requestId) 는 한 행 (D-01). 스트리밍 중간본보다 output_tokens 가 큰 최종본으로 바꾼다.
+    output 이 그대로여도 output_est · cost_est_usd 가 바뀌면 그 두 칸을 갱신한다 (spec §6.2 — 호출한 쪽이 요청 누적 길이로 계산)."""
+    cur = con.execute("SELECT output_tokens, output_est, cost_est_usd FROM usage_event WHERE agent_key=? AND request_id=?",
                       (ev.agent_key, ev.request_id)).fetchone()
     vals = [clip(v) if isinstance(v, str) else v for v in (getattr(ev, c) for c in _USAGE_COLS)]
     if cur is None:
@@ -286,6 +289,16 @@ def add_usage(con: sqlite3.Connection, ev: UsageEvent) -> bool:
         sets = ",".join(f"{c}=?" for c in _USAGE_COLS[2:])
         con.execute(f"UPDATE usage_event SET {sets} WHERE agent_key=? AND request_id=?",
                     [*vals[2:], ev.agent_key, ev.request_id])
+        _emit("agent.usage", {"agent_key": ev.agent_key})
+    elif (ev.output_est, ev.cost_est_usd) != (cur[1], cur[2]):
+        # 같은 요청의 다음 줄 — 기록 output 은 그대로여도 길이가 늘어 추정이 바뀐다 (spec §6.2). 추정 두 칸만.
+        # 의심 아님(output_est None)이면 cost_est_usd = 저장된 cost_usd (이 줄의 값이 아니라 남아 있는 최종본 기준)
+        if ev.output_est is None:
+            con.execute("UPDATE usage_event SET output_est=NULL, cost_est_usd=cost_usd WHERE agent_key=? AND request_id=?",
+                        (ev.agent_key, ev.request_id))
+        else:
+            con.execute("UPDATE usage_event SET output_est=?, cost_est_usd=? WHERE agent_key=? AND request_id=?",
+                        (ev.output_est, ev.cost_est_usd, ev.agent_key, ev.request_id))
         _emit("agent.usage", {"agent_key": ev.agent_key})
     return False
 
@@ -305,7 +318,8 @@ def upgrade_owner_usage(con: sqlite3.Connection, session_id: str, ev: UsageEvent
         return None
     if (ev.output_tokens or 0) <= (cur[1] or 0):
         return False
-    cols = [c for c in _USAGE_COLS if c not in ("agent_key", "request_id", "at")]
+    # 추정 두 칸은 소유 기록의 길이로 정한 값이라 사본 값으로 덮지 않는다 — 호출한 쪽이 usage.refresh_est 로 다시 맞춘다
+    cols = [c for c in _USAGE_COLS if c not in ("agent_key", "request_id", "at", "output_est", "cost_est_usd")]
     con.execute(f"UPDATE usage_event SET {','.join(f'{c}=?' for c in cols)} WHERE agent_key=? AND request_id=?",
                 [*(clip(getattr(ev, c)) if isinstance(getattr(ev, c), str) else getattr(ev, c) for c in cols),
                  cur[0], ev.request_id])

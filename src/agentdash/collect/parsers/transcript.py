@@ -78,6 +78,8 @@ class Record:
     tool_uses: list[ToolUse] = field(default_factory=list)
     tool_results: list[ToolResult] = field(default_factory=list)
     agent_name: str | None = None     # agent-name 줄
+    content_json_len: int = 0         # assistant content 블록 json.dumps 길이 합 — D-17 의심 판정용 숫자만 (spec §6.2, 저장 안 함)
+    est_chars: int = 0                # text 글자 수 + tool_use 입력 json.dumps(ensure_ascii=False) 글자 수, thinking 제외 (저장 안 함)
     raw: dict | None = field(default=None, repr=False, compare=False)   # 원래 줄 dict — 메모리에서만 (linker.on_line), 저장 안 함
 
 
@@ -144,6 +146,21 @@ def _usage(u: dict) -> Usage:
         speed=u.get("speed") if isinstance(u.get("speed"), str) else None)
 
 
+def _lengths(blocks: list) -> tuple[int, int]:
+    """(content 블록 json.dumps 길이 합, text + tool_use 입력 글자 수) — 길이만 재고 본문은 버린다 (spec §2.3 · §6.2).
+    QA1 `stream_heuristic.py` 와 같은 정의: 블록 길이는 json.dumps 기본값, 도구 입력은 ensure_ascii=False. thinking 은 0."""
+    jlen = chars = 0
+    for b in blocks:
+        jlen += len(json.dumps(b))
+        if isinstance(b, dict):
+            if b.get("type") == "text":
+                t = b.get("text")
+                chars += len(t) if isinstance(t, str) else 0
+            elif b.get("type") == "tool_use":
+                chars += len(json.dumps(b.get("input"), ensure_ascii=False))
+    return jlen, chars
+
+
 def parse_line(raw: bytes | str, *, others: bool = False) -> Record | None:
     """줄 하나 → Record. 세지 않는 줄 종류(D-11)는 None — 단 `others=True` 면 시각이 있는 그런 줄도
     `Record(type, uuid, timestamp)` 만 채워 돌려준다(마지막 기록 시각용, 웨이브 D2 R8). 본문은 꺼내지 않는다."""
@@ -183,6 +200,7 @@ def parse_line(raw: bytes | str, *, others: bool = False) -> Record | None:
         rec.model = msg.get("model")
         if isinstance(msg.get("usage"), dict):
             rec.usage = _usage(msg["usage"])
+        rec.content_json_len, rec.est_chars = _lengths(blocks)
         for b in blocks:
             if isinstance(b, dict) and b.get("type") == "tool_use":
                 if not b.get("id") or not b.get("name"):
