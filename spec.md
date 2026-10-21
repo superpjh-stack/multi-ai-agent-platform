@@ -2,7 +2,8 @@
 
 > 관련 문서: `intro.md`(소개 · 근거 숫자 · 경계), `problem.md`(문제 · 목표 G1~G10 · 확정 필요 사항 Q1~Q10)
 > 근거: 이 컴퓨터의 `~/.claude/` 기록 (2026-08-01 ~ 2026-10-17, Claude Code 2.1.x)
-> 버전: **v0.4** (2026-10-21 사람 승인, 2차-T — 디지털 트윈: D-01 을 공장 평면도로 · 트윈 배치 규칙 T-01~T-07 · 애니메이션 규칙 · API 14 · V-17)
+> 버전: **v0.4.1** (2026-10-21 사람 승인 — §5.4 라인 이름 규칙(D-28) · T-08 라인 격자(DEF-QA2-402))
+> 이전: v0.4 (2026-10-21 사람 승인, 2차-T — 디지털 트윈: D-01 을 공장 평면도로 · 트윈 배치 규칙 T-01~T-07 · 애니메이션 규칙 · API 14 · V-17)
 > 이전: v0.3 (2026-10-20 사람 승인, 2차-A — 결정 D-07 · D-08 · D-13 · D-14 · D-17 · D-18 · D-19 확정 반영 · 추정 출력 열 · 예산 · 추세 · 캐시 적중률 · WAITING 알림 · 디자인 · 화면 D-07 · API 13)
 > 이전: v0.2 (2026-10-17, Q1 훅 연동 · Q2 멈춤 5 분 · Q4 비용 단가표 · Q5 진척 규칙 확정 반영)
 > 설계: `docs/superpowers/specs/2026-10-21-agentdash-twin-design.md` (v0.4) · `docs/superpowers/specs/2026-10-20-agentdash-v2a-design.md` (v0.3)
@@ -300,7 +301,7 @@ D-01 은 에이전트를 공장 설비처럼 보여 준다. 같은 데이터(§3
 
 | 공장 | 대시보드 |
 |---|---|
-| 생산 라인 | 프로젝트 (`agent.project_path` 마지막 이름, 없으면 `project_key`) |
+| 생산 라인 | 프로젝트 (`project_key` 하나 = 라인 하나). **라인 이름** = 그 `project_key` 의 에이전트들 `project_path` 중 가장 짧은 것(= 프로젝트 루트, 길이가 같으면 사전순 첫 번째)의 마지막 이름, 경로가 하나도 없으면 `project_key` (v0.4.1, D-28) |
 | 주 설비 | 세션 |
 | 보조 설비 | 서브에이전트 · 워크플로 에이전트 (워크플로는 그 에이전트들을 감싸는 묶음 틀) |
 | 배관 | `spawn` (부모 → 자식) · `handback` (자식 → 부모) |
@@ -317,7 +318,8 @@ D-01 은 에이전트를 공장 설비처럼 보여 준다. 같은 데이터(§3
 | T-04 | 칸 크기 고정 (설비 상자 너비 · 높이 · 가로 · 세로 간격은 상수) — 설비 상자끼리 · 라인 상자끼리 겹침 0 |
 | T-05 | `DONE` · `FAILED` 이고 `ended_at` 이 지금보다 30 분 넘게 이전인 설비는 칸을 만들지 않고 부모 설비의 `folded` 수에 더한다 ("+N 완료"). 자손도 함께 접힌다. 접힌 설비의 숫자는 부모 누적에 더하지 않는다(누적은 §6 그대로) |
 | T-06 | T-05 뒤에도 설비 > 300 이면 T-01 순서의 뒤 라인부터 라인 머리 한 줄로 접는다(`folded_lines`), 300 이하가 될 때까지 |
-| T-07 | 결정적: 같은 DB 상태 · 같은 `now` · 같은 필터면 좌표까지 같은 응답 |
+| T-07 | 결정적: 같은 DB 상태 · 같은 `now` · 같은 필터면 좌표까지 같은 응답 (DB 행의 물리 순서와 무관) |
+| T-08 | 라인 격자 (v0.4.1): 라인 상자를 열 수 `cols` 의 격자에 T-01 순서대로 왼 → 오른, 위 → 아래로 채운다. `cols` 는 요청의 `width`(평면도 너비 px, 없으면 1400)에 들어가는 최대 열 수(≥ 1) — 한 열 너비 = 그 열에 놓인 라인 중 가장 넓은 라인. 같은 행의 라인 높이는 그 행에서 가장 높은 라인에 맞춘다. 좁은 화면(`cols = 1`)이면 v0.4 와 같이 세로로 쌓인다 |
 
 - 범위: 기본 「지금 살아 있는 것 + 최근 24 시간 안에 기록이 있는 것」, 필터 기간 · 프로젝트 (D-02 와 같음).
 - 설비 값: 상태 · 규칙 · `state_since` · 경과 · 지금 도구(그 에이전트의 결과 없는 마지막 `tool_call` 의 `tool` · `target`) · 누적 출력(기록 · 추정 보정) · 추정 보정 비용(= §6 `totals` 의 자기 몫) · **스파크** = 최근 30 분 분당 추정 보정 출력(`output_est` 가 있으면 그 값, 없으면 `output_tokens`, `<synthetic>` 제외) `[추정]` 30 칸 (가장 오래된 것부터, 지금 분이 마지막).
@@ -595,7 +597,7 @@ v0.4 — 관제판을 디지털 트윈 평면도로 바꾼다. **v0.3 관제판�
 | `GET /api/v1/budget` | 예산 칸별 기준 금액 · 기록 금액 · 한도 · 비율 · 단계 (§6.3) |
 | `GET /api/v1/trend?grain=day\|week\|month&from=&to=&group=total\|project` | 비용 · 출력 추세 (기록 · 추정 보정) |
 | `GET /api/v1/efficiency?group=project\|session\|agent&from=&to=` | 캐시 적중률 순위 |
-| `GET /api/v1/twin?since=&project=` | 평면도 (§5.4) `{generated_at, lines[{key, name, live, counts, box, machines[{key, kind, name, parent, state, rule, since, elapsed_s, tool, target, out_total, out_est_total, cost_est_usd, spark[30], folded, box}], pipes[{src, dst, kind, at}]}], links[{src, dst, count}], folded_lines}` |
+| `GET /api/v1/twin?since=&project=&width=` | 평면도 (§5.4) `{generated_at, lines[{key, name, live, counts, box, machines[{key, kind, name, parent, state, rule, since, elapsed_s, tool, target, out_total, out_est_total, cost_est_usd, spark[30], folded, box}], pipes[{src, dst, kind, at}]}], links[{src, dst, count}], folded_lines}` |
 | `GET /api/v1/stream` | SSE: `agent.new` · `agent.state` · `agent.usage` · `edge.new` |
 | `POST /hooks/event` | 훅 이벤트 수신 (로컬 · 본문 1 MB 제한 · 필요한 필드만 남기고 버림) |
 

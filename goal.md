@@ -9,7 +9,7 @@
 | 시스템 | 2차-A 대시보드 + **D-01 을 디지털 트윈 공장 평면도로** (라인 = 프로젝트 · 설비 = 에이전트 · 배관 = spawn/handback · 컨베이어 = message · 표시등 · 스파크 · 흐름) | `problem.md` §4.2b G17 |
 | 정본 | `intro.md` · `problem.md`(2차-T) · `spec.md` **v0.4** — 사람만 고친다 | — |
 | 설계 · 계획 | `docs/superpowers/specs/2026-10-21-agentdash-twin-design.md` · **`docs/superpowers/plans/2026-10-21-agentdash-twin.md` (Task 1~8)** | — |
-| 규모 | 화면 7 · API **14** · 테이블 11 · 판정 규칙 13 · 연결 규칙 7 · **배치 규칙 7 (T-01~T-07)** · 진척 규칙 7 · 검증 **17** · 훅 이벤트 9 | `spec.md` |
+| 규모 | 화면 7 · API **14** · 테이블 11 · 판정 규칙 13 · 연결 규칙 7 · **배치 규칙 8 (T-01~T-08, v0.4.1)** · 진척 규칙 7 · 검증 **17** · 훅 이벤트 9 | `spec.md` |
 | 출발점 | `1c33a63` 2차-A 완료 (G-01~G-30 PASS · pytest 375) → `27102d3` 정본 v0.4 | `git log` |
 | 범위 밖 | 3D · 평면도에서 에이전트 제어(2차-B) · 사용자 배치 저장 · 라인 KPI | `problem.md` §5 |
 | 완료 기준 | **G-01~G-35 전부 PASS · QA 치명 0 · 중대 0 · 연속 2 회전 변화 없음** | §4.4 |
@@ -60,7 +60,7 @@ FAIL 중 가장 앞선 웨이브의 항목을 골라 계획(docs/superpowers/pla
 
 | # | 게이트 | 통과 기준 | 판정 수단 · 태스크 |
 |---|---|---|---|
-| G-31 | 배치 규칙 | T-01~T-07 각 표 기반 테스트 ≥ 1 + Review Focus 5 (라인 간 부모 · 순환 · 뿌리 안 접힘 · 24 자 · 경과 클램프) | `test_twin.py` · T3 |
+| G-31 | 배치 규칙 | T-01~T-08 각 표 기반 테스트 ≥ 1 + Review Focus 5 (라인 간 부모 · 순환 · 뿌리 안 접힘 · 24 자 · 경과 클램프) | `test_twin.py` · T3 |
 | G-32 | 트윈 API | 실제 DB: 누적 · 스파크 불일치 0 · 겹침 0 · 칸 + 접힘 = 범위 안 에이전트 · TEXT ≤ 300 · 합성 300 설비 ≤ 300 ms | `check_twin` · T3 · T5 |
 | G-33 | 실시간 | 가짜 루트 새 세션 + 서브 2 → 평면도 ≤ 5 초 · 훅 상태 → 표시등 ≤ 1 초 · handback → 역흐름 + DONE (브라우저 E2E) | `test_realtime.py` + QA2 `outputs/e2e/twin.md` · T6 · T8 |
 | G-34 | 관제판 흡수 | v0.3 관제판 항목 전부 · 기존 `test_dashboard.py` 무삭제 PASS · 알림 · 예산 띠 회귀 | `test_dashboard.py` + QA2 · T6 · T8 |
@@ -106,7 +106,7 @@ Phase 0  아키텍트   T1 gate G-31~G-35 · routers/twin.py 자리(→ 개발2 
 grep -cE '^CREATE TABLE' spec.md            # 11
 grep -cE '^\| R-[0-9]+[ab]? \|' spec.md      # 13
 grep -cE '^\| L-0[1-7] \|' spec.md           # 7
-grep -cE '^\| T-0[1-7] \|' spec.md           # 7
+grep -cE '^\| T-0[1-8] \|' spec.md           # 8
 grep -cE '^\| P-0[1-7] \|' spec.md           # 7
 grep -cE '^\| V-[0-9]{2} `' spec.md          # 17
 grep -cE '^### D-0[1-7] ' spec.md            # 7
