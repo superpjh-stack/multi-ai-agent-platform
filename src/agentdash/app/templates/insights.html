@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block head %}
+<style>
+  .gauge { height:10px; border-radius:999px; background:var(--line); overflow:hidden; margin:6px 0 4px; }
+  .gauge > i { display:block; height:100%; background:var(--c); }
+  .filters { display:flex; flex-wrap:wrap; gap:var(--sp-2); align-items:end; margin:var(--sp-2) 0 var(--sp-3); }
+  .filters label { display:flex; flex-direction:column; font-size:13px; color:var(--muted); gap:2px; }
+  .chart canvas { width:100% !important; max-height:280px; }
+  .chart-err { color:var(--muted); font-size:13px; }
+</style>
+{% endblock %}
+{% block body %}
+<h1>D-07 비용 · 효율</h1>
+<p class="muted">모든 금액은 <b>{{ label }}</b> — Claude Code 구독 요금제의 실제 청구와 다르다. 기준 금액은 <b>{{ est_note }}</b> 비용(cost_est_usd 합), 옆에 기록 기준 금액 (spec.md §6.3).</p>
+
+<h2>예산</h2>
+{% if worst %}<p class="badge {{ 'st-FAILED' if worst.level == 'over' else 'st-WAITING_INPUT' }}" data-budget-worst="{{ worst.level }}">가장 높은 칸: {{ worst.project or '전체' }} {{ periods[worst.period] }} {{ worst.pct }}</p>{% endif %}
+<div class="grid">
+  {% for c in cells %}
+  <div class="card kpi {{ c.cls }}" data-budget-level="{{ c.level }}">
+    <div class="k">{{ c.project or '전체' }} · {{ periods[c.period] }}</div>
+    {% if c.level == 'unset' %}
+      <div class="n">{{ money(c.est_usd) }}</div>
+      <div class="k">한도 미설정 — config/budget.yaml · 기록 {{ money(c.rec_usd) }}</div>
+    {% elif c.level == 'no_records' %}
+      <div class="n">—</div>
+      <div class="k">기록 없음 — config/budget.yaml 의 프로젝트 이름 「{{ c.project }}」 이 기록에 없다 (한도 {{ money(c.limit) }})</div>
+    {% else %}
+      <div class="n">{{ c.pct }} <span class="badge {{ c.cls }}">{{ c.level }}</span></div>
+      <div class="gauge" role="img" aria-label="{{ c.pct }}"><i style="width:{{ '%.1f' % c.width }}%"></i></div>
+      <div class="k">{{ money(c.est_usd) }} / 한도 {{ money(c.limit) }} · 기록 {{ money(c.rec_usd) }}</div>
+    {% endif %}
+    {% if c.unpriced %}<div class="k">단가 없음 {{ c.unpriced }} 건</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<h2>비용 추세 <span class="muted">{{ label }}</span></h2>
+<form class="filters" method="get" action="/insights">
+  <label>단위
+    <select name="grain">{% for g, n in grains.items() %}<option value="{{ g }}"{% if g == grain %} selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+  </label>
+  <label>시작 (KST)<input type="date" name="from" value="{{ frm }}"></label>
+  <label>끝 (KST)<input type="date" name="to" value="{{ to }}"></label>
+  <input type="hidden" name="eff" value="{{ eff }}">
+  <button type="submit">보기</button>
+</form>
+<div class="card chart"><canvas id="trend-chart" aria-label="비용 추세 — 기록 · 추정 보정 선, 프로젝트별 쌓은 막대"></canvas><p class="chart-err" id="chart-err" hidden></p></div>
+<div class="tbl">
+<table>
+  <thead><tr><th>묶음 ({{ grains[grain] }})</th><th class="num">기록 비용</th><th class="num">{{ est_note }} 비용 <span class="muted">[추정]</span></th>
+    <th class="num">출력 기록</th><th class="num">출력 {{ est_note }} <span class="muted">[추정]</span></th><th class="num">캐시 적중률</th></tr></thead>
+  <tbody>
+  {% for r in total %}
+    <tr><td>{{ r.bucket }}</td><td class="num">{{ money(r.cost_usd) }}</td><td class="num">{{ money(r.cost_est_usd) }}</td>
+      <td class="num">{{ fmt(r.output_tokens) }}</td><td class="num">{{ fmt(r.output_est_total) }}</td><td class="num">{{ pct(r.hit) }}</td></tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">이 기간에 기록이 없다.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<h2>캐시 적중률 순위 — {{ effs[eff] }} ({{ frm }} ~ {{ to }})</h2>
+<form class="filters" method="get" action="/insights">
+  <input type="hidden" name="grain" value="{{ grain }}"><input type="hidden" name="from" value="{{ frm }}"><input type="hidden" name="to" value="{{ to }}">
+  <label>묶음
+    <select name="eff">{% for g, n in effs.items() %}<option value="{{ g }}"{% if g == eff %} selected{% endif %}>{{ n }}</option>{% endfor %}</select>
+  </label>
+  <button type="submit">보기</button>
+</form>
+<div class="card chart"><canvas id="hit-chart" aria-label="전체 일별 캐시 적중률"></canvas></div>
+<div class="tbl">
+<table>
+  <thead><tr><th>#</th><th>{{ effs[eff] }}</th><th class="num">적중률</th><th class="num">캐시 읽기</th><th class="num">입력</th>
+    <th class="num">캐시 쓰기</th><th class="num">{{ est_note }} 비용 <span class="muted">{{ label }}</span></th><th class="num">절감 여지 (1−적중률)×비용</th></tr></thead>
+  <tbody>
+  {% for r in eff_rows %}
+    <tr>
+      <td class="num">{{ loop.index }}</td>
+      <td>{% if eff == 'project' %}<a href="/usage?group=project&amp;from={{ frm }}&amp;to={{ to }}">{{ r.label }}</a>{% else %}<a href="/agents/{{ r.key }}">{{ r.label }}</a>{% endif %}</td>
+      <td class="num">{{ pct(r.hit) }}</td><td class="num">{{ fmt(r.cache_read) }}</td><td class="num">{{ fmt(r.input_tokens) }}</td>
+      <td class="num">{{ fmt(r.cache_write) }}</td>
+      <td class="num">{{ money(r.cost_est_usd) }}{% if r.unpriced %} <span class="badge st-STALE">단가 없음 {{ r.unpriced }} 건</span>{% endif %}</td>
+      <td class="num">{{ money(r.waste) }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="muted">이 기간에 기록이 없다.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if eff_more %}<p class="muted">위 200 행만 보인다 (나머지 {{ eff_more }} 행은 <code>/api/v1/efficiency?group={{ eff }}</code>).</p>{% endif %}
+<p class="muted">적중률 = 캐시 읽기 ÷ (입력 + 캐시 읽기 + 캐시 쓰기), 분모 0 이면 「—」. 정렬은 (1 − 적중률) × {{ est_note }} 비용 큰 순 — 절감 여지가 큰 곳이 위. 일자는 KST.</p>
+
+<script id="insights-data" type="application/json">{{ chart | tojson }}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var err = document.getElementById("chart-err");
+  if (typeof Chart === "undefined") {
+    err.textContent = "Chart.js 4.4.1 를 불러오지 못했다 (cdn.jsdelivr.net) — 그래프 대신 아래 표만 보여 준다. /api/v1/trend 는 그대로 쓸 수 있다.";
+    err.hidden = false;
+    return;
+  }
+  var d = JSON.parse(document.getElementById("insights-data").textContent);
+  var css = getComputedStyle(document.documentElement);
+  function tok(n) { return css.getPropertyValue(n).trim(); }
+  var palette = ["--st-running", "--st-sleeping", "--st-waiting-child", "--st-done", "--st-waiting-permission",
+                 "--st-stale", "--st-waiting-input", "--st-failed"].map(tok);
+  Chart.defaults.color = tok("--muted");
+  Chart.defaults.borderColor = tok("--line");
+  var ds = d.projects.map(function (p, i) {
+    return {type: "bar", label: p.name + " (추정 보정)", data: p.data, stack: "p", backgroundColor: palette[i % palette.length]};
+  });
+  ds.unshift({type: "line", label: "기록", data: d.rec, borderColor: tok("--muted"), backgroundColor: tok("--muted"), tension: 0.2});
+  ds.unshift({type: "line", label: "추정 보정 (D-17)", data: d.est, borderColor: tok("--accent"), backgroundColor: tok("--accent"), tension: 0.2});
+  new Chart(document.getElementById("trend-chart"), {data: {labels: d.buckets, datasets: ds},
+    options: {responsive: true, maintainAspectRatio: false, scales: {x: {stacked: true}, y: {stacked: false, title: {display: true, text: "US$ [추정] API 정가 환산"}}}}});
+  new Chart(document.getElementById("hit-chart"), {type: "line",
+    data: {labels: d.hit_days, datasets: [{label: "전체 일별 캐시 적중률 %", data: d.hit, borderColor: tok("--accent"), spanGaps: false}]},
+    options: {responsive: true, maintainAspectRatio: false, scales: {y: {min: 0, max: 100}}}});
+})();
+</script>
+{% endblock %}
