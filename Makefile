@@ -3,7 +3,7 @@
 # 개발마다 AGENTDASH_DB=data/agentdash-dev{N}.db). 포트 8095 (개발 중 AGENTDASH_PORT=8096 · 8097). 127.0.0.1 만.
 .PHONY: setup backfill run gate test hooks-install hooks-uninstall hooks-check pricing-check reprice export \
         fixtures check-fixtures check-routes check-readonly check-bind check-no-payload check-hooks \
-        check-decisions check-contrast
+        check-decisions check-contrast check-twin
 
 TOOLS := src/agentdash/tools
 # 미구현 타깃 — 종료코드 2 로 분명히 실패한다 (조용한 성공 금지)
@@ -20,7 +20,7 @@ backfill:         ## 과거 기록 전체 읽기 [SINCE=2026-08-01] — 개발1 
 run:              ## 감시기 + 웹 (127.0.0.1:8095) — 빈 DB 면 기동 때 백필, 그 뒤 감시기가 증분으로 이어 읽는다
 	uv run python -m agentdash.app
 
-gate:             ## 판정표 G-01~G-30 (goal.md §2 — 1차 G-01~G-22 는 goal-v1.md)
+gate:             ## 판정표 G-01~G-35 (goal.md §2 — 1차 G-01~G-22 는 goal-v1.md · G-23~G-30 은 goal-v2a.md)
 	uv run python $(TOOLS)/gate.py
 
 test:
@@ -68,7 +68,7 @@ check-hooks:      ## G-15 (V-10) 가짜 settings 로만
 check-bind:       ## G-16 (V-06)
 	uv run python $(TOOLS)/check_bind.py
 
-check-routes:     ## G-17 화면 7 + API 13
+check-routes:     ## G-17 화면 7 + API 14
 	uv run python $(TOOLS)/check_routes.py
 
 check-decisions:  ## G-23 결정 반영 (D-07·08·13·14·17·18·19 확정 · 「가설 D-18」 0)
@@ -76,3 +76,7 @@ check-decisions:  ## G-23 결정 반영 (D-07·08·13·14·17·18·19 확정 · 
 
 check-contrast:   ## G-30 (V-16) base.html 두 테마 토큰 대비
 	uv run python $(TOOLS)/check_contrast.py
+
+check-twin:       ## G-32 (V-17) 트윈 API — 누적 · 스파크 · 겹침 (실제 DB = AGENTDASH_DB) — 개발1 (tools/check_twin.py)
+	@if [ -f $(TOOLS)/check_twin.py ]; then uv run python $(TOOLS)/check_twin.py; \
+	else echo "미구현 — 담당 개발1 (make $@) — goal.md §3"; exit 2; fi

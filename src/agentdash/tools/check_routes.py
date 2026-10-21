@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-"""G-17 check_routes — 화면 7 + API 13 (spec.md v0.3 §7 · §8) 전부 HTTP 200, 빈 DB 에서도.
+"""G-17 check_routes — 화면 7 + API 14 (spec.md v0.4 §7 · §8) 전부 HTTP 200, 빈 DB 에서도.
 
     uv run python src/agentdash/tools/check_routes.py
 
-  · 목록은 spec.md 에서 읽는다: `### D-0n 이름 `/경로`` 7 개 · `| `GET|POST /경로` |` 13 개. 개수가 7 · 13 이 아니면 FAIL.
+  · 목록은 spec.md 에서 읽는다: `### D-0n 이름 `/경로`` 7 개 · `| `GET|POST /경로` |` 14 개. 개수가 7 · 14 가 아니면 FAIL.
   · 앱에 그 메서드 · 경로가 등록돼 있어야 한다(경로 변수는 `{key}` → 표본 `S:fixture`).
   · 임시 빈 DB(schema 11 테이블, 행 0)를 AGENTDASH_DB 로 주고 TestClient 로 부른다 — 서버를 띄우지 않는다.
   · placeholder 수(HTML `data-placeholder` · JSON `_placeholder` · SSE 본문)를 실측에 적는다. placeholder 도 200 이면 PASS
@@ -26,7 +26,7 @@ warnings.filterwarnings("ignore")
 
 SPEC = ROOT / "spec.md"
 SAMPLE = {"key": "S:fixture"}
-N_PAGES, N_APIS = 7, 13                  # spec.md v0.3 (goal.md §9)
+N_PAGES, N_APIS = 7, 14                  # spec.md v0.4 (goal.md §9 — 2차-T `/api/v1/twin`)
 
 
 def spec_routes() -> tuple[list[tuple[str, str, str]], list[tuple[str, str]]]:

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""수용 게이트 판정표 — `make gate` (goal.md §2 G-01~G-30 — 1차 G-01~G-22 는 goal-v1.md).
+"""수용 게이트 판정표 — `make gate` (goal.md §2 G-01~G-35 — 1차 G-01~G-22 는 goal-v1.md · 2차-A G-23~G-30 은 goal-v2a.md).
 
     uv run python src/agentdash/tools/gate.py            # 판정표 (종료코드 0)
     uv run python src/agentdash/tools/gate.py --strict   # PASS 아닌 행이 있으면 종료코드 1
@@ -42,7 +42,8 @@ _QA_MARK = re.compile(r"^\s*<!--\s*gate:(G-\d{2})\s*-->\s*$")
 QA_FORMAT_NOTE = "— QA 재검증 필요(리포트 형식)"
 
 #: QA 리포트 묶음 (DEF-QA1-103) — ROOT 기준 glob. 회차 = 파일 이름 끝 `-rN` (없으면 0).
-QA_GLOBS = ("outputs/qa*-*.md", "outputs/e2e/self-observe*.md", "outputs/e2e/alerts*.md", "outputs/e2e/design*.md")
+QA_GLOBS = ("outputs/qa*-*.md", "outputs/e2e/self-observe*.md", "outputs/e2e/alerts*.md", "outputs/e2e/design*.md",
+            "outputs/e2e/twin*.md")
 _ROUND = re.compile(r"^(?P<base>.+?)(?:-r(?P<n>\d+))?\.md$")
 
 #: (게이트, 항목, 담당, 판정 수단). 수단 = ("tool", 이름) | ("test", 파일) | ("qa", "" = QA 판정 필수 · 또는 리포트 경로)
@@ -66,7 +67,7 @@ GATES: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("G-15", "훅 설치 안전 — 가짜 settings (V-10)", "개발2", [("tool", "check_hooks"),
                                                           ("test", "test_hooks_install.py")]),
     ("G-16", "로컬 전용 — 127.0.0.1 · 외부 전송 0 (V-06)", "아키텍트", [("tool", "check_bind")]),
-    ("G-17", "화면 7 · API 13 — HTTP 200", "개발1·2", [("tool", "check_routes")]),
+    ("G-17", "화면 7 · API 14 — HTTP 200", "개발1·2", [("tool", "check_routes")]),
     ("G-18", "구성도 — 300 노드 ≤ 300 ms · 접기 · 보기 3", "개발2", [("test", "test_graph.py"),
                                                                 ("qa", "")]),
     ("G-19", "진척 판정 — P-01~P-07 · 고려솔더 (V-11)", "개발1", [("tool", "check_pipeline"),
@@ -85,6 +86,15 @@ GATES: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("G-29", "알림 — WAITING 전이 1 회", "개발2·QA2", [("test", "test_alerts.py"), ("qa", "")]),
     ("G-30", "디자인 — 두 테마 대비 · 390px (V-16)", "아키텍트·개발1·2·QA2", [("tool", "check_contrast"),
                                                                           ("test", "test_design.py"), ("qa", "")]),
+    # ── 2차-T 디지털 트윈 (goal.md §2.2 · 계획 docs/superpowers/plans/2026-10-21-agentdash-twin.md) ──
+    ("G-31", "배치 규칙 T-01~T-07 + Review Focus 5", "개발2", [("test", "test_twin.py")]),
+    ("G-32", "트윈 API — 누적 · 스파크 · 겹침 0 (V-17)", "개발1·2", [("tool", "check_twin")]),
+    ("G-33", "트윈 실시간 — 새 설비 5 초 · 표시등 1 초 · 역흐름", "개발2·QA2", [("test", "test_realtime.py"),
+                                                                         ("qa", "")]),
+    ("G-34", "관제판 흡수 — v0.3 항목 · test_dashboard 무삭제", "개발2·QA2", [("test", "test_dashboard.py"),
+                                                                       ("qa", "")]),
+    ("G-35", "트윈 시각 — 정적 계약 · 두 테마 · 390/1400 · 움직임 0", "개발2·QA2", [("test", "test_twin_page.py"),
+                                                                            ("qa", "")]),
 ]
 
 

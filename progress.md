@@ -2,6 +2,36 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 2차-T — Phase 0 (아키텍트 · 계획 Task 1, 2026-10-21)
+
+### 지금 해야 할 것
+- **웨이브 A** — 개발1 Task 2 `usage.spark` (공표) → Task 5 `check_twin` (Task 4 공표 뒤) / 개발2 Task 3 `core/twin.py` 배치 → Task 4 `/api/v1/twin` (placeholder 제거 · 응답 키 공표).
+- G-15 송신 항목은 사람이 8095 에 띄운 개발 서버 때문에 `미검증` — 서버를 끄지 않았다. EXIT 판정 때 사람에게 물어 잠깐 끄고 잰다 (`goal.md` §0.2).
+
+| 항목 | 실측 | 검증 명령 |
+|---|---|---|
+| 게이트 표 | GATES G-01..G-35 연속 35 행 · G-17 「화면 7 · API 14」 · G-31 `test_twin.py` · G-32 `check_twin` · G-33 `test_realtime.py`+QA · G-34 `test_dashboard.py`+QA · G-35 `test_twin_page.py`+QA · QA_GLOBS 에 `outputs/e2e/twin*.md` | `uv run pytest -q tests/test_gate.py` (`test_gates_cover_g01_to_g35`) |
+| 트윈 라우터 자리 | `app/routers/twin.py` `GET /api/v1/twin` → `placeholders.api("개발2", lines=[], links=[], folded_lines=0)` · `main.py` `ROUTERS` 에 `twin` · **소유 개발2** (CLAUDE.md 2차-T 표) | `uv run pytest -q tests/test_routes.py` |
+| 화면 · API | `check_routes` N_APIS 14 · 화면 7 + API 14 = 21 중 HTTP 200 21 (빈 DB) · placeholder 1 (`/api/v1/twin`) | `uv run python src/agentdash/tools/check_routes.py` |
+| Makefile | `make check-twin` — `tools/check_twin.py` 없으면 `미구현 — 담당 개발1` · 종료코드 2 | `make check-twin; echo $?` → 2 |
+| 전체 테스트 | **380 passed** (`tests/test_twin.py` 는 개발2 작업 중 · 제외해도 380) | `uv run pytest -q` |
+| 판정표 | **35 행 · PASS 29 · FAIL 3 · WARN 0 · BLOCKED 0 · 미검증 3** — FAIL G-31 (test_twin.py 없음 — 개발2) · G-32 (check_twin.py 없음 — 개발1) · G-35 (test_twin_page.py 없음 — 개발2 · QA 표지 없음) / 미검증 G-15 (송신 미검증 — 8095 사용 중 · QA r4 PASS) · G-33 · G-34 (개발 테스트 PASS · QA 표지 대기). G-01~G-30 회귀: G-15 외 전부 PASS | `AGENTDASH_DB=data/agentdash-v2a-verify.db make gate` |
+| CLAUDE.md | 2차-T 로 갱신 — 완료 기준 G-01~G-35 · 규모 API 14 · 검증 17 · 배치 규칙 7 · 게이트 35 · 2차-T 새 소유 파일 · `goal-v2a.md` 보존 · 8095 사람 서버 끄지 않음 | `grep -n "2차-T" CLAUDE.md` |
+
+### spec v0.4 에서 센 숫자 (`goal.md` §9)
+
+| 항목 | 값 | 명령 |
+|---|---|---|
+| 테이블 | 11 | `grep -cE '^CREATE TABLE' spec.md` |
+| 판정 규칙 | 13 | `grep -cE '^\| R-[0-9]+[ab]? \|' spec.md` |
+| 연결 규칙 | 7 | `grep -cE '^\| L-0[1-7] \|' spec.md` |
+| 배치 규칙 | 7 | `grep -cE '^\| T-0[1-7] \|' spec.md` |
+| 진척 규칙 | 7 | `grep -cE '^\| P-0[1-7] \|' spec.md` |
+| 검증 | 17 | `grep -cE '^\| V-[0-9]{2} `' spec.md` |
+| 화면 | 7 | `grep -cE '^### D-0[1-7] ' spec.md` |
+| API | 14 | `grep -cE '^\| `(GET\|POST) /' spec.md` |
+| 게이트 | 35 | `AGENTDASH_DB=data/agentdash-v2a-verify.db make gate` |
+
 ## 2차-A 최종 보고 — 2026-10-21 · 루프 종료 (`goal.md` §4.4 EXIT 3 조건 충족)
 
 | EXIT 조건 | 실측 | 검증 |

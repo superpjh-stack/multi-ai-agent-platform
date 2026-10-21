@@ -2,13 +2,13 @@
 
 **멀티 에이전트 대시보드** — 이 컴퓨터의 Claude Code 기록(`~/.claude`)을 **읽기만** 해서 세션 · 서브에이전트 · 워크플로 에이전트의 상태 · 관계 · 작업량 · 비용 · 파이프라인 진척을 `127.0.0.1:8095` 에 보여 준다. 패키지 `agentdash` (`src/agentdash`).
 본체는 **부모 연결(`spec.md` §3.2 L-01~L-07) + 상태 판정(§4.2 R-01 · R-02a · R-02b · R-03~R-12)** 이다. 이 둘이 틀리면 구성도 · 관제판 · 작업량이 전부 틀린다.
-**지금은 2차-A** (정본 `spec.md` **v0.3** · 계획 `docs/superpowers/plans/2026-10-20-agentdash-v2a.md` 태스크 1~15). 1차(G-01~G-22, 2026-10-17 EXIT)는 `goal-v1.md` 에 보존 — 읽기만.
-완료 기준 (2차-A, `goal.md` §4.4): **G-01~G-30 전부 PASS (1차 G-01~G-22 회귀 포함) · QA r4 치명 0 · 중대 0 · 연속 2 회전 변화 없음.** 새로 백필한 DB 에서 V-01~V-16 이 통과하고, 이 루프가 띄운 에이전트가 D-01 · D-02 에 실시간으로 나타났다 사라진다.
+**지금은 2차-T 디지털 트윈** (정본 `spec.md` **v0.4** · 계획 `docs/superpowers/plans/2026-10-21-agentdash-twin.md` Task 1~8). D-01 관제판을 공장 평면도(라인 = 프로젝트 · 설비 = 에이전트 · 배관 = spawn/handback · 표시등 · 스파크 · 흐름)로 바꾸고, 기존 관제판 항목은 패널로 옮긴다. 1차(G-01~G-22, 2026-10-17 EXIT)는 `goal-v1.md`, 2차-A(G-23~G-30, `1c33a63` EXIT)는 `goal-v2a.md` 에 보존 — 읽기만.
+완료 기준 (2차-T, `goal.md` §4.4): **G-01~G-35 전부 PASS (G-01~G-30 회귀 포함 · G-17 은 API 14) · QA r5 2 종 + `e2e/twin` · `self-observe-r6` 치명 0 · 중대 0 · 연속 2 회전 변화 없음.** 새로 백필한 DB 에서 V-01~V-17 이 통과하고, 이 루프가 띄운 에이전트가 D-01 평면도 · D-02 에 실시간으로 나타났다 DONE 으로 흐려진다.
 
 ## 먼저 읽는다
 
-1. **`goal.md`** (2차-A) — 목표 · 수용 게이트 G-01~G-30 · 팀 편성 · 루프 프로토콜 · 기동 프롬프트. **전원 필독. 사람만 고친다.** 1차 프로토콜 · 금지 사항(§4.3 · §5 · §8)은 `goal-v1.md` 가 그대로 유효.
-2. **`intro.md` · `problem.md` · `spec.md` v0.3** — 정본. 테이블 11 · 화면 7 · API 13 · 상태 규칙 13 · 연결 규칙 7 · 진척 규칙 7 · 검증 16 · 훅 이벤트 9 의 출처. **읽기만 한다.** 결함 · 모순은 고치지 말고 `decisions.md` 에 적는다.
+1. **`goal.md`** (2차-T) — 목표 · 수용 게이트 G-01~G-35 · 팀 편성 · 루프 프로토콜 · 기동 프롬프트. **전원 필독. 사람만 고친다.** 1차 프로토콜 · 금지 사항(§4.3 · §5 · §8)은 `goal-v1.md`, 2차-A 프로토콜(§0.2 · §4 · G-23~G-30 정의)은 `goal-v2a.md` 가 그대로 유효 — 둘 다 읽기만.
+2. **`intro.md` · `problem.md` · `spec.md` v0.4** — 정본. 테이블 11 · 화면 7 · API 14 · 상태 규칙 13 · 연결 규칙 7 · 배치 규칙 7 (§5.4 T-01~T-07) · 진척 규칙 7 · 검증 17 · 훅 이벤트 9 의 출처. **읽기만 한다.** 결함 · 모순은 고치지 말고 `decisions.md` 에 적는다.
 3. `decisions.md` — 결정 대장 D-nn (`확정` / `가설` / `가설 반박` / `차단`). 여기 없는 것을 마음대로 정하지 않는다. `[가설]` 은 실제 기록(읽기만)으로 확인한 뒤 근거 파일 · 줄과 함께 `확정`.
 4. `progress.md` — 검증된 현황의 유일한 진실. 실측값 + 검증 명령만. 맨 위 "지금 해야 할 것".
 5. `progress-dev{1,2}.md` — 개발자별 진행 · 공표(§1, 공용 시그니처) · 요청(§3).
@@ -26,23 +26,25 @@
 - `uv` / Python 3.12. **명령은 전부 `uv run …`.**
 - SQLite(WAL). 기본 `data/agentdash.db`, 개발마다 `AGENTDASH_DB=data/agentdash-dev{N}.db` (아키텍트 0 · 개발1 1 · 개발2 2). `data/` 는 git 제외.
 - 포트 **8095** · `127.0.0.1` 만. 개발 중 `AGENTDASH_PORT=8096` · `8097`. 다른 프로젝트 포트(8000 · 8020 · 8030 · 8090)를 피한다. 백그라운드 `make run` 은 회전 끝에 정지.
+- **사람이 8095 에 띄운 개발 서버는 끄지 않는다.** 에이전트는 8096 · 8097 만 쓰고 **자기가 띄운 PID 만** kill 한다(`pkill` · 포트로 찾아 죽이기 금지). G-15 송신 항목이 8095 사용 중으로 `미검증` 이면 정상 — 사람에게 물어 잠깐 끄고 잰다(`goal.md` §0.2).
+- 실측 게이트는 새로 백필한 DB 로 잰다: `AGENTDASH_DB=data/agentdash-v2a-verify.db make gate` (또는 새 파일).
 - 이 폴더 밖에는 쓰지 않는다.
 
 ## 명령
 
-`make setup`(uv sync · DB · schema) · `backfill` · `run` · **`gate`**(G-01~G-30 판정표) · `test` · `hooks-install` · `hooks-uninstall` · `hooks-check` · `pricing-check` · `reprice` · `export` · `fixtures`(픽스처 재생성 + 검사) · `check-fixtures` · `check-no-payload` · `check-readonly` · `check-hooks` · `check-bind` · `check-routes` · `check-decisions`(G-23) · `check-contrast`(G-30).
+`make setup`(uv sync · DB · schema) · `backfill` · `run` · **`gate`**(G-01~G-35 판정표) · `test` · `hooks-install` · `hooks-uninstall` · `hooks-check` · `pricing-check` · `reprice` · `export` · `fixtures`(픽스처 재생성 + 검사) · `check-fixtures` · `check-no-payload` · `check-readonly` · `check-hooks` · `check-bind` · `check-routes` · `check-decisions`(G-23) · `check-contrast`(G-30) · `check-twin`(G-32 · V-17 — 개발1, 없으면 종료코드 2).
 미구현 타깃은 `미구현 — 담당 개발N` 을 찍고 **종료코드 2** 로 실패한다. 검사 도구는 `src/agentdash/tools/`(`uv run python src/agentdash/tools/<도구>.py`), 출력 행 형식은 `G-nn  항목  PASS|FAIL|WARN|BLOCKED|미검증  실측` — `gate.py` 가 이 행을 읽는다. 검사기가 없으면 그 게이트는 FAIL(개발 몫) 또는 미검증(QA · 사람 몫).
 
 ## QA 리포트 형식
 
 - `gate.py` 는 QA 리포트(`outputs/qa*.md` · `outputs/e2e/self-observe.md`)에서 **표지 줄 `<!-- gate:G-nn -->` 바로 다음 줄 하나**만 그 게이트의 판정 행(`G-nn  항목  PASS|FAIL|WARN|BLOCKED|미검증  실측`)으로 읽는다 — 리포트의 다른 판정 꼴 줄(붙여 넣은 `make gate` 출력 등)은 읽지 않고, 표지가 없으면 `미검증 — QA 재검증 필요(리포트 형식)` (DEF-QA2-008).
-- 모든 게이트에 대해 리포트 묶음(`outputs/qa*-*.md` · `outputs/e2e/{self-observe,alerts,design}*.md`, 이름 끝 `-rN` 을 뗀 것)마다 그 표지가 있는 **가장 최근 회차**(N 큰 것, 없으면 원본) 하나를 읽고, 개발 도구 판정과 다르면 **더 나쁜 쪽**(PASS < 미검증 < WARN < FAIL, BLOCKED 은 FAIL 다음 · 출처 표시) — 실측 칸에 읽은 파일을 적는다 (DEF-QA1-103). 새 회차는 덮어쓰지 말고 `-r{N+1}` 로 낸다.
+- 모든 게이트에 대해 리포트 묶음(`outputs/qa*-*.md` · `outputs/e2e/{self-observe,alerts,design,twin}*.md`, 이름 끝 `-rN` 을 뗀 것)마다 그 표지가 있는 **가장 최근 회차**(N 큰 것, 없으면 원본) 하나를 읽고, 개발 도구 판정과 다르면 **더 나쁜 쪽**(PASS < 미검증 < WARN < FAIL, BLOCKED 은 FAIL 다음 · 출처 표시) — 실측 칸에 읽은 파일을 적는다 (DEF-QA1-103). 새 회차는 덮어쓰지 말고 `-r{N+1}` 로 낸다.
 
 ## 규모 (`spec.md` 에서 센 값 — `goal.md` §9 명령)
 
-(`spec.md` v0.3) 테이블 **11** · 화면 **7** (D-01~D-07) · API **13** · 상태 **8** · 판정 규칙 **13** · 연결 규칙 **7** · 진척 규칙 **7** · 검증 **16** (V-01~V-16) · 훅 이벤트 **9**. 게이트 **30** (G-01~G-30).
+(`spec.md` v0.4) 테이블 **11** · 화면 **7** (D-01~D-07) · API **14** · 상태 **8** · 판정 규칙 **13** · 연결 규칙 **7** · 배치 규칙 **7** (T-01~T-07) · 진척 규칙 **7** · 검증 **17** (V-01~V-17) · 훅 이벤트 **9**. 게이트 **35** (G-01~G-35).
 
-## 소유 파일 — 한 파일은 한 사람만 (`goal.md` §3.2 — 1차 표 + 2차-A 새 파일)
+## 소유 파일 — 한 파일은 한 사람만 (`goal.md` §3 — 1차 표 + 2차-A · 2차-T 새 파일)
 
 | 담당 | 웨이브 A | 웨이브 B | 소유 파일 |
 |---|---|---|---|
@@ -58,6 +60,18 @@
 | **아키텍트** | `config/budget.yaml` · `tools/check_decisions.py` · `tools/check_contrast.py` · `tests/test_design.py` · `goal-v1.md`(읽기만) |
 | **개발1** | `core/budget.py` · `app/routers/insights.py` · `templates/insights.html` · `tools/check_{usage_est,budget,trend,efficiency}.py` · `tests/test_{usage_est,budget,insights,check_counts}.py` |
 | **개발2** | `templates/_alerts.html` · `tests/test_alerts.py` |
+
+**2차-T 새 파일** (`goal.md` §3 · 계획 Global Constraints)
+
+| 담당 | 새로 갖는 파일 |
+|---|---|
+| **아키텍트** | `goal-v2a.md`(읽기만) · `tools/gate.py` G-31~G-35 · `Makefile` `check-twin` |
+| **개발1** | `core/usage.py` 의 `spark` (Task 2) · `tools/check_twin.py` · `tests/test_check_twin.py` |
+| **개발2** | `core/twin.py` · **`app/routers/twin.py`** (자리는 아키텍트 Phase 0 — placeholder `/api/v1/twin`, 이제 개발2 소유) · `templates/_twin.html` · `tests/test_{twin,twin_page}.py` |
+
+- `main.py` `ROUTERS` 에 `twin` 등록 완료 (Phase 0). 개발2 가 Task 4 에서 `twin.build(...)` 를 연결하며 placeholder 를 지운다. 응답 키는 `progress-dev2.md` §1 에 공표.
+- 새 JS · CSS 라이브러리 · CDN 0 (spec §7.4). 색은 `base.html` 토큰만. 배치는 서버가 결정적으로(T-07) — 브라우저가 좌표를 다시 계산하지 않는다.
+- 기존 관제판 항목은 하나도 빼지 않는다 — `tests/test_dashboard.py` 가 회귀 기준(G-34). 테스트를 지워서 통과시키는 것은 게이트 낮추기다.
 
 - `main.py` `ROUTERS` 에 `insights` 등록 완료 (Task 8 뒤 placeholder 분기 제거, R-2A-2). 공용 시그니처 `budget.status · worst · trend · efficiency` 는 개발1 이 Task 7 끝에 `progress-dev1.md` §1 에 공표.
 - 색 · 간격 · 글꼴은 `base.html` 의 CSS 토큰 · 공통 클래스만 쓴다 (spec §7.3). 이름은 `progress.md` 「2차-A — Phase 0」 공표 칸.

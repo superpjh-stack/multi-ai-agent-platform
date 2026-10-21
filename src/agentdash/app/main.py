@@ -1,8 +1,8 @@
-"""FastAPI 앱 — 화면 7 · API 13 (spec.md v0.3 §7 · §8). 실행은 `make run` (127.0.0.1:8095 만).
+"""FastAPI 앱 — 화면 7 · API 14 (spec.md v0.4 §7 · §8). 실행은 `make run` (127.0.0.1:8095 만).
 
 라우터 소유 (goal.md §3.2 — 한 파일은 한 사람만)
   개발1: routers/{usage,timeline,pipeline,insights}.py  (insights = 2차-A D-07 · API 3)
-  개발2: routers/{pages,agents,graph,stream,hooks}.py
+  개발2: routers/{pages,agents,graph,stream,hooks,twin}.py  (twin = 2차-T `/api/v1/twin` — 자리는 아키텍트 Phase 0)
 이 파일과 settings.py 는 아키텍트 소유. 새 라우터가 필요하면 progress-devN.md §3 에 요청한다.
 
 lifespan (R5 — 오케스트레이터 지시로 개발2 가 넣음, 회전 4)
@@ -22,9 +22,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from agentdash.app.routers import agents, graph, hooks, insights, pages, pipeline, stream, timeline, usage
+from agentdash.app.routers import agents, graph, hooks, insights, pages, pipeline, stream, timeline, twin, usage
 
-ROUTERS = [pages, usage, timeline, pipeline, insights, agents, graph, stream, hooks]
+ROUTERS = [pages, usage, timeline, pipeline, insights, agents, graph, twin, stream, hooks]
 NO_WATCH_ENV = "AGENTDASH_NO_WATCH"
 log = logging.getLogger("agentdash.lifespan")
 
