@@ -2,6 +2,66 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 2차-A — Phase 0 (아키텍트, 2026-10-21 · Task 1~4)
+
+### 지금 해야 할 것
+- **웨이브 A 기동 가능.** 개발1 Task 5 (추정 출력) → 6 → 7 (공표) → 8, 개발2 Task 9 (D-18 표시 제거 = G-23) → 10 → 11.
+- **회귀 G-04 · G-07 FAIL = D-22 (가설)** — 원천에서 지워진 기록 26 키가 DB 에 보관된 채 V-01 · V-03 비교에 들어간다. 검사기는 개발1 소유 → 개발1 이 D-22 제안 ①② 반영(웨이브 A 첫 일), 사람은 Q10 해석 승인. 수집 · 숫자 결함은 아니다(남은 표본 8 세션 4 칸 일치).
+- 실측 게이트(G-24 · G-26~G-28)는 새로 백필한 DB 로 잰다 — `output_est` 는 기존 DB 에 열만 있고 값은 NULL.
+
+| 항목 | 실측 | 검증 명령 |
+|---|---|---|
+| T1 스키마 v0.3 | `schema.sql` = spec v0.3 §3 블록 (usage_event · usage_daily 에 `output_est INTEGER` · `cost_est_usd REAL`) · v0.2 DB 에 `init_db` 가 열 4 덧붙임(두 번 돌려도 같음) · 기본 DB · dev0 DB 열 덧붙임 완료 | `uv run pytest tests/test_schema.py -q` (7 passed) |
+| T1 하드 링크 거부 (G-25 · DEF-QA1-201) | 이미 있는 DB 파일 `st_nlink > 1` → `connect` · `init_db` 둘 다 `RuntimeError("DB 파일이 하드 링크 …")`, 새 경로 통과 | `uv run pytest tests/test_settings.py -q` (16 passed) |
+| T1 G-14 회복 | 읽기 전용 pytest 1 failed(spec v0.3 스키마) → 0 · 트리 변경 0 · DB 경로 씨앗 49/49 거부 | `uv run python src/agentdash/tools/check_readonly.py` |
+| T2 budget.yaml | spec §6.3 블록 그대로 — `warn_ratio 0.8` · total 두 값 `null` · `projects {}` (금액 0 개) | `uv run pytest tests/test_config.py -q` (6 passed) |
+| T2 D-08 | 공식 단가 페이지(2026-10-21 WebFetch 읽기) Haiku 5.5 캐시 읽기 $0.01 (≤100K) · $0.05 (>100K) = 기존 값 → **확정**, `cache_read_estimated` 표시 제거 · 값 변경 0 → reprice 불필요 | `decisions.md` D-08 · `config/pricing.yaml` |
+| T2 결정 확정 | D-07 · D-08 · D-13 · D-14 · D-17 · D-18 · D-19 `확정` (근거 spec v0.3 §3.1 · §4.2 · §6.1 · §6.2 · 2026-10-20 사람 승인), 1차 관찰 글 유지 | `uv run python src/agentdash/tools/check_decisions.py` → G-23 FAIL **정상** (`routers/agents.py:100 · 108` `D18_NOTE` 3 곳 — 개발2 Task 9) |
+| T3 게이트 30 행 | GATES G-01~G-30 · G-17 「화면 7 · API 13」 · QA_GLOBS 에 `outputs/e2e/{alerts,design}*.md` · QA 필수 게이트(`("qa","")`)는 개발 PASS 여도 QA 표지 없으면 미검증 (G-29 · G-30 의 E2E 를 건너뛰지 않게) | `uv run pytest tests/test_gate.py -q` (26 passed) · `make gate` |
+| T3 라우트 | spec 화면 7 (D-01~D-07) · API 13 → 20/20 HTTP 200 (빈 DB) · **placeholder 4** (`/insights` · `/api/v1/{budget,trend,efficiency}` — Task 8 이 없앤다) | `uv run python src/agentdash/tools/check_routes.py` |
+| T3 문서 | CLAUDE.md 2차-A (완료 기준 · G-01~G-30 · 규모 화면 7 · API 13 · 검증 16 · 새 소유 파일 · `goal-v1.md`) · Makefile `gate` 주석 G-30 · `run` 주석 정정 · `check-decisions` · `check-contrast` | `make -n check-decisions check-contrast` |
+| T4 화면 틀 | base.html 토큰 3 블록(밝은 `:root` · `:root[data-theme="dark"]` · 시스템 다크 `@media … :root:not([data-theme="light"])`, 두 다크 값 같음) · 대비 48 쌍 최소 글자 5.6:1 · 도형 3.3:1 | `uv run python src/agentdash/tools/check_contrast.py` · `uv run pytest tests/test_design.py -q` (4 passed · 1 xfailed = `test_no_dev_style_includes`, 웨이브 B) |
+| 전체 테스트 | **308 passed · 1 xfailed** (1차 296 → +12, 실패 0) | `uv run pytest -q` |
+| 원천 무접촉 | `~/.claude/settings.json` mtime 1792131308 · sha1 `8641eb22e8f5…` (1차와 같음) · 훅 설치 0 | `stat -f %m ~/.claude/settings.json` · `shasum` |
+
+### `make gate` 판정표 요약 (2026-10-21, 기본 DB `data/agentdash.db`)
+
+**합계 PASS 21 · FAIL 8 · WARN 0 · BLOCKED 0 · 미검증 1**
+
+| 판정 | 게이트 | 실측 한 줄 |
+|---|---|---|
+| PASS | G-01~G-03 · G-05 · G-06 · G-08~G-22 · G-25 | 회귀 20 + G-25 (G-17 개발 20/20 · placeholder 4) |
+| FAIL (회귀) | G-04 | 세션 원천 74 · DB 81 (남음 7) · 서브에이전트 233 · 252 (남음 19) — 남은 26 전부 원천 삭제 (D-22) |
+| FAIL (회귀) | G-07 | 표본 10 중 `09cc91b1` · `cd6db165` 원천 합 0 vs DB 합 (원천 삭제, D-22) · 나머지 8 일치 |
+| FAIL (정상 — 개발2 T9) | G-23 | 확정 7/7 · D-08 출처 있음 · src/ `D18_NOTE` 3 곳 |
+| FAIL (정상 — 개발1 T5~T7) | G-24 · G-26 · G-27 · G-28 | 검사기 · 테스트 파일 없음 |
+| FAIL (정상 — 개발2 T10) | G-29 | `tests/test_alerts.py` 없음 · QA 표지 없음 |
+| 미검증 | G-30 | 개발 PASS (대비 48 쌍 · test_design 4 + xfail 1) · QA2 `outputs/e2e/design.md` 대기 |
+
+### spec.md v0.3 에서 센 숫자 (`goal.md` §9 명령)
+
+| 항목 | 값 | 명령 |
+|---|---|---|
+| 테이블 | 11 | `grep -cE '^CREATE TABLE' spec.md` |
+| 판정 규칙 | 13 | `grep -cE '^\| R-[0-9]+[ab]? \|' spec.md` |
+| 연결 규칙 | 7 | `grep -cE '^\| L-0[1-7] \|' spec.md` |
+| 진척 규칙 | 7 | `grep -cE '^\| P-0[1-7] \|' spec.md` |
+| 검증 | 16 | `grep -cE '^\| V-[0-9]{2} `' spec.md` |
+| 화면 | 7 | `grep -cE '^### D-0[1-7] ' spec.md` |
+| API | 13 | `grep -cE '^\| `(GET\|POST) /' spec.md` |
+| 상태 · 훅 이벤트 | 8 · 9 | spec §4.1 표 · §9.2 표 (손으로 셈) |
+
+### 공표 — 개발자가 쓰는 것 (아키텍트 소유 파일)
+
+- **D-07 자리 (`main.py` · `placeholders.py`)**: `main._insights_router()` 가 `importlib.util.find_spec("agentdash.app.routers.insights")` 로 **파일이 있으면 그 모듈의 `router`**, 없으면 `placeholders.INSIGHTS_STUB` (`GET /insights` HTML placeholder · `/api/v1/budget` `{"_placeholder", cells: []}` · `/api/v1/trend` `{grain, group, series: []}` · `/api/v1/efficiency` `{group, rows: []}`) 를 `EXTRA_ROUTERS` 로 단다. 파일이 있는데 import 가 깨지면 예외 그대로(숨기지 않음). **개발1 은 Task 8 에서 `routers/insights.py` (`router = APIRouter()`, 위 네 경로)만 만들면 바로 바뀐다** — main.py 수정 요청 불필요. 끝나면 아키텍트가 stub 과 분기를 지우고 `insights` 를 `ROUTERS` 로 옮긴다 (progress-dev1 §3 에 「T8 끝」 한 줄).
+- **CSS 토큰 (base.html, 두 테마 자동)**: `--bg --surface --fg --muted --line --accent` · 상태 8 `--st-running --st-waiting-input --st-waiting-permission --st-sleeping --st-waiting-child --st-done --st-failed --st-stale` (도형 · 테두리 · 막대) + 각 `-fg` (글자) · 간격 `--sp-1`(4) … `--sp-6`(32) · `--radius --radius-sm --font --font-mono --shadow`. 1차 이름 별칭(웨이브 B 끝까지): `--warn --card --soft --st-RUNNING … --st-STALE --st-UNKNOWN --st-NONE`.
+- **공통 클래스**: `.card` · `.grid` (자동 열, `<g class="grid">` 에는 안 걸림) · `.kpi` (`.k` 이름 · `.n` 숫자) · `.tbl` (표 감싸개 — 칸 안 가로 밀기, `td.num`) · `.badge` · `.st-<STATE>` (`--c` · `--c-fg` 를 그 상태 색으로 — 예 `<span class="badge st-RUNNING">`) · `.chart` (차트 감싸개). 머리글: `#theme-btn` (localStorage `agentdash-theme`) · **`#alerts-btn`** (지금 `disabled` 「알림 켜기」 — 개발2 `_alerts.html` 이 켠다) · nav 에 `/insights` 「D-07 비용 · 효율」 · `</body>` 앞 `{% include "_alerts.html" ignore missing %}`.
+- **웨이브 B**: `_dev1_style.html` · `_dev2_style.html` include 를 걷어 내면 `tests/test_design.py::test_no_dev_style_includes` 가 XPASS(strict) 로 깨진다 → progress-devN §3 로 요청하면 아키텍트가 xfail 을 뗀다.
+
+커밋: `27d2f86` T1 → `18af221` T2 → `97cd253` T3 → `d08a3de` T4 → `ca0fa7c` gate QA 필수 · D-22 (로컬만).
+
+---
+
 ## 최종 보고 — 2026-10-17 21:58 · 루프 종료 (`goal.md` §4.4 EXIT 3 조건 충족)
 
 | EXIT 조건 | 실측 | 검증 |
