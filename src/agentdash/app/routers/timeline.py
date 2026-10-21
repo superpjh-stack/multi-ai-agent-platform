@@ -139,7 +139,7 @@ def gantt_svg(data: dict, width: int = 960, label_w: int = 220, row_h: int = 16)
     w = width - label_w
     lanes = data["lanes"]
     height = max(1, len(lanes)) * row_h + 22
-    out = [f'<svg class="chart gantt" viewBox="0 0 {width} {height}" width="100%" role="img" aria-label="간트">']
+    out = [f'<svg class="chart gantt" viewBox="0 0 {width} {height}" width="100%" role="img" aria-label="간트">', _svg.STYLE]
     for i in range(5):    # 시각 눈금
         x = label_w + w * i / 4
         t = a + (b - a) * i / 4
@@ -160,14 +160,14 @@ def gantt_svg(data: dict, width: int = 960, label_w: int = 220, row_h: int = 16)
                 e = s + timedelta(seconds=span / w)    # 최소 1 px
             x0 = label_w + (s - a).total_seconds() / span * w
             x1 = label_w + (e - a).total_seconds() / span * w
-            out.append(f'<rect class="seg" x="{x0:.1f}" y="{y + 3}" width="{max(1.0, x1 - x0):.1f}" height="{row_h - 6}" rx="2" '
-                       f'style="fill:var(--st-{escape(sg["state"])}, var(--st-UNKNOWN))"><title>{label} · {escape(sg["state"])} · '
+            out.append(f'<rect x="{x0:.1f}" y="{y + 3}" width="{max(1.0, x1 - x0):.1f}" height="{row_h - 6}" rx="2" '
+                       f'class="seg st-{escape(sg["state"])}"><title>{label} · {escape(sg["state"])} · '
                        f'{_kst(sg["from"])} → {_kst(sg["to"])} · {escape(sg["reason"] or "")}</title></rect>')
         # 지금 상태 표시 (막대 끝 4 px)
         e = min(_parse(ln["end"]), b)
         xe = label_w + (e - a).total_seconds() / span * w
         out.append(f'<rect x="{max(label_w, xe - 4):.1f}" y="{y + 2}" width="4" height="{row_h - 4}" '
-                   f'style="fill:var(--st-{escape(ln["state"] or "UNKNOWN")}, var(--st-UNKNOWN))"><title>지금 {escape(ln["state"] or "")}</title></rect>')
+                   f'class="now st-{escape(ln["state"] or "UNKNOWN")}"><title>지금 {escape(ln["state"] or "")}</title></rect>')
     if not lanes:
         out.append(f'<text class="tick" x="{width / 2}" y="14" text-anchor="middle">기간 안 에이전트 없음</text>')
     out.append("</svg>")

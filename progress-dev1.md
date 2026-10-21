@@ -164,14 +164,29 @@ kst_bucket(ts_or_day, grain) -> "YYYY-MM-DD" ;  GRAINS · TREND_GROUPS · EFF_GR
 SUSPECT_MAX_OUTPUT = 30 ; SUSPECT_MIN_JSON = 400 ; UNDERCOUNT_NOTE = "추정 보정 (D-17)"
 estimate(max_output, json_len, est_chars) -> int | None ;  cost_est(ev, pricing) -> float | None
 totals(con, key, descendants=False)   # + "output_est_total" (의심 행 output_est · 나머지 output_tokens 합) · "cost_est_usd" · "est_note"
-                                      #   1차 키 undercount · undercount_note(= "기록상 과소 (D-17)") · undercount_output 은 §3 R-2A-1 까지 남김
+                                      #   1차 키 undercount* · LEGACY_UNDERCOUNT_NOTE 는 웨이브 B 에서 지움 (R-2A-1 개발2 완료 뒤)
 table(...)                            # 행 · total · trend(일) 에 output_est_total · cost_est_usd, 결과에 "est_note" (undercount* 키 없음)
 # agentdash.core.model.UsageEvent  + output_est: int|None · cost_est_usd: float|None
 ```
 
-- 화면 문구 (spec 그대로): 금액 옆 `[추정] API 정가 환산` (`usage.ESTIMATE_LABEL`) · unset 칸 `한도 미설정` · 단가 없음 `단가 없음 N 건`. D-01 띠 예: 「오늘 전체 82 % · Standard MES 이번 달 104 %」 → `/insights` 링크. over = `st-FAILED` (계획 Task 11). D-07 게이지는 ok `st-DONE` · warn `st-WAITING_INPUT` · over `st-FAILED` · unset/no_records `st-STALE` 를 쓴다 (`routers/insights.LEVEL_CLASS`) — D-01 띠도 같게 쓰면 맞는다.
+- 화면 문구 (spec 그대로): 금액 옆 `[추정] API 정가 환산` (`usage.ESTIMATE_LABEL`) · unset 칸 `한도 미설정` · 단가 없음 `단가 없음 N 건`. D-01 띠 예: 「오늘 전체 82 % · Standard MES 이번 달 104 %」 → `/insights` 링크. over = `st-FAILED` (계획 Task 11). D-07 게이지는 ok `st-DONE` · warn `st-WAITING_PERMISSION` (spec §6.3 · §4.1 주황, 웨이브 B 에서 바꿈 — R-2A-dev2-2) · over `st-FAILED` · unset/no_records `st-STALE` 를 쓴다 (`routers/insights.LEVEL_CLASS`) — D-01 띠도 같게 쓰면 맞는다.
 - 수집기 누적기 키는 계획의 `(agent_key, request_id)` 에 **DB 파일을 더한** `(DB, agent_key) → {requestId: [max_output, json_len, est_chars]}` (테스트 · 도구가 한 프로세스에서 DB 를 여럿 연다). 다른 프로세스가 이어 읽으면 그 기록 앞부분 길이를 다시 잰다.
 - 증분 수집(`ingest_all` · 감시기 묶음)이 바뀐 키의 `usage_daily` 를 다시 만든다 (`ingest_all(daily=True)` 기본, backfill 만 False 후 전체 재생성).
+
+## 2B2. 2차-A 웨이브 B — Task 12 (D-04~D-07 공통 틀) · R-2A-1 후속 (2026-10-21 10:30, DB `data/agentdash-dev1.db`)
+
+| 항목 | 실측 | 검증 명령 |
+|---|---|---|
+| `_dev1_style.html` 삭제 | 템플릿 include 0 (D-04~D-07). 색 #hex 0 · `--p-*` · `--st-RUNNING` 별칭 사용 0 — base 토큰 · `.card .grid .kpi .tbl .badge .st-* .chart` 만. 화면마다 `{% block head %}<style>` 은 배치(여백 · 폼 · 칩)만, 값은 토큰 | `grep -rn "_dev1_style\|#[0-9a-f]\{6\}" src/agentdash/app/templates/{usage,timeline,pipeline,insights}.html` |
+| `_svg.py` · 간트 | SVG 마다 토큰만 쓰는 `<style>` (`_svg.STYLE`) · 간트 막대 `class="seg st-<STATE>"` (`--c`, `st-NONE` = `--line`, UNKNOWN = `--muted`) — 인라인 `var(--st-X)` 0 | `tests/test_usage_page.py` (`seg st-RUNNING`) |
+| D-04 | 필터 카드 · KPI 카드 5 (`.grid.kpis` 160 px) · 설명 카드 · 일별 추이 2 차트 카드 (넓으면 2 열) · 순위 표 카드(`.tbl`, 칸 안 가로 밀기) · `[추정]` = `.badge` · 단가 없음 = `badge st-WAITING_PERMISSION` · y 눈금 잘림 수정(pad_l 60) | 브라우저 |
+| D-05 | KPI 3 (기간 · 에이전트 · state_log) · 동시 실행 차트 카드 · 간트 카드(범례 = 상태 배지 10, 간트 `min-width 720px` 를 `.tbl` 안에서 가로 밀기) | 브라우저 |
+| D-06 | 상태 수 KPI · 요약 카드 · 표 카드 — 칩 색 토큰 섞기(완료 accent · 일부 accent 옅게 · 진행 중 `--st-running` · 시작 전 선 · 규칙 없음 빗금) · 판단 필요 `badge st-WAITING_PERMISSION` | 브라우저 |
+| D-07 | 예산 KPI 카드 · 추세 / 적중률 섹션 카드 · warn = `st-WAITING_PERMISSION` (`routers/insights.LEVEL_CLASS`, D-01 띠와 같음) · Chart.js 범례는 두 선만(프로젝트 막대 이름은 툴팁) · 테마 토글 · 시스템 테마 변경 시 토큰 다시 읽어 다시 그림(실측: 토글 뒤 선 색 = `--accent`) | 브라우저 |
+| 390 px · 두 테마 | 4 화면 × 밝은 · 다크 = 8 : 문서 `scrollWidth` = `clientWidth` (373/373, iframe 390 px) · 콘솔 오류 0 | 스크린샷 `outputs/e2e/dev1-design/` 19 장 (커밋 안 함 — D-07) |
+| R-2A-1 후속 | 개발2 완료(progress-dev2.md §8) 확인 뒤 `usage.totals()` 의 `undercount` · `undercount_note` · `undercount_output` · `_undercount_keys` · `UNDERCOUNT_KINDS` · `LEGACY_UNDERCOUNT_NOTE` 삭제 · 테스트 `test_undercount_flag_on_subagent_totals` → `test_totals_est_keys_without_legacy_undercount` (1차 키 0) · src 「기록상 과소」 0 | `uv run pytest -q tests/test_usage.py` · `grep -rn "기록상 과소\|undercount" src` |
+| 전체 테스트 | **371 passed · 1 failed = `test_design.py::test_no_dev_style_includes` XPASS(strict)** — 개발1 · 개발2 둘 다 `_dev*_style` 을 걷어 내서 정상 (§3 R-2A-4) | `uv run pytest -q` |
+| `make gate` | **PASS 27 · FAIL 2 · 미검증 1** — FAIL G-14 (읽기 전용 pytest `-x` 가 같은 XPASS 1 건에서 멈춤 · 정적 · DB 씨앗 PASS) · G-30 (같은 XPASS) → xfail 해제로 둘 다 풀린다. 미검증 G-29 (QA 표지) | `AGENTDASH_DB=data/agentdash-dev1.db make gate` |
 
 ## 2A. 2차-A 진행 — Task 5~8 · D-22 (2026-10-21 10:17, DB `data/agentdash-dev1.db` 새로 백필)
 
@@ -271,6 +286,10 @@ table(...)                            # 행 · total · trend(일) 에 output_es
 - 원천 무변경: `~/.claude/settings.json` mtime 1792131308 (2026-10-16 15:15) 그대로 · `~/.claude` · `~/Desktop/AI Coding` 의 이 폴더 밖에 `*agentdash*` · `newdir*` · `agentdash-probe` 0. 서버는 띄우지 않았다(8096 LISTEN 0). 커밋하지 않았다.
 
 ## 3. 요청 (다른 사람에게)
+
+- **2차-A R-2A-4 (아키텍트) — xfail 해제**: Task 12 끝 — `_dev1_style.html` 삭제 · D-04~D-07 include 0. 개발2 도 `_dev2_style.html` 을 지워 `tests/test_design.py::test_no_dev_style_includes` 가 XPASS(strict) 로 깨진다 → xfail 을 떼 달라. 이 1 건이 `make gate` G-14 (check_readonly 의 `pytest -x`) · G-30 FAIL 의 원인이다.
+- **2차-A R-2A-5 (아키텍트, 제안)**: 화면 4 가 같은 배치 규칙(`h1` · `h2` 크기 · `.stack` 세로 간격 · `.filters` 폼 컨트롤)을 각자 `<style>` 에 둔다(토큰만). base.html 공통 부품에 `.filters` (label · input · select · button) · `.stack` 을 올려 주면 화면별 `<style>` 을 더 줄인다.
+- **R-2A-1 (개발2) — 완료 확인**: 개발2 §8 완료 → 개발1 이 `undercount*` 키 · `LEGACY_UNDERCOUNT_NOTE` 삭제 (§2B2).
 
 - **2차-A R-2A-1 (개발2)**: D-03 (`agent.html` · `routers/agents.py`) 의 「기록상 과소 (D-17)」 를 D-17 확정 표기로 — `usage.totals()` 의 `output_est_total` · `cost_est_usd` · `est_note`(= 「추정 보정 (D-17)」) 를 기록 칸 옆에 `[추정]` 으로 (spec §6.2 「기록」 과 「추정 보정 (D-17)」 나란히). 바꾸면 `tests/test_dashboard.py::test_d03_undercount_note_d17` 도 갱신하고 알려 달라 — 그때 개발1 이 `totals()` 의 `undercount*` 키 · `LEGACY_UNDERCOUNT_NOTE` 를 지운다.
 - **2차-A R-2A-2 (아키텍트) — T8 끝**: `routers/insights.py` 가 생겼다(`router = APIRouter()`, `/insights` · `/api/v1/{budget,trend,efficiency}`). `main.py` 의 `_insights_router` 분기 · `placeholders.INSIGHTS_STUB` 를 지우고 `insights` 를 `ROUTERS` 로 옮겨 달라. 지금도 check_routes placeholder 0.

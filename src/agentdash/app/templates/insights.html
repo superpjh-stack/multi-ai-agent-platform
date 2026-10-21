@@ -1,20 +1,36 @@
 {% extends "base.html" %}
 {% block head %}
 <style>
+  /* D-07 배치만 — 색 · 간격 · 글꼴은 base.html 토큰 (spec.md v0.3 §7.3). 게이지 색 = 칸의 상태 클래스 --c
+     (ok st-DONE · warn st-WAITING_PERMISSION 주황 · over st-FAILED — D-01 예산 띠와 같다) */
+  h1 { font-size:22px; margin:var(--sp-2) 0 var(--sp-4); }
+  h2 { font-size:15px; margin:0 0 var(--sp-3); }
+  .stack { display:flex; flex-direction:column; gap:var(--sp-5); }
+  section > h2 { font-size:17px; }
+  .lead { font-size:13px; margin:0; }
+  .lead.gap-top { margin-top:var(--sp-3); }
+  .tbl th { white-space:nowrap; }
+  .filters input, .filters select, .filters button { font:inherit; font-size:14px; padding:var(--sp-1) var(--sp-2);
+    border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); color:var(--fg); }
+  .filters button { cursor:pointer; }
+  .chart { height:320px; margin-bottom:var(--sp-3); }
+  .tbl td:first-child { white-space:nowrap; }
   .gauge { height:10px; border-radius:999px; background:var(--line); overflow:hidden; margin:6px 0 4px; }
   .gauge > i { display:block; height:100%; background:var(--c); }
   .filters { display:flex; flex-wrap:wrap; gap:var(--sp-2); align-items:end; margin:var(--sp-2) 0 var(--sp-3); }
   .filters label { display:flex; flex-direction:column; font-size:13px; color:var(--muted); gap:2px; }
-  .chart canvas { width:100% !important; max-height:280px; }
+  .chart canvas { width:100% !important; }
   .chart-err { color:var(--muted); font-size:13px; }
 </style>
 {% endblock %}
 {% block body %}
 <h1>D-07 비용 · 효율</h1>
-<p class="muted">모든 금액은 <b>{{ label }}</b> — Claude Code 구독 요금제의 실제 청구와 다르다. 기준 금액은 <b>{{ est_note }}</b> 비용(cost_est_usd 합), 옆에 기록 기준 금액 (spec.md §6.3).</p>
+<div class="stack">
+<p class="muted lead">모든 금액은 <b>{{ label }}</b> — Claude Code 구독 요금제의 실제 청구와 다르다. 기준 금액은 <b>{{ est_note }}</b> 비용(cost_est_usd 합), 옆에 기록 기준 금액 (spec.md §6.3).</p>
 
+<section>
 <h2>예산</h2>
-{% if worst %}<p class="badge {{ 'st-FAILED' if worst.level == 'over' else 'st-WAITING_INPUT' }}" data-budget-worst="{{ worst.level }}">가장 높은 칸: {{ worst.project or '전체' }} {{ periods[worst.period] }} {{ worst.pct }}</p>{% endif %}
+{% if worst %}<p class="badge {{ 'st-FAILED' if worst.level == 'over' else 'st-WAITING_PERMISSION' }}" data-budget-worst="{{ worst.level }}">가장 높은 칸: {{ worst.project or '전체' }} {{ periods[worst.period] }} {{ worst.pct }}</p>{% endif %}
 <div class="grid">
   {% for c in cells %}
   <div class="card kpi {{ c.cls }}" data-budget-level="{{ c.level }}">
@@ -34,7 +50,9 @@
   </div>
   {% endfor %}
 </div>
+</section>
 
+<section class="card">
 <h2>비용 추세 <span class="muted">{{ label }}</span></h2>
 <form class="filters" method="get" action="/insights">
   <label>단위
@@ -45,7 +63,8 @@
   <input type="hidden" name="eff" value="{{ eff }}">
   <button type="submit">보기</button>
 </form>
-<div class="card chart"><canvas id="trend-chart" aria-label="비용 추세 — 기록 · 추정 보정 선, 프로젝트별 쌓은 막대"></canvas><p class="chart-err" id="chart-err" hidden></p></div>
+<div class="chart"><canvas id="trend-chart" aria-label="비용 추세 — 기록 · 추정 보정 선, 프로젝트별 쌓은 막대"></canvas><p class="chart-err" id="chart-err" hidden></p></div>
+<p class="muted lead">선 = 전체 추정 보정 · 기록, 쌓은 막대 = 프로젝트별 추정 보정 (막대에 마우스를 올리면 프로젝트 이름).</p>
 <div class="tbl">
 <table>
   <thead><tr><th>묶음 ({{ grains[grain] }})</th><th class="num">기록 비용</th><th class="num">{{ est_note }} 비용 <span class="muted">[추정]</span></th>
@@ -60,7 +79,9 @@
   </tbody>
 </table>
 </div>
+</section>
 
+<section class="card">
 <h2>캐시 적중률 순위 — {{ effs[eff] }} ({{ frm }} ~ {{ to }})</h2>
 <form class="filters" method="get" action="/insights">
   <input type="hidden" name="grain" value="{{ grain }}"><input type="hidden" name="from" value="{{ frm }}"><input type="hidden" name="to" value="{{ to }}">
@@ -69,7 +90,7 @@
   </label>
   <button type="submit">보기</button>
 </form>
-<div class="card chart"><canvas id="hit-chart" aria-label="전체 일별 캐시 적중률"></canvas></div>
+<div class="chart"><canvas id="hit-chart" aria-label="전체 일별 캐시 적중률"></canvas></div>
 <div class="tbl">
 <table>
   <thead><tr><th>#</th><th>{{ effs[eff] }}</th><th class="num">적중률</th><th class="num">캐시 읽기</th><th class="num">입력</th>
@@ -90,8 +111,10 @@
   </tbody>
 </table>
 </div>
-{% if eff_more %}<p class="muted">위 200 행만 보인다 (나머지 {{ eff_more }} 행은 <code>/api/v1/efficiency?group={{ eff }}</code>).</p>{% endif %}
-<p class="muted">적중률 = 캐시 읽기 ÷ (입력 + 캐시 읽기 + 캐시 쓰기), 분모 0 이면 「—」. 정렬은 (1 − 적중률) × {{ est_note }} 비용 큰 순 — 절감 여지가 큰 곳이 위. 일자는 KST.</p>
+{% if eff_more %}<p class="muted lead">위 200 행만 보인다 (나머지 {{ eff_more }} 행은 <code>/api/v1/efficiency?group={{ eff }}</code>).</p>{% endif %}
+<p class="muted lead gap-top">적중률 = 캐시 읽기 ÷ (입력 + 캐시 읽기 + 캐시 쓰기), 분모 0 이면 「—」. 정렬은 (1 − 적중률) × {{ est_note }} 비용 큰 순 — 절감 여지가 큰 곳이 위. 일자는 KST.</p>
+</section>
+</div>
 
 <script id="insights-data" type="application/json">{{ chart | tojson }}</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -104,22 +127,37 @@
     return;
   }
   var d = JSON.parse(document.getElementById("insights-data").textContent);
-  var css = getComputedStyle(document.documentElement);
-  function tok(n) { return css.getPropertyValue(n).trim(); }
-  var palette = ["--st-running", "--st-sleeping", "--st-waiting-child", "--st-done", "--st-waiting-permission",
-                 "--st-stale", "--st-waiting-input", "--st-failed"].map(tok);
-  Chart.defaults.color = tok("--muted");
-  Chart.defaults.borderColor = tok("--line");
-  var ds = d.projects.map(function (p, i) {
-    return {type: "bar", label: p.name + " (추정 보정)", data: p.data, stack: "p", backgroundColor: palette[i % palette.length]};
-  });
-  ds.unshift({type: "line", label: "기록", data: d.rec, borderColor: tok("--muted"), backgroundColor: tok("--muted"), tension: 0.2});
-  ds.unshift({type: "line", label: "추정 보정 (D-17)", data: d.est, borderColor: tok("--accent"), backgroundColor: tok("--accent"), tension: 0.2});
-  new Chart(document.getElementById("trend-chart"), {data: {labels: d.buckets, datasets: ds},
-    options: {responsive: true, maintainAspectRatio: false, scales: {x: {stacked: true}, y: {stacked: false, title: {display: true, text: "US$ [추정] API 정가 환산"}}}}});
-  new Chart(document.getElementById("hit-chart"), {type: "line",
-    data: {labels: d.hit_days, datasets: [{label: "전체 일별 캐시 적중률 %", data: d.hit, borderColor: tok("--accent"), spanGaps: false}]},
-    options: {responsive: true, maintainAspectRatio: false, scales: {y: {min: 0, max: 100}}}});
+  /* 색은 base.html 토큰에서 읽는다 — 테마를 바꾸면(#theme-btn) 다시 그린다. */
+  var charts = [];
+  function tok(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function draw() {
+    charts.forEach(function (c) { c.destroy(); });
+    charts = [];
+    var palette = ["--st-running", "--st-sleeping", "--st-waiting-child", "--st-done", "--st-waiting-permission",
+                   "--st-stale", "--st-waiting-input", "--st-failed"].map(tok);
+    Chart.defaults.color = tok("--muted");
+    Chart.defaults.borderColor = tok("--line");
+    Chart.defaults.font.family = tok("--font");
+    Chart.defaults.plugins.legend.labels.boxWidth = 12;
+    Chart.defaults.plugins.legend.labels.font = {size: 11};
+    var ds = d.projects.map(function (p, i) {
+      return {type: "bar", label: p.name + " (추정 보정)", data: p.data, stack: "p", backgroundColor: palette[i % palette.length]};
+    });
+    ds.unshift({type: "line", label: "기록", data: d.rec, borderColor: tok("--muted"), backgroundColor: tok("--muted"), tension: 0.2});
+    ds.unshift({type: "line", label: "추정 보정 (D-17)", data: d.est, borderColor: tok("--accent"), backgroundColor: tok("--accent"), tension: 0.2});
+    charts.push(new Chart(document.getElementById("trend-chart"), {data: {labels: d.buckets, datasets: ds},
+      options: {responsive: true, maintainAspectRatio: false,
+        /* 범례는 두 선(추정 보정 · 기록)만 — 프로젝트 막대 이름은 툴팁 (프로젝트가 많으면 범례가 그래프를 덮는다) */
+        plugins: {legend: {labels: {filter: function (it) { return it.datasetIndex < 2; }}}},
+        scales: {x: {stacked: true}, y: {stacked: false, title: {display: true, text: "US$ [추정] API 정가 환산"}}}}}));
+    charts.push(new Chart(document.getElementById("hit-chart"), {type: "line",
+      data: {labels: d.hit_days, datasets: [{label: "전체 일별 캐시 적중률 %", data: d.hit, borderColor: tok("--accent"), spanGaps: false}]},
+      options: {responsive: true, maintainAspectRatio: false, scales: {y: {min: 0, max: 100}}}}));
+  }
+  draw();
+  var tb = document.getElementById("theme-btn");
+  if (tb) tb.addEventListener("click", function () { setTimeout(draw, 0); });
+  if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
 })();
 </script>
 {% endblock %}

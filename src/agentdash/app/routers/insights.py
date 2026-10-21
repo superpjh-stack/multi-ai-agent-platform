@@ -24,7 +24,7 @@ DAY_RE = r"^\d{4}-\d{2}-\d{2}$"
 DEFAULT_DAYS = {"day": 30, "week": 26 * 7, "month": 365}
 GRAIN_LABEL = {"day": "일", "week": "주 (월요일 시작)", "month": "월"}
 EFF_LABEL = {"project": "프로젝트", "session": "세션 (자손 포함)", "agent": "에이전트 (자기만)"}
-LEVEL_CLASS = {"ok": "st-DONE", "warn": "st-WAITING_INPUT", "over": "st-FAILED", "unset": "st-STALE",
+LEVEL_CLASS = {"ok": "st-DONE", "warn": "st-WAITING_PERMISSION", "over": "st-FAILED", "unset": "st-STALE",
                "no_records": "st-STALE"}
 PERIOD_LABEL = {"day": "오늘", "month": "이번 달"}
 

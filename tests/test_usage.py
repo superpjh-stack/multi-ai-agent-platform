@@ -227,17 +227,17 @@ def test_files_written_unique_over_period(home, con):
     assert U.table(con, "2026-10-15", "2026-10-15", "agent")["total"]["files_written"] == 1
 
 
-# ── 웨이브 D — DEF-QA1-002 / D-17 (차단) 임시 표기 ①: 서브에이전트 · 워크플로 출력은 「기록상 과소 (D-17)」 ──
-def test_undercount_flag_on_subagent_totals(home, con):
+# ── 2차-A R-2A-1 — totals() 는 1차 「기록상 과소」 키 없이 기록 · 추정 보정 (D-17) 만 ──
+def test_totals_est_keys_without_legacy_undercount(home, con):
     _build(home)
     ingest.ingest_all(con, run_hooks=False)
     own = U.totals(con, f"S:{SID}")
-    assert own["undercount"] is False and own["undercount_note"] is None      # 메인 세션 자기 몫은 표기 없음
     allx = U.totals(con, f"S:{SID}", descendants=True)
-    assert allx["undercount"] is True and allx["undercount_note"] == "기록상 과소 (D-17)"
-    assert allx["undercount_output"] == 7 + 3 + 11                            # 과소 의심 몫 = 자손 출력
-    assert U.totals(con, "A:c1")["undercount"] is True
+    for t in (own, allx, U.totals(con, "A:c1")):
+        assert not any(k.startswith("undercount") for k in t)                 # 1차 키 0
+        assert t["est_note"] == "추정 보정 (D-17)" and "output_est_total" in t and "cost_est_usd" in t
     assert allx["output_tokens"] == 140 + 7 + 3 + 11                          # 숫자는 원천 그대로
+    assert not hasattr(U, "LEGACY_UNDERCOUNT_NOTE")
 
 
 def test_usage_table_est_columns_replace_undercount(home, con):

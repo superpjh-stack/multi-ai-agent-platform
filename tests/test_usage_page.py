@@ -140,7 +140,7 @@ def test_timeline_segments(db):
     assert [s["state"] for s in lanes["A:a1"]["segments"]] == ["NONE", "RUNNING", "DONE"]
     assert max(c["n"] for c in j["concurrency"]) == 2
     h = _client().get("/timeline?from=2026-10-16T00:00:00Z&to=2026-10-16T04:00:00Z").text
-    assert "var(--st-RUNNING)" in h and "판정 기록 없음" in h
+    assert "seg st-RUNNING" in h and "판정 기록 없음" in h
 
 
 # ── 2차-A Task 6 — 「추정 보정 (D-17)」 표기 · CSV 두 열 (spec v0.3 §6.2) ──────────────────────────────

@@ -1,11 +1,27 @@
 """서버 렌더 SVG 조각 — D-04 일별 추이 · D-05 간트 · 동시 실행 면적. 담당 개발1. 외부 스크립트 없음.
 
-값 · 라벨은 이스케이프해서 넣는다. 색은 CSS 변수(var(--…))로만 — 다크 모드는 _dev1_style.html 이 바꾼다.
+값 · 라벨은 이스케이프해서 넣는다. 색은 base.html 토큰(var(--accent) · var(--line) · var(--muted) · 상태 클래스
+`.st-<STATE>` 의 --c)로만 — 두 테마는 토큰이 바꾼다 (spec.md v0.3 §7.3). 색 값(#hex)을 여기 쓰지 않는다.
+SVG 마다 같은 <style> 을 붙여 화면 템플릿에 따로 스타일 조각을 두지 않는다.
 """
 
 from __future__ import annotations
 
 from html import escape
+
+# 토큰만 쓰는 SVG 스타일 — 막대 · 면적 · 눈금 · 간트 (상태 막대는 class="seg st-<STATE>" 의 --c).
+STYLE = ("<style>"
+         "svg.chart{display:block;max-width:100%;font-family:var(--font)}"
+         "svg.chart .bar{fill:var(--accent)}svg.chart .bar:hover{opacity:.8}"
+         "svg.chart .grid{stroke:var(--line);stroke-width:1}"
+         "svg.chart .axis{stroke:var(--muted);stroke-opacity:.5;stroke-width:1}"
+         "svg.chart .tick{fill:var(--muted);font-size:11px}"
+         "svg.chart .area{fill:var(--accent);fill-opacity:.3;stroke:var(--accent);stroke-width:1.5}"
+         "svg.chart .hit{fill:transparent}svg.chart .hit:hover{fill:var(--accent);fill-opacity:.15}"
+         "svg.chart .lane{fill:var(--fg);font-size:11px}svg.chart a:hover .lane{fill:var(--accent);text-decoration:underline}"
+         "svg.chart .seg,svg.chart .now{fill:var(--c,var(--muted))}svg.chart .seg:hover{opacity:.75}"
+         "svg.chart .st-NONE{--c:var(--line)}"
+         "</style>")
 
 
 def fmt_int(n: float | int | None) -> str:
@@ -21,12 +37,12 @@ def fmt_int(n: float | int | None) -> str:
 def bars(points: list[tuple[str, float | None]], *, width: int = 720, height: int = 160, unit: str = "",
          fmt=fmt_int, title: str = "") -> str:
     """단일 계열 막대 (일자 → 값). 막대마다 <title> 툴팁. 값 None 은 빈 칸(0 이 아님)."""
-    pad_l, pad_r, pad_t, pad_b = 44, 8, 10, 22
+    pad_l, pad_r, pad_t, pad_b = 60, 8, 10, 22
     w, h = width - pad_l - pad_r, height - pad_t - pad_b
     vals = [v for _, v in points if v is not None]
     vmax = max(vals) if vals else 0
     out = [f'<svg class="chart" viewBox="0 0 {width} {height}" role="img" aria-label="{escape(title)}" '
-           f'preserveAspectRatio="none" width="100%" height="{height}">']
+           f'preserveAspectRatio="none" width="100%" height="{height}">', STYLE]
     out.append(f'<line class="axis" x1="{pad_l}" y1="{pad_t + h}" x2="{pad_l + w}" y2="{pad_t + h}"/>')
     if vmax > 0:
         for frac in (0.5, 1.0):
@@ -62,7 +78,7 @@ def area(points: list[tuple[float, int]], t0: float, t1: float, *, width: int = 
     w = width - left
     nmax = max((n for _, n in points), default=0)
     out = [f'<svg class="chart" viewBox="0 0 {width} {height}" role="img" aria-label="동시 실행 수" '
-           f'preserveAspectRatio="none" width="100%" height="{height}">']
+           f'preserveAspectRatio="none" width="100%" height="{height}">', STYLE]
     out.append(f'<line class="axis" x1="{left}" y1="{pad_t + h}" x2="{width}" y2="{pad_t + h}"/>')
     if points and nmax > 0 and t1 > t0:
         step = (t1 - t0) / len(points)

@@ -1,8 +1,28 @@
 {% extends "base.html" %}
-{% block head %}{% include "_dev1_style.html" %}{% endblock %}
+{% block head %}
+<style>
+  /* D-04 배치만 — 색 · 간격 · 글꼴은 base.html 토큰 (spec.md v0.3 §7.3) */
+  h1 { font-size:22px; margin:var(--sp-2) 0 var(--sp-4); }
+  h2 { font-size:15px; margin:0 0 var(--sp-3); }
+  .grid.kpis { grid-template-columns:repeat(auto-fill, minmax(min(100%, 160px), 1fr)); }
+  .stack { display:flex; flex-direction:column; gap:var(--sp-5); }
+  .filters { display:flex; flex-wrap:wrap; gap:var(--sp-2) var(--sp-3); align-items:end; }
+  .filters label { display:flex; flex-direction:column; gap:2px; font-size:13px; color:var(--muted); }
+  .filters input, .filters select, .filters button, .filters a { font:inherit; font-size:14px; padding:var(--sp-1) var(--sp-2);
+    border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); color:var(--fg); text-decoration:none; }
+  .filters button { cursor:pointer; }
+  .kpi .sub { color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+  .note { font-size:13px; margin:0; }
+  .grid.charts { grid-template-columns:repeat(auto-fit, minmax(min(100%, 420px), 1fr)); }
+  .card > .note + .note, .tbl + .note { margin-top:var(--sp-3); }
+  .tbl th { white-space:nowrap; }
+  .tbl td.name { overflow-wrap:anywhere; min-width:140px; }
+</style>
+{% endblock %}
 {% block body %}
 <h1>D-04 작업량</h1>
-<form class="filters" method="get" action="/usage">
+<div class="stack">
+<form class="filters card" method="get" action="/usage">
   <label>시작 (KST)<input type="date" name="from" value="{{ t['from'] }}"></label>
   <label>끝 (KST)<input type="date" name="to" value="{{ t['to'] }}"></label>
   <label>묶음 기준
@@ -14,33 +34,34 @@
   <a class="btn" href="/api/v1/usage?from={{ t['from'] }}&amp;to={{ t['to'] }}&amp;group={{ t.group }}&amp;format=csv">CSV 내보내기</a>
 </form>
 
-<div class="cards">
-  <div class="card"><div class="k">출력 토큰 — 기록</div><div class="n">{{ fmt(t.total.output_tokens) }}</div>
-    <div class="k" data-est-output="{{ t.total.output_est_total }}">{{ t.est_note }} <span class="est">[추정]</span> {{ fmt(t.total.output_est_total) }}</div></div>
-  <div class="card"><div class="k">입력 · 캐시 쓰기</div><div class="n">{{ fmt(t.total.input_tokens + t.total.cache_write) }}</div></div>
-  <div class="card"><div class="k">캐시 적중률</div><div class="n">{% if t.total.cache_hit is not none %}{{ '%.1f' % (t.total.cache_hit * 100) }}%{% else %}—{% endif %}</div></div>
-  <div class="card"><div class="k">도구 호출 · 요청</div><div class="n">{{ fmt(t.total.tool_calls) }} · {{ fmt(t.total.requests) }}</div></div>
-  <div class="card"><div class="k">추정 비용 — 기록 <span class="est" data-estimate="1">{{ t.estimate_label }}</span></div>
+<div class="grid kpis">
+  <div class="card kpi"><div class="k">출력 토큰 — 기록</div><div class="n">{{ fmt(t.total.output_tokens) }}</div>
+    <div class="sub" data-est-output="{{ t.total.output_est_total }}">{{ t.est_note }} <span class="badge">[추정]</span> {{ fmt(t.total.output_est_total) }}</div></div>
+  <div class="card kpi"><div class="k">입력 · 캐시 쓰기</div><div class="n">{{ fmt(t.total.input_tokens + t.total.cache_write) }}</div></div>
+  <div class="card kpi"><div class="k">캐시 적중률</div><div class="n">{% if t.total.cache_hit is not none %}{{ '%.1f' % (t.total.cache_hit * 100) }}%{% else %}—{% endif %}</div></div>
+  <div class="card kpi"><div class="k">도구 호출 · 요청</div><div class="n">{{ fmt(t.total.tool_calls) }} · {{ fmt(t.total.requests) }}</div></div>
+  <div class="card kpi"><div class="k">추정 비용 — 기록 <span class="badge" data-estimate="1">{{ t.estimate_label }}</span></div>
     <div class="n" data-total-cost="{{ '%.6f' % (t.total.cost_usd or 0) }}">{% if t.total.cost_usd is not none %}${{ '{:,.2f}'.format(t.total.cost_usd) }}{% else %}—{% endif %}</div>
-    <div class="k" data-total-cost-est="{{ '%.6f' % (t.total.cost_est_usd or 0) }}">{{ t.est_note }} <span class="est">[추정]</span> {% if t.total.cost_est_usd is not none %}${{ '{:,.2f}'.format(t.total.cost_est_usd) }}{% else %}—{% endif %}</div>
-    <div class="k" data-unpriced="{{ t.unpriced }}">단가 없음 {{ t.unpriced }} 건{% if t.unpriced_models %} ({% for m, n in t.unpriced_models %}{{ m or '모델 없음' }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}){% endif %}</div>
+    <div class="sub" data-total-cost-est="{{ '%.6f' % (t.total.cost_est_usd or 0) }}">{{ t.est_note }} <span class="badge">[추정]</span> {% if t.total.cost_est_usd is not none %}${{ '{:,.2f}'.format(t.total.cost_est_usd) }}{% else %}—{% endif %}</div>
+    <div class="sub" data-unpriced="{{ t.unpriced }}">단가 없음 {{ t.unpriced }} 건{% if t.unpriced_models %} ({% for m, n in t.unpriced_models %}{{ m or '모델 없음' }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}){% endif %}</div>
   </div>
 </div>
-<p class="muted" data-est-note="1"><b>{{ t.est_note }}</b> <span class="est">[추정]</span> — 서브에이전트 · 워크플로 기록의 출력 토큰은 스트리밍 시작값만 남은 경우가 많다. 기록값은 그대로 두고, 의심 요청(기록 출력 &lt; 30 · 내용 길이 &gt; 400 자)은 글자 수 ÷ 4 를 하한 추정으로 따로 센다 (spec.md §6.2 · decisions.md D-17). 추정 비용은 그 추정 출력을 넣은 값이다.</p>
-<p class="muted">비용은 <b>{{ t.estimate_label }}</b> 값이다 (단가표 {{ t.pricing_ver or '—' }}, spec.md §6.1). Claude Code 구독 요금제의 실제 청구와 다르다. 단가표에 없는 모델은 비용을 비우고(NULL) 「단가 없음」으로 센다 — <code>make pricing-check</code>.</p>
+<div class="card"><p class="muted note" data-est-note="1"><b>{{ t.est_note }}</b> <span class="badge">[추정]</span> — 서브에이전트 · 워크플로 기록의 출력 토큰은 스트리밍 시작값만 남은 경우가 많다. 기록값은 그대로 두고, 의심 요청(기록 출력 &lt; 30 · 내용 길이 &gt; 400 자)은 글자 수 ÷ 4 를 하한 추정으로 따로 센다 (spec.md §6.2 · decisions.md D-17). 추정 비용은 그 추정 출력을 넣은 값이다.</p>
+<p class="muted note">비용은 <b>{{ t.estimate_label }}</b> 값이다 (단가표 {{ t.pricing_ver or '—' }}, spec.md §6.1). Claude Code 구독 요금제의 실제 청구와 다르다. 단가표에 없는 모델은 비용을 비우고(NULL) 「단가 없음」으로 센다 — <code>make pricing-check</code>.</p></div>
 
-<h2>일별 추이 — 출력 토큰</h2>
-{{ svg_out | safe }}
-<h2>일별 추이 — 추정 비용 <span class="est">{{ t.estimate_label }}</span></h2>
-{{ svg_cost | safe }}
+<div class="grid charts">
+  <div class="card chart"><h2>일별 추이 — 출력 토큰</h2>{{ svg_out | safe }}</div>
+  <div class="card chart"><h2>일별 추이 — 추정 비용 <span class="badge">{{ t.estimate_label }}</span></h2>{{ svg_cost | safe }}</div>
+</div>
 
+<div class="card">
 <h2>순위 — {{ glabel[t.group] }}별 ({{ t['from'] }} ~ {{ t['to'] }}, {{ t.rows | length }} 행)</h2>
-<div class="tablewrap">
+<div class="tbl">
 <table>
   <thead><tr>
     <th>#</th><th>{{ glabel[t.group] }}</th><th class="num">요청</th><th class="num">입력</th><th class="num">캐시 읽기</th>
-    <th class="num">캐시 쓰기</th><th class="num">출력 기록</th><th class="num">출력 {{ t.est_note }} <span class="est">[추정]</span></th><th class="num">캐시 적중률</th><th class="num">도구 호출</th>
-    <th class="num">작성 파일</th><th class="num">실행 시간</th><th class="num">추정 비용 <span class="est">{{ t.estimate_label }}</span></th><th class="num">비용 {{ t.est_note }} <span class="est">[추정]</span></th>
+    <th class="num">캐시 쓰기</th><th class="num">출력 기록</th><th class="num">출력 {{ t.est_note }} <span class="badge">[추정]</span></th><th class="num">캐시 적중률</th><th class="num">도구 호출</th>
+    <th class="num">작성 파일</th><th class="num">실행 시간</th><th class="num">추정 비용 <span class="badge">{{ t.estimate_label }}</span></th><th class="num">비용 {{ t.est_note }} <span class="badge">[추정]</span></th>
   </tr></thead>
   <tbody>
   {% for r in rows %}
@@ -51,7 +72,7 @@
       <td class="num">{{ fmt(r.cache_write) }}</td><td class="num">{{ fmt(r.output_tokens) }}</td><td class="num">{{ fmt(r.output_est_total) }}</td>
       <td class="num">{% if r.cache_hit is not none %}{{ '%.1f' % (r.cache_hit * 100) }}%{% else %}—{% endif %}</td>
       <td class="num">{{ fmt(r.tool_calls) }}</td><td class="num">{{ r.files_written }}</td><td class="num">{{ hours(r.active_seconds) }}</td>
-      <td class="num">{% if r.cost_usd is not none %}${{ '{:,.2f}'.format(r.cost_usd) }}{% else %}—{% endif %}{% if r.unpriced %} <span class="warn">단가 없음 {{ r.unpriced }} 건</span>{% endif %}</td>
+      <td class="num">{% if r.cost_usd is not none %}${{ '{:,.2f}'.format(r.cost_usd) }}{% else %}—{% endif %}{% if r.unpriced %} <span class="badge st-WAITING_PERMISSION">단가 없음 {{ r.unpriced }} 건</span>{% endif %}</td>
       <td class="num">{% if r.cost_est_usd is not none %}${{ '{:,.2f}'.format(r.cost_est_usd) }}{% else %}—{% endif %}</td>
     </tr>
   {% else %}
@@ -60,6 +81,8 @@
   </tbody>
 </table>
 </div>
-{% if more %}<p class="muted">위 300 행만 보인다 (나머지 {{ more }} 행은 CSV 에).</p>{% endif %}
-<p class="muted">작성 파일은 기간 안 서로 다른 (에이전트, 경로) 수 — 일자 묶음은 그날 기준 · 실행 시간은 연속 기록 간격 ≤ 5 분 구간의 합 (D-06) · 일자는 KST.</p>
+{% if more %}<p class="muted note">위 300 행만 보인다 (나머지 {{ more }} 행은 CSV 에).</p>{% endif %}
+<p class="muted note">작성 파일은 기간 안 서로 다른 (에이전트, 경로) 수 — 일자 묶음은 그날 기준 · 실행 시간은 연속 기록 간격 ≤ 5 분 구간의 합 (D-06) · 일자는 KST.</p>
+</div>
+</div>
 {% endblock %}

@@ -1,22 +1,42 @@
 {% extends "base.html" %}
-{% block head %}{% include "_dev1_style.html" %}
+{% block head %}
 <style>
-  svg.gantt .lane { fill:var(--fg); font-size:11px; }
-  svg.gantt a:hover .lane { fill:var(--accent); text-decoration:underline; }
-  svg.gantt .seg:hover { opacity:.75; }
-</style>{% endblock %}
+  /* D-05 배치만 — 색 · 간격 · 글꼴은 base.html 토큰, 막대 색은 상태 클래스 .st-<STATE> (spec.md v0.3 §7.3) */
+  h1 { font-size:22px; margin:var(--sp-2) 0 var(--sp-4); }
+  h2 { font-size:15px; margin:0 0 var(--sp-3); }
+  .grid.kpis { grid-template-columns:repeat(auto-fill, minmax(min(100%, 160px), 1fr)); }
+  .stack { display:flex; flex-direction:column; gap:var(--sp-5); }
+  .filters { display:flex; flex-wrap:wrap; gap:var(--sp-2) var(--sp-3); align-items:end; }
+  .filters label { display:flex; flex-direction:column; gap:2px; font-size:13px; color:var(--muted); min-width:0; }
+  .filters input, .filters button { font:inherit; font-size:14px; padding:var(--sp-1) var(--sp-2); max-width:100%;
+    border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); color:var(--fg); }
+  .filters button { cursor:pointer; }
+  .note { font-size:13px; margin:var(--sp-3) 0 0; }
+  .legend { display:flex; flex-wrap:wrap; gap:var(--sp-1) var(--sp-2); margin:0 0 var(--sp-3); }
+  .kpi .n.sm { font-size:16px; }
+  .tbl svg.gantt { min-width:720px; }
+</style>
+{% endblock %}
 {% block body %}
 <h1>D-05 타임라인</h1>
-<form class="filters" method="get" action="/timeline">
+<div class="stack">
+<form class="filters card" method="get" action="/timeline">
   <label>시작 (KST 날짜 또는 ISO 시각)<input name="from" value="{{ from_v }}" placeholder="기본: 끝 − 24 시간"></label>
   <label>끝<input name="to" value="{{ to_v }}" placeholder="기본: 지금"></label>
   <button type="submit">보기</button>
 </form>
-<p class="muted">{{ range_kst }} (KST) · 에이전트 {{ d.lanes | length }}{% if d.truncated %} (앞 200 만 — 나머지 {{ d.truncated }}){% endif %} · state_log {{ d.state_log_rows }} 행</p>
-<h2>동시 실행 수</h2>
-{{ svg_area | safe }}
-<h2>간트 — 부모 아래 자식 들여쓰기</h2>
-<div class="legend">{% for s in states %}<span><i style="--c:var(--st-{{ s }})"></i>{{ '판정 기록 없음' if s == 'NONE' else s }}</span>{% endfor %}</div>
-<div class="tablewrap">{{ svg_gantt | safe }}</div>
-<p class="muted">막대 색은 그 시점의 상태(<code>state_log</code>)다. 대시보드가 처음 판정하기 전 구간은 「판정 기록 없음」으로 칠하고, 막대 끝 4 px 에 지금 상태를 붙인다. 이름을 누르면 D-03.</p>
+<div class="grid kpis">
+  <div class="card kpi"><div class="k">기간 (KST)</div><div class="n sm">{{ range_kst }}</div></div>
+  <div class="card kpi"><div class="k">에이전트</div><div class="n">{{ d.lanes | length }}</div>
+    {% if d.truncated %}<div class="k">앞 200 만 — 나머지 {{ d.truncated }}</div>{% endif %}</div>
+  <div class="card kpi"><div class="k">state_log</div><div class="n">{{ d.state_log_rows }} 행</div></div>
+</div>
+<div class="card chart"><h2>동시 실행 수</h2>{{ svg_area | safe }}</div>
+<div class="card chart">
+  <h2>간트 — 부모 아래 자식 들여쓰기</h2>
+  <div class="legend">{% for s in states %}<span class="badge st-{{ s }}">{{ '판정 기록 없음' if s == 'NONE' else s }}</span>{% endfor %}</div>
+  <div class="tbl">{{ svg_gantt | safe }}</div>
+  <p class="muted note">막대 색은 그 시점의 상태(<code>state_log</code>)다. 대시보드가 처음 판정하기 전 구간은 「판정 기록 없음」으로 칠하고, 막대 끝 4 px 에 지금 상태를 붙인다. 이름을 누르면 D-03.</p>
+</div>
+</div>
 {% endblock %}

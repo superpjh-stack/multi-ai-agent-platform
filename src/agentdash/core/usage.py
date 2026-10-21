@@ -24,10 +24,6 @@ KST = timezone(timedelta(hours=9))
 ACTIVE_GAP_SEC = 300
 #: D-17 확정 (spec v0.3 §6.2 — 대안 ②): 기록값은 그대로, 의심 요청에 output_est · cost_est_usd. 표기 「추정 보정 (D-17)」.
 UNDERCOUNT_NOTE = "추정 보정 (D-17)"
-#: 1차 임시 ① 표기 — D-03(개발2 agent.html · totals 의 undercount* 키)만 아직 쓴다. 개발2 가 output_est_total ·
-#: cost_est_usd 로 바꾸면 지운다 (progress-dev1.md §3 R-2A-1). D-04 · CSV 는 쓰지 않는다.
-UNDERCOUNT_KINDS = ("SUBAGENT", "WORKFLOW_AGENT")
-LEGACY_UNDERCOUNT_NOTE = "기록상 과소 (D-17)"
 
 
 @dataclass
@@ -205,29 +201,14 @@ def descendants(con: sqlite3.Connection, agent_key: str) -> list[str]:
 _descendants = descendants
 
 
-def _undercount_keys(con: sqlite3.Connection, keys: list[str]) -> list[str]:
-    out: list[str] = []
-    for i in range(0, len(keys), 500):
-        part = keys[i:i + 500]
-        out += [r[0] for r in con.execute(
-            f"SELECT agent_key FROM agent WHERE agent_key IN ({','.join('?' * len(part))}) "
-            f"AND kind IN ({','.join('?' * len(UNDERCOUNT_KINDS))})", [*part, *UNDERCOUNT_KINDS])]
-    return out
-
-
 def totals(con: sqlite3.Connection, agent_key: str, *, descendants: bool = False) -> dict:
     """합계. D-17 (spec §6.2): output_est_total = 의심 행은 output_est · 나머지는 output_tokens 의 합, cost_est_usd = 추정 보정 비용
-    (단가 없는 행은 더하지 않는다 — unpriced). 1차 키 undercount · undercount_note(LEGACY) · undercount_output 은 D-03 용으로 남긴다."""
+    (단가 없는 행은 더하지 않는다 — unpriced). est_note = 「추정 보정 (D-17)」 — D-03 · D-04 가 기록 칸 옆에 나란히 쓴다."""
     keys = [agent_key]
     if descendants:
         keys += _descendants(con, agent_key)
     out = _sum(con, keys)
-    flagged = _undercount_keys(con, keys)
-    sub = _sum(con, flagged) if flagged else None
-    out["undercount"] = bool(sub and sub["requests"])
-    out["undercount_note"] = LEGACY_UNDERCOUNT_NOTE if out["undercount"] else None
     out["est_note"] = UNDERCOUNT_NOTE
-    out["undercount_output"] = sub["output_tokens"] if sub else 0
     return out
 
 
