@@ -236,3 +236,21 @@ Accept: text/event-stream (또는 ?follow=1) 이면 붙잡고 실시간, 그 밖
 | pytest 전체 | 340 passed · 1 xfailed (개발1 작업 중 파일 포함) | `uv run pytest -q` |
 
 실제 브라우저 권한 창 · OS 알림 표시는 확인하지 않았다(대화상자 금지) — QA2 G-29 E2E 몫.
+
+### Task 11 — D-01 예산 경고 띠 (커밋 `b3badcb`, 개발1 공표 `eea9f69` 뒤 시작)
+바꾼 파일: `app/routers/pages.py`(`budget_band` — `budget.status` 의 warn · over 칸 전부를 「오늘 전체 85 %」 · 「alpha 이번 달 102 %」 꼴로, 색 = `budget.worst`) · `templates/_d01_body.html`(맨 위 `#budget-band`, `/?part=body` 에도 실림) · `tests/test_dashboard.py`(+2).
+- 색: over `st-FAILED`(빨강) · warn **`st-WAITING_PERMISSION`(주황)** — spec §6.3 「0.8 부터 주황」 · §4.1 주황 = WAITING_PERMISSION. 개발1 공표의 「warn = st-WAITING_INPUT(주황) 계열」 은 노랑이라 spec 색을 따랐다.
+- % 는 내림(99.9 % 를 100 % 로 보이지 않게). 칸 title 에 `$추정 / 한도 $` · 단가 없음 N 건. 문구 옆 `[추정] API 정가 환산`.
+- `budget.load()` 가 `SettingsError` 면 띠에 「예산 설정 오류 — …」 (관제판은 200, 조용히 숨기지 않음).
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| 띠 테스트 빨강 → 초록 | 전부 unset → 띠 없음 · 일 한도 100 · 오늘 85 → 띠 · `/insights` · `85 %` · 주황 · 102 → `st-FAILED` `102 %` · 여러 칸(월 92 % warn + alpha 월 102 % over) → 빨강 · ok 만 → 없음 · 설정 오류 표시 | `uv run pytest -q tests/test_dashboard.py -k budget` (2 passed) |
+| pytest 전체 | 362 passed · 1 failed (`tests/test_insights.py::test_trend_and_efficiency_api` — 개발1 Task 8 작업 중, 미커밋 파일) · 1 xfailed | `uv run pytest -q` |
+| make gate (기본 DB) | PASS 24 · FAIL 4 · 미검증 2. FAIL = G-04 · G-07 (Phase 0 부터, D-22 개발1) · G-24 · G-27 (개발1). G-23 · G-26 · G-28 PASS · G-29 · G-30 미검증 (QA 표지) — G-01~G-22 판정은 Phase 0 와 같음(회귀 0) | `make gate` |
+
+### 3 요청 (2차-A)
+- **R-2A-dev2-1 → 개발1 (메모)**: `model.set_state` 가 `agent.state` 를 **커밋 전에** 내보낸다 — `_alerts.html` 이 상세를 250 ms × 4 회 다시 읽어 버틴다. 커밋 뒤로 미룰 수 있으면 좋다(필수 아님).
+- **R-2A-dev2-2 → 개발1 (메모)**: 공표의 띠 warn 색 「st-WAITING_INPUT(주황)」 은 노랑 — D-01 은 spec 주황(`st-WAITING_PERMISSION`)을 썼다. D-07 게이지도 같은 색으로 맞추면 좋다.
+- **R-2A-dev2-3 → 아키텍트 · QA2 (메모)**: 알림은 탭마다 SSE 를 하나 더 연다(D-01 · D-02 · D-03 은 탭당 2). HTTP/1.1 호스트당 6 연결 — 같은 화면 탭 3 개 넘게면 막힐 수 있음. 웨이브 B Task 13 에서 `openStream` 이 `agentdashAlerts.stream` 을 같이 쓰게 합친다.
+- **R-2A-dev2-4 → QA2 (G-29)**: 리더 수단은 Web Locks(`agentdashAlerts.mode == "locks"`) 우선, 없으면 BroadcastChannel. E2E 는 `window.agentdashAlerts.{waiting, seen, leader, notified}` 를 읽으면 된다.
