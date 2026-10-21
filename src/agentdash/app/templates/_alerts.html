@@ -1,0 +1,235 @@
+{# WAITING 알림 (spec.md v0.3 §7.2 · G-29) — 담당 개발2. base.html 이 </body> 앞에서 한 번 싣는다. 서버 변경 없음.
+   · SSE agent.state 를 받아 WAITING_INPUT · WAITING_PERMISSION 으로 바뀌는 순간만 Notification (본문 = 프로젝트 · 이름, 누르면 D-03).
+   · (agent_key, state_since) 한 번 — 키 `key|since` 를 localStorage agentdash.seen (최근 200) 에 남긴다.
+   · 첫 로드(그리고 SSE 재연결)는 지금 대기 목록으로 배지만 채우고 알리지 않는다.
+   · 탭이 여럿이면 한 탭(리더)만 알린다 — 리더는 먼저 잡은 탭: Web Locks 가 있으면 잠금 "agentdash-alerts",
+     없으면 BroadcastChannel "agentdash-alerts" 의 생존 신호로 가장 먼저 열린 탭. 알린 키는 같은 채널로 다른 탭에 알린다.
+   · 배지: 탭 제목 앞 "(N) " + 파비콘 점, N = 지금 WAITING_* 수. 켜짐/꺼짐은 localStorage agentdash.alerts (on|off) 에만.
+   · 권한 거부 · 미지원이면 버튼에 「알림 불가 — 배지만」. 브라우저 대화상자(alert · confirm)는 쓰지 않는다. #}
+<script id="agentdash-alerts">
+(function () {
+  "use strict";
+  var WAIT = { WAITING_INPUT: "입력 대기", WAITING_PERMISSION: "권한 대기" };
+  var LS_ON = "agentdash.alerts", LS_SEEN = "agentdash.seen", CH = "agentdash-alerts", SEEN_MAX = 200;
+  var loadedAt = Date.now();
+  var A = window.agentdashAlerts = {
+    waiting: new Set(),        // 지금 WAITING_* 인 agent_key (배지 N)
+    seen: new Set(),           // 이미 처리한 전이 "agent_key|state_since"
+    states: {},                // agent_key → WAITING_* 상태 (파비콘 색)
+    leader: false, ready: false, notified: 0, skipped: 0, events: 0, mode: "?"
+  };
+
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* 사생활 모드 — 이 탭 메모리만 */ } }
+  function loadSeen() {
+    var raw = lsGet(LS_SEEN), arr = [];
+    try { arr = JSON.parse(raw || "[]"); } catch (e) { arr = []; }
+    if (Array.isArray(arr)) arr.forEach(function (k) { if (typeof k === "string") A.seen.add(k); });
+  }
+  function saveSeen(k) {
+    var arr = [];
+    try { arr = JSON.parse(lsGet(LS_SEEN) || "[]"); } catch (e) { arr = []; }
+    if (!Array.isArray(arr)) arr = [];
+    if (arr.indexOf(k) < 0) arr.push(k);
+    if (arr.length > SEEN_MAX) arr = arr.slice(arr.length - SEEN_MAX);
+    lsSet(LS_SEEN, JSON.stringify(arr));
+  }
+  loadSeen();
+
+  // ── 권한 · 버튼 ────────────────────────────────────────────────
+  var supported = "Notification" in window;
+  function perm() { return supported ? Notification.permission : "unsupported"; }
+  function enabled() { return lsGet(LS_ON) === "on" && perm() === "granted"; }
+  A.perm = perm; A.enabled = enabled;
+  var btn = document.getElementById("alerts-btn");
+  function label() {
+    if (!btn) return;
+    var p = perm();
+    if (p === "unsupported" || p === "denied") {
+      btn.textContent = "알림 불가 — 배지만";
+      btn.disabled = true;
+      btn.title = p === "denied" ? "브라우저가 알림을 거부함 — 탭 제목 배지만 씀 (브라우저 사이트 설정에서 바꿀 수 있음)"
+                                 : "이 브라우저는 Notification 을 지원하지 않음 — 탭 제목 배지만 씀";
+      btn.setAttribute("aria-pressed", "false");
+      return;
+    }
+    btn.disabled = false;
+    var on = enabled();
+    btn.textContent = on ? "알림 끄기" : "알림 켜기";
+    btn.title = on ? "WAITING 알림 켜짐 — 누르면 끔" : "입력 · 권한 대기가 되는 순간 브라우저 알림 (spec §7.2)";
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  }
+  if (btn) btn.addEventListener("click", function () {
+    if (enabled()) { lsSet(LS_ON, "off"); label(); return; }
+    if (perm() === "granted") { lsSet(LS_ON, "on"); label(); return; }
+    if (!supported) { label(); return; }
+    var done = function (p) { if (p === "granted") lsSet(LS_ON, "on"); label(); };
+    var r = Notification.requestPermission(done);            // 옛 브라우저는 콜백, 새 브라우저는 Promise
+    if (r && typeof r.then === "function") r.then(done, function () { label(); });
+  });
+  label();
+
+  // ── 배지: 탭 제목 "(N) " + 파비콘 점 ────────────────────────────
+  var icon = null;
+  function favicon(n) {
+    if (!icon) {
+      icon = document.createElement("link"); icon.rel = "icon"; icon.id = "agentdash-alerts-icon";
+      document.head.appendChild(icon);
+    }
+    var c = document.createElement("canvas"); c.width = c.height = 32;
+    var g = c.getContext && c.getContext("2d");
+    if (!g) return;
+    var css = getComputedStyle(document.documentElement);
+    g.fillStyle = css.getPropertyValue("--accent").trim() || "#2563c9";
+    g.fillRect(4, 4, 24, 24);
+    if (n > 0) {
+      var hasPerm = false;
+      A.waiting.forEach(function (k) { if (A.states[k] === "WAITING_PERMISSION") hasPerm = true; });
+      g.beginPath(); g.arc(23, 9, 9, 0, 2 * Math.PI);
+      g.fillStyle = css.getPropertyValue(hasPerm ? "--st-waiting-permission" : "--st-waiting-input").trim() || "#d9650a";
+      g.fill();
+    }
+    icon.href = c.toDataURL("image/png");
+  }
+  function badge() {
+    var n = A.waiting.size;
+    var base = document.title.replace(/^\(\d+\) /, "");
+    document.title = (n > 0 ? "(" + n + ") " : "") + base;
+    favicon(n);
+  }
+
+  // ── 리더 탭 (한 탭만 알린다) ─────────────────────────────────────
+  var me = { id: Math.random().toString(36).slice(2) + Date.now().toString(36), born: loadedAt };
+  var ch = null, peers = {};
+  try { ch = "BroadcastChannel" in window ? new BroadcastChannel(CH) : null; } catch (e) { ch = null; }
+  function post(m) { if (ch) { m.id = me.id; m.born = me.born; try { ch.postMessage(m); } catch (e) { /* 닫힘 */ } } }
+  if (ch) {
+    ch.onmessage = function (ev) {
+      var m = ev.data || {};
+      if (m.id === me.id) return;
+      if (m.t === "hello" || m.t === "ping") {
+        peers[m.id] = { born: m.born, at: Date.now() };
+        if (m.t === "hello") post({ t: "ping" });
+      } else if (m.t === "bye") {
+        delete peers[m.id];
+      } else if (m.t === "seen" && typeof m.k === "string") {
+        A.seen.add(m.k);
+      }
+      if (A.mode === "channel") A.leader = channelLeader();
+    };
+    window.addEventListener("pagehide", function () { post({ t: "bye" }); });
+  }
+  function channelLeader() {
+    var now = Date.now();
+    for (var id in peers) {
+      var p = peers[id];
+      if (now - p.at > 75000) { delete peers[id]; continue; }   // 숨은 탭 타이머는 1 분까지 늦어진다
+      if (p.born < me.born || (p.born === me.born && id < me.id)) return false;
+    }
+    return true;
+  }
+  if (navigator.locks && navigator.locks.request) {
+    A.mode = "locks";
+    navigator.locks.request(CH, function () {                 // 먼저 잡은 탭이 쥐고 있다가 닫히면 다음 탭으로
+      A.leader = true;
+      return new Promise(function () {});
+    });
+  } else if (ch) {
+    A.mode = "channel";
+    A.leader = channelLeader();
+    setInterval(function () { post({ t: "ping" }); A.leader = channelLeader(); }, 2000);
+  } else {
+    A.mode = "single"; A.leader = true;
+  }
+  post({ t: "hello" });
+
+  // ── 전이 처리 ───────────────────────────────────────────────
+  function projectOf(a) {
+    var p = (a && a.project_path) || "";
+    var parts = p.split("/").filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : ((a && a.project_key) || "");
+  }
+  function detail(key, want, tries) {
+    return fetch("/api/v1/agents/" + encodeURIComponent(key), { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        // agent.state 는 DB 커밋 직전에 나간다 — 저장값이 아직 옛것이면 잠깐 뒤 다시 읽는다
+        if (d && d.found && d.state && d.state.db !== want && tries > 0) {
+          return new Promise(function (ok) { setTimeout(ok, 250); }).then(function () { return detail(key, want, tries - 1); });
+        }
+        return d;
+      });
+  }
+  function notify(key, state, d) {
+    var a = d.agent || {};
+    var body = [projectOf(a), a.name || a.agent_type || key].filter(Boolean).join(" · ");
+    var k = key + "|" + d.state.since;
+    try {
+      var n = new Notification(WAIT[state], { body: body, tag: k });
+      n.onclick = function () { try { window.focus(); } catch (e) {} location.href = "/agents/" + encodeURIComponent(key); n.close(); };
+      A.notified += 1;
+    } catch (e) {
+      A.error = String(e && e.message || e).slice(0, 120);   // 알림 생성 실패 — 배지는 그대로
+    }
+  }
+  function onWaiting(key, state) {
+    if (!A.leader) return;                                   // 다른 탭이 알린다 (그 탭이 "seen" 을 보낸다)
+    detail(key, state, 4).then(function (d) {
+      if (!d || !d.found || !d.state || !WAIT[d.state.db] || !d.state.since) { A.skipped += 1; return; }
+      var k = key + "|" + d.state.since;                    // (agent_key, state_since) 한 번
+      loadSeen();
+      if (A.seen.has(k)) { A.skipped += 1; return; }
+      A.seen.add(k); saveSeen(k); post({ t: "seen", k: k });
+      var since = Date.parse(d.state.since);
+      if (!isNaN(since) && since < loadedAt) { A.skipped += 1; return; }   // 화면을 열기 전부터 대기 중
+      if (enabled()) notify(key, d.state.db, d);
+    }, function () { A.skipped += 1; });
+  }
+  function handle(ev) {
+    A.events += 1;
+    var key = ev.agent_key, state = ev.state;
+    if (!key) return;
+    if (WAIT[state]) { A.waiting.add(key); A.states[key] = state; }
+    else { A.waiting.delete(key); delete A.states[key]; }
+    badge();
+    if (WAIT[state]) onWaiting(key, state);                  // 같은 전이를 두 번 받아도 seen 이 막는다
+  }
+
+  // ── 지금 대기 목록 (첫 로드 · 재연결 — 알리지 않음) ─────────────────
+  var queue = [];
+  function sync() {
+    return fetch("/api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000", { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && Array.isArray(d.agents)) {
+          A.waiting = new Set(); A.states = {};
+          d.agents.forEach(function (a) {
+            if (WAIT[a.state]) { A.waiting.add(a.agent_key); A.states[a.agent_key] = a.state; }
+          });
+        }
+        badge();
+      }, function () { badge(); })
+      .then(function () {
+        if (!A.ready) { A.ready = true; var q = queue; queue = []; q.forEach(handle); }
+      });
+  }
+
+  var es = new EventSource("/api/v1/stream?follow=1");
+  A.stream = es;
+  var opened = false;
+  es.onopen = function () { if (opened) sync(); opened = true; };   // 재연결 — 놓친 사이의 대기 수를 다시 맞춘다 (알리지 않음)
+  es.addEventListener("agent.state", function (e) {
+    var d = null;
+    try { d = JSON.parse(e.data); } catch (err) { d = null; }
+    if (!d) return;
+    if (A.ready) handle(d); else queue.push(d);
+  });
+  window.addEventListener("storage", function (e) {
+    if (e.key === LS_ON) label();
+    if (e.key === LS_SEEN) loadSeen();
+  });
+  window.addEventListener("pagehide", function () { try { es.close(); } catch (e) {} });
+  badge();
+  sync();
+})();
+</script>
