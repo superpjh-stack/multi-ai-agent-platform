@@ -261,3 +261,44 @@ Accept: text/event-stream (또는 ?follow=1) 이면 붙잡고 실시간, 그 밖
 - `templates/agent.html`: 「기록상 과소 (D-17)」 매크로(`under` · `data-undercount`)를 지우고, 작업량 표 출력 · 비용 칸마다 기록 숫자 옆에 `[추정] 추정 보정 (D-17) <값>` (`usage.totals()` 의 `output_est_total` · `cost_est_usd` · `est_note`, 비용 NULL 이면 「단가 없음」). 자기 · 자손 포함 두 칸 모두, 늘 나란히 (spec §6.2 표기).
 - D-03 은 이제 `undercount` · `undercount_note` · `undercount_output` 을 읽지 않는다 → **개발1 이 `totals()` 의 `undercount*` 키 · `LEGACY_UNDERCOUNT_NOTE` 를 지워도 된다** (`tests/test_usage.py:230~237` 은 개발1 소유 — 같이 정리).
 - 테스트: `tests/test_dashboard.py::test_d03_undercount_note_d17` → `test_d03_estimate_note_d17` (A:kid output_est 4,321 · cost_est $0.25 → 칸별 표기 2 · 자손 포함 5,555 · $0.3750 · 「기록상 과소」 0). `uv run pytest -q tests/test_dashboard.py` 12 passed · 전체 370 passed · 1 xfailed.
+
+### Task 13 — D-01 · D-02 · D-03 공통 틀 (spec v0.3 §7.3)
+바꾼 파일: `templates/{dashboard,_d01_body,graph,agent,agent_raw,_alerts}.html` · 새 `templates/_live.html` (스크립트만 — 상태 이름 `state_ko|tojson` · `stColor`(토큰 `--st-<state>` 를 getComputedStyle) · `stateBadge` · `onThemeChange` · `copyText` · `openStream`) · **`templates/_dev2_style.html` 삭제** · `tests/test_alerts.py` (+1 · 화면별 EventSource 1 검사).
+- 세 화면 모두 base 토큰 · 공통 클래스(`.card .grid .kpi .tbl .badge .st-<STATE> .chart`)로. 화면별 `<style>` 은 `{% block head %}` 의 배치만(개발1 insights 와 같은 방식) — hex 색 0, 색 · 간격 · 글꼴은 전부 `var(--…)`. 옛 `.pill` + 인라인 `--c:var(--st-X)` → `badge st-X`.
+- D-01: 상태 KPI 카드(위 테두리 = 상태 색) · **살아 있는 상태 분포 막대(차트)** · 내 차례 표 · 살아 있는 에이전트 카드 · 오늘 KPI 2×2 · 상위 5 가로 막대 · 파싱 오류 · 최근 상태 변화. 데스크톱 2 열(2:1), 1000 px 아래 1 열.
+- D-02: 필터 카드(보기 세그먼트 버튼 · 범례 = 상태 배지) · 구성도 카드 + 요약 패널 카드. **Cytoscape 스타일 = `buildStyle()` 가 토큰을 읽어 만든다**, 머리글 토글(data-theme MutationObserver) · 시스템 설정 변경 시 `cy.style(buildStyle())` 로 다시 칠함(`window.__graphThemeRedraws`).
+- D-03: KPI 5 (출력 · 비용 = 기록 큰 숫자 + `[추정] 추정 보정 (D-17)` 작은 줄) · 정보 · 판정 · 작업량 표 · 시간대 막대 차트 · 자식 · 상태 이력 · 작성 파일 · 도구 타임라인 · 원본 보기. 좁은 폭에서 큰 표는 `.tbl.wide`(표 min-width 600) — 칸을 짓누르지 않고 표 안에서만 가로로 민다.
+
+### R-2A-dev2-3 — SSE 탭당 1 연결
+- `_alerts.html` 의 EventSource 하나에 `agentdashAlerts.subscribe(handlers, statusEl)` 를 더했다 (agent.state · agent.new · agent.usage · edge.new 를 구독자에게 나눠 줌, 상태 칸 「실시간: 연결됨 / 끊김 — 다시 연결 중」). 화면 스크립트는 `_live.html` 의 `openStream` 으로 붙는다 — `_alerts` 가 `</body>` 앞이라 먼저 부른 구독은 `window.agentdashStreamQueue` 에 있다가 붙는다. 처리기 오류는 상태 칸 · console.error 로 드러낸다(삼키지 않음). base.html 수정 불필요.
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| 화면 HTML 의 `new EventSource(` | 화면 7 모두 1 | `uv run pytest -q tests/test_alerts.py` (13 passed) |
+| 실제 연결 수 | 탭 2 개(D-01 · D-02) 열린 상태 서버 ESTABLISHED 브라우저 연결 **2 = 탭당 1** (전: 탭당 2) · 각 탭 `subscribers()` 1 · D-03 탭도 1 | `lsof -nP -iTCP:8097 -sTCP:ESTABLISHED` · `agentdashAlerts.subscribers()` |
+| 390 px 가로 스크롤 | D-01 · D-02 · D-03 × 밝은 · 다크 = 6/6 `scrollWidth == clientWidth` (375 = 390 − 세로 막대), 표 밖으로 넘친 요소 0 · 1400 px 도 6/6 | 같은 출처 iframe(폭 390 · 1400) 안 `documentElement.scrollWidth` — 창 크기 바꾸기가 듣지 않아 iframe 으로 잼 |
+| 테마 전환 다시 그림 | D-02 밝은 → 토글 → `data-theme=dark` · `__graphThemeRedraws` +1 · `--st-running` `#34c06f` 로 다시 칠함 | Chrome `javascript_tool` |
+| 대비 | 48 쌍 · 글자 최소 5.6:1 · 도형 3.3:1 | `uv run python src/agentdash/tools/check_contrast.py` |
+| 스크린샷 (커밋 안 함, D-07) | `outputs/e2e/dev2-design/` 16 장 (d01 · d02 · d03 × light/dark × 390/1400) — 디자인 DB 는 `data/agentdash-v2a-verify.db` 복사본 + `AGENTDASH_NO_WATCH=1` (원천 안 읽음) | |
+
+### 알림 회귀 (가짜 루트 `data/fake-alerts/` · DB `data/agentdash-dev2-alerts.db` 새로 · 8097 · 살아 있는 `sleep` pid · 훅 = `curl POST /hooks/event`, Notification 은 로드 뒤 기록용 가짜)
+| 단계 | 결과 |
+|---|---|
+| 첫 로드 (세션 1 이미 WAITING_INPUT) | 탭 A `/` · 탭 B `/graph` 제목 `(1)` · 알림 0 · 이벤트 0 |
+| 전이 (세션 2 permission_prompt) | 알림 **1** (리더 A 「권한 대기」 `alert-proj · alert-2`) · B 0 · 두 탭 `(2)` · D-01 피드에 같은 이벤트(공유 연결) |
+| 재전송 | `changed:false` · 이벤트 0 · 알림 추가 0 |
+| 새로고침 | A 새로고침 → 알림 0 · 이벤트 0 · 리더 B 로 넘어감 |
+| 두 탭 | 세션 1 UserPromptSubmit → idle_prompt → B 알림 1 · A 0 (합 1) · A 피드 새 줄 2 |
+| 콘솔 오류 | 두 탭 0 (D-03 탭 포함) |
+| 정리 | 서버 · sleep 은 띄운 PID 만 kill · 8097 LISTEN 0 · 탭 닫음 · `~/.claude/settings.json` mtime 1792131308 · sha1 `8641eb22e8f5` 그대로 |
+
+| 회귀 | 실측 | 명령 |
+|---|---|---|
+| pytest 전체 | **371 passed · 1 failed** = `tests/test_design.py::test_no_dev_style_includes` **XPASS(strict) — 정상** (개발1 7639db1 · 개발2 모두 `_dev*_style` 0). 그것만 빼면 371 passed · 1 deselected | `uv run pytest -q` · `… --deselect tests/test_design.py::test_no_dev_style_includes` |
+| make gate (기본 DB) | PASS 25 · FAIL 4 · 미검증 1 — FAIL = G-14 · G-30 (둘 다 위 XPASS: check_readonly 의 `pytest -x` · test_design) · G-24 · G-27 (기본 DB `output_est` 미채움 = D-24, 화면 무관) | `make gate` |
+| make gate (새 DB) | **PASS 27 · FAIL 2 · 미검증 1** — FAIL = G-14 · G-30 (XPASS 만) · G-29 미검증(QA 표지) | `AGENTDASH_DB=data/agentdash-v2a-verify.db make gate` |
+
+### 3 요청 (웨이브 B)
+- **R-2B-dev2-1 → 아키텍트**: `tests/test_design.py::test_no_dev_style_includes` 의 **xfail 해제** (개발1 · 개발2 둘 다 `_dev*_style` include 0 — 지금 XPASS(strict) 로 G-14 · G-30 이 FAIL). 해제하면 base 의 1차 별칭(`--warn --card --soft --st-RUNNING …`)도 개발2 화면은 더 쓰지 않는다(D-01~D-03 은 새 토큰만).
+- **R-2B-dev2-2 → 아키텍트 (선택)**: base.html 다크 블록에 `color-scheme: dark` (밝은 쪽 `light`) — 다크에서 표 · 피드 안 스크롤 막대와 select 가 밝게 그려진다(스크린샷 `d01-dark-390-table.jpg`). 화면에서 고칠 수 없는 브라우저 기본 부품이라 토큰 쪽 일.
+- **R-2B-dev2-3 → QA2 (G-29 · G-30)**: 화면 스크립트는 `agentdashAlerts.subscribe` 로 SSE 를 같이 쓴다 — 탭당 연결 1 은 `agentdashAlerts.subscribers()` · 서버 ESTABLISHED 로 잴 수 있다. D-02 테마 전환 다시 그림 = `window.__graphThemeRedraws`.

@@ -1,23 +1,50 @@
 {% extends "base.html" %}
-{% block body %}
-{% include "_dev2_style.html" %}
+{% block head %}
+{% include "_live.html" %}
 <style>
-  .gwrap { display:grid; grid-template-columns: minmax(0, 1fr) 300px; gap:12px; }
-  @media (max-width: 900px) { .gwrap { grid-template-columns: minmax(0, 1fr); } }
-  #cy { width:100%; height:70vh; min-height:420px; border:1px solid var(--line); border-radius:10px; background:var(--card); }
-  .filters { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; font-size:13px; margin-bottom:8px; }
-  .filters label { white-space:nowrap; }
-  .filters select, .filters input { font-size:13px; max-width:220px; }
-  .views button { font-size:13px; padding:3px 10px; border:1px solid var(--line); background:var(--soft); color:var(--fg); border-radius:6px; cursor:pointer; }
-  .views button.on { background:var(--accent); color:#fff; border-color:var(--accent); }
-  #panel { font-size:13px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px; min-width:0; overflow-wrap:anywhere; }
-  .legend span { display:inline-block; margin-right:8px; font-size:12px; }
-  .legend i { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:3px; vertical-align:middle; }
-  #gerr { color:var(--warn); }
+  /* D-02 배치만 — 색 · 간격 · 글꼴은 base.html 토큰 · 공통 부품 (spec.md v0.3 §7.3).
+     Cytoscape 노드 · 엣지 색도 토큰을 getComputedStyle 로 읽고, 테마가 바뀌면 다시 그린다. */
+  main { max-width:1440px; }
+  .page-h { display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--sp-1) var(--sp-3); margin:var(--sp-2) 0 var(--sp-4); }
+  .page-h h1 { font-size:22px; margin:0; }
+  .live-st { font-size:12px; color:var(--muted); }
+  .filters { display:flex; flex-wrap:wrap; gap:var(--sp-3) var(--sp-4); align-items:end; }
+  .filters label { display:flex; flex-direction:column; gap:2px; font-size:12px; color:var(--muted); min-width:0; }
+  .filters label.chk { flex-direction:row; align-items:center; gap:var(--sp-1); color:var(--fg); font-size:13px; }
+  .filters select, .filters input[type=number] { font:inherit; font-size:13px; padding:var(--sp-1) var(--sp-2); max-width:220px;
+    border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface); color:var(--fg); }
+  .filters input[type=number] { width:110px; }
+  .views { display:inline-flex; border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden; }
+  .views button { font:inherit; font-size:13px; padding:var(--sp-1) var(--sp-3); border:0; border-right:1px solid var(--line);
+    background:var(--surface); color:var(--fg); cursor:pointer; }
+  .views button:last-child { border-right:0; }
+  .views button.on { background:var(--accent); color:var(--bg); }
+  .legend { display:flex; flex-wrap:wrap; gap:var(--sp-1) var(--sp-2); align-items:center; margin:var(--sp-3) 0 0; font-size:12px; }
+  .legend .hint { color:var(--muted); }
+  .gstat { font-size:12px; color:var(--muted); margin:var(--sp-3) 0 0; overflow-wrap:anywhere; }
+  #gerr { color:var(--st-failed-fg); margin:var(--sp-2) 0 0; }
+  #gerr:empty { display:none; }
+  .gwrap { display:grid; gap:var(--sp-4); grid-template-columns:minmax(0, 1fr); margin-top:var(--sp-4); }
+  @media (min-width: 1000px) { .gwrap { grid-template-columns:minmax(0, 1fr) 320px; } }
+  #cy { width:100%; height:72vh; min-height:420px; border:1px solid var(--line); border-radius:var(--radius);
+        background:var(--surface); box-shadow:var(--shadow); }
+  #panel { font-size:13px; overflow-wrap:anywhere; align-self:start; }
+  #panel h2 { font-size:15px; margin:0 0 var(--sp-2); }
+  #panel p { margin:var(--sp-2) 0; }
+  .kv { display:grid; grid-template-columns:max-content minmax(0, 1fr); gap:var(--sp-1) var(--sp-3); margin:var(--sp-3) 0 0; }
+  .kv dt { color:var(--muted); } .kv dd { margin:0; overflow-wrap:anywhere; }
+  .ev { color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+  .warn { color:var(--st-waiting-permission-fg); }
+  code { font-family:var(--font-mono); font-size:12px; overflow-wrap:anywhere; }
+  #panel button { font:inherit; font-size:13px; padding:var(--sp-1) var(--sp-3); border:1px solid var(--line); border-radius:var(--radius-sm);
+                  background:var(--bg); color:var(--fg); cursor:pointer; }
 </style>
-<h1>D-02 네트워크 구성도 <span class="sse" id="sse">실시간: 연결 전</span></h1>
+{% endblock %}
+{% block body %}
+<div class="page-h"><h1>D-02 네트워크 구성도</h1><span class="live-st" id="sse">실시간: 연결 전</span></div>
+<section class="card">
 <form class="filters" id="filters" onsubmit="return false">
-  <span class="views" id="views">
+  <span class="views" id="views" role="group" aria-label="보기">
     <button type="button" data-view="tree">계층</button>
     <button type="button" data-view="collab">협업</button>
     <button type="button" data-view="pipeline">파이프라인</button>
@@ -31,18 +58,19 @@
     <option value="WORKFLOW">워크플로</option></select></label>
   <label>상태 <select name="state"><option value="">전체</option>
     {% for s in states %}<option value="{{ s }}">{{ state_ko[s] }}</option>{% endfor %}</select></label>
-  <label>최소 출력 토큰 <input name="min_tokens" type="number" min="0" step="1000" value="0" style="width:90px"></label>
-  <label><input name="handback" type="checkbox"> handback 보기</label>
+  <label>최소 출력 토큰 <input name="min_tokens" type="number" min="0" step="1000" value="0"></label>
+  <label class="chk"><input name="handback" type="checkbox"> handback 보기</label>
 </form>
 <div class="legend">
-  {% for s in states %}<span><i style="background:var(--st-{{ s }})"></i>{{ state_ko[s] }}</span>{% endfor %}
-  <span>(!) 사람 행동 필요 · (?) 확인 · 점선 = 부모 미확인/외부 · "+N" = 접힌 DONE 서브에이전트</span>
+  {% for s in states %}<span class="badge st-{{ s }}">{{ state_ko[s] }}</span>{% endfor %}
+  <span class="hint">(!) 사람 행동 필요 · (?) 확인 · 점선 = 부모 미확인/외부 · "+N" = 접힌 DONE 서브에이전트</span>
 </div>
-<p class="muted" id="gstat" style="font-size:12px">불러오는 중…</p>
+<p class="gstat" id="gstat">불러오는 중…</p>
 <p id="gerr"></p>
+</section>
 <div class="gwrap">
-  <div id="cy" role="img" aria-label="에이전트 구성도"></div>
-  <aside id="panel"><p class="muted">노드를 누르면 요약, 두 번 누르면 상세(D-03).</p></aside>
+  <div id="cy" class="chart" role="img" aria-label="에이전트 구성도"></div>
+  <aside id="panel" class="card"><p class="muted">노드를 누르면 요약, 두 번 누르면 상세(D-03).</p></aside>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
 <script>
@@ -63,36 +91,51 @@
   if (!q.get("since")) form.elements.since.value = "24h";
   form.elements.handback.checked = q.get("handback") === "1";
 
-  var C = {}; Object.keys(STATE_KO).forEach(function (s) { C[s] = stColor(s); });
-  var css = getComputedStyle(document.documentElement);
-  var fg = css.getPropertyValue("--fg").trim() || "#222", muted = css.getPropertyValue("--muted").trim() || "#888",
-      accent = css.getPropertyValue("--accent").trim() || "#2f6fdb";
-  var style = [
-    {selector: "node", style: {"label": "data(display)", "font-size": 10, "color": fg, "text-valign": "bottom",
-      "text-margin-y": 3, "text-wrap": "ellipsis", "text-max-width": 140, "width": "data(size)", "height": "data(size)",
-      "background-color": "#b0b0b0", "border-width": 1, "border-color": muted,
-      "transition-property": "border-width, border-color", "transition-duration": "0.6s"}},
-    {selector: "node[kind='PROJECT']", style: {"shape": "round-rectangle", "background-opacity": 0.06,
-      "background-color": accent, "border-width": 1, "border-color": muted, "label": "data(label)",
-      "text-valign": "top", "font-size": 12, "font-weight": 600, "padding": 14}},
-    {selector: "node[kind='SESSION']", style: {"border-width": 4, "border-color": fg}},
-    {selector: "node[kind='WORKFLOW']", style: {"shape": "hexagon", "width": 40, "height": 36}},
-    {selector: ".unresolved", style: {"border-style": "dashed", "border-width": 2, "background-opacity": 0, "border-color": muted}},
-    {selector: ".slow", style: {"border-style": "dashed", "border-color": muted, "border-width": 3}},
-    {selector: ".ctx", style: {"opacity": 0.45}},
-    {selector: ".pulse", style: {"border-width": 7, "border-color": C.RUNNING}},
-    {selector: ":selected", style: {"overlay-color": accent, "overlay-opacity": 0.2}},
-    {selector: "edge", style: {"width": 1.5, "curve-style": "bezier", "line-color": muted, "target-arrow-color": muted,
-      "target-arrow-shape": "triangle", "arrow-scale": 0.7, "opacity": 0.8}},
-    {selector: ".e-message", style: {"line-style": "dashed", "width": "data(width)", "line-color": accent, "target-arrow-color": accent}},
-    {selector: ".e-handback", style: {"width": 0.7, "display": "none"}},
-    {selector: ".e-workflow", style: {"line-color": C.WAITING_CHILD, "target-arrow-color": C.WAITING_CHILD}},
-    {selector: "edge.unresolved", style: {"line-style": "dashed"}}
-  ];
-  Object.keys(C).forEach(function (s) { style.push({selector: "node[state='" + s + "']", style: {"background-color": C[s]}}); });
-  style.push({selector: "node[kind='PROJECT']", style: {"background-color": accent}});
-  var cy = cytoscape({container: document.getElementById("cy"), style: style, wheelSensitivity: 0.3,
+  // 색은 base.html 토큰에서 읽는다 — 테마(머리글 토글 · 시스템)가 바뀌면 buildStyle() 로 다시 칠한다
+  var C = {};
+  function buildStyle() {
+    Object.keys(STATE_KO).forEach(function (s) { C[s] = stColor(s); });
+    var fg = cssVar("--fg"), muted = cssVar("--muted"), accent = cssVar("--accent"), surface = cssVar("--surface"),
+        line = cssVar("--line");
+    var style = [
+      {selector: "node", style: {"label": "data(display)", "font-size": 10, "color": fg, "text-valign": "bottom",
+        "text-margin-y": 3, "text-wrap": "ellipsis", "text-max-width": 140, "width": "data(size)", "height": "data(size)",
+        "text-outline-color": surface, "text-outline-width": 2,
+        "background-color": muted, "border-width": 1, "border-color": surface,
+        "transition-property": "border-width, border-color", "transition-duration": "0.6s"}},
+      {selector: "node[kind='PROJECT']", style: {"shape": "round-rectangle", "background-opacity": 0.06,
+        "background-color": accent, "border-width": 1, "border-color": line, "label": "data(label)",
+        "text-valign": "top", "font-size": 12, "font-weight": 600, "padding": 14, "color": muted}},
+      {selector: "node[kind='SESSION']", style: {"border-width": 4, "border-color": fg}},
+      {selector: "node[kind='WORKFLOW']", style: {"shape": "hexagon", "width": 40, "height": 36}},
+      {selector: ".unresolved", style: {"border-style": "dashed", "border-width": 2, "background-opacity": 0, "border-color": muted}},
+      {selector: ".slow", style: {"border-style": "dashed", "border-color": muted, "border-width": 3}},
+      {selector: ".ctx", style: {"opacity": 0.45}},
+      {selector: ".pulse", style: {"border-width": 7, "border-color": C.RUNNING}},
+      {selector: ":selected", style: {"overlay-color": accent, "overlay-opacity": 0.2}},
+      {selector: "edge", style: {"width": 1.5, "curve-style": "bezier", "line-color": muted, "target-arrow-color": muted,
+        "target-arrow-shape": "triangle", "arrow-scale": 0.7, "opacity": 0.8}},
+      {selector: ".e-message", style: {"line-style": "dashed", "width": "data(width)", "line-color": accent, "target-arrow-color": accent}},
+      {selector: ".e-handback", style: {"width": 0.7, "display": "none"}},
+      {selector: ".e-workflow", style: {"line-color": C.WAITING_CHILD, "target-arrow-color": C.WAITING_CHILD}},
+      {selector: "edge.unresolved", style: {"line-style": "dashed"}}
+    ];
+    Object.keys(C).forEach(function (s) { style.push({selector: "node[state='" + s + "']", style: {"background-color": C[s]}}); });
+    style.push({selector: "node[kind='PROJECT']", style: {"background-color": accent}});
+    return style;
+  }
+  var cy = cytoscape({container: document.getElementById("cy"), style: buildStyle(), wheelSensitivity: 0.3,
                       minZoom: 0.05, maxZoom: 3, textureOnViewport: true, hideEdgesOnViewport: true});
+  function restyle() {                          // 펼친 보기 상태(handback 표시 · 협업 굵기)는 load 가 다시 건다
+    cy.style(buildStyle());
+    cy.edges(".e-handback").style("display", form.elements.handback.checked ? "element" : "none");
+    if (view === "collab") {
+      cy.edges(".e-spawn,.e-workflow").style("opacity", 0.25);
+      cy.edges(".e-message").style({"width": "mapData(count, 1, 20, 2, 10)", "opacity": 1});
+    }
+    window.__graphThemeRedraws = (window.__graphThemeRedraws || 0) + 1;
+  }
+  onThemeChange(restyle);
 
   function display(d) {
     var b = d.badge ? "(" + d.badge + ") " : "";
@@ -219,17 +262,17 @@
   function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
   cy.on("tap", "node", function (e) {
     var d = e.target.data();
-    if (d.kind === "PROJECT") { panel.innerHTML = "<b>" + esc(d.label) + "</b><p class='muted'>프로젝트 " + esc(d.project) + " · 열 " + esc(d.col_label) + "</p>"; return; }
+    if (d.kind === "PROJECT") { panel.innerHTML = "<h2>" + esc(d.label) + "</h2><p class='muted'>프로젝트 " + esc(d.project) + " · 열 " + esc(d.col_label) + "</p>"; return; }
     var foldBtn = d.folded ? "<p><button type='button' id='unfold'>접힌 " + d.folded + " 개 펼치기</button></p>" : "";
     if (d.kind === "UNRESOLVED" || d.kind === "EXTERNAL") {
-      panel.innerHTML = "<b>" + esc(d.label) + "</b><p class='muted'>" + (d.kind === "EXTERNAL" ? "L-06 SendMessage 대상을 에이전트와 맞추지 못함" : "L-05 부모를 끝까지 못 찾은 서브에이전트 묶음") + "</p>" + foldBtn;
+      panel.innerHTML = "<h2>" + esc(d.label) + "</h2><p class='muted'>" + (d.kind === "EXTERNAL" ? "L-06 SendMessage 대상을 에이전트와 맞추지 못함" : "L-05 부모를 끝까지 못 찾은 서브에이전트 묶음") + "</p>" + foldBtn;
     } else {
-      panel.innerHTML = "<b>" + esc(d.label) + "</b><p class='muted'>불러오는 중…</p>" + foldBtn;
+      panel.innerHTML = "<h2>" + esc(d.label) + "</h2><p class='muted'>불러오는 중…</p>" + foldBtn;
       fetch("/api/v1/agents/" + encodeURIComponent(d.id)).then(function (r) { return r.json(); }).then(function (a) {
-        if (!a.found) { panel.innerHTML = "<b>" + esc(d.id) + "</b><p class='warn'>" + esc(a.reason) + "</p>"; return; }
+        if (!a.found) { panel.innerHTML = "<h2>" + esc(d.id) + "</h2><p class='warn'>" + esc(a.reason) + "</p>"; return; }
         var u = a.usage, ag = a.agent;
-        panel.innerHTML = "<b><a href='/agents/" + encodeURIComponent(ag.agent_key) + "'>" + esc(ag.name || ag.agent_key) + "</a></b>" +
-          "<p><span class='pill' style='--c:" + stColor(ag.state) + "'>" + esc(STATE_KO[ag.state] || ag.state) + "</span> <code>" + esc(ag.state_reason) + "</code></p>" +
+        panel.innerHTML = "<h2><a href='/agents/" + encodeURIComponent(ag.agent_key) + "'>" + esc(ag.name || ag.agent_key) + "</a></h2>" +
+          "<p><span class='badge st-" + esc(ag.state) + "'>" + esc(STATE_KO[ag.state] || ag.state) + "</span> <code>" + esc(ag.state_reason) + "</code></p>" +
           "<p class='ev'>" + esc(a.state.evidence || "근거 기록 없음") + "</p>" +
           "<p class='ev'>지금 판정: " + esc(a.state.now.evidence) + "</p>" +
           "<dl class='kv'><dt>종류</dt><dd>" + esc(ag.kind) + (ag.agent_type ? " · " + esc(ag.agent_type) : "") + "</dd>" +

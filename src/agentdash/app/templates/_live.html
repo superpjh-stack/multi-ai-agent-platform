@@ -1,0 +1,38 @@
+{# D-01 · D-02 · D-03 화면 스크립트 공용 도우미 (개발2) — 스타일 없음. 화면의 {% block head %} 에서 싣는다.
+   · 상태 이름 · 색: 색은 base.html 토큰(--st-<state>)을 getComputedStyle 로 읽는다 — 테마가 바뀌면 다시 읽는다.
+   · openStream: SSE 연결은 _alerts.html 의 EventSource 하나를 같이 쓴다 (탭당 1 연결, R-2A-dev2-3).
+     _alerts.html 은 </body> 앞에서 실리므로, 그 전에 부른 구독은 줄(agentdashStreamQueue)에 두었다가 거기서 붙인다. #}
+<script>
+  window.STATE_KO = {{ state_ko|tojson }};
+  window.cssVar = function (name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); };
+  window.stColor = function (s) {               // 상태 → 도형 색 (규칙 밖 상태 · 판정 전 = --muted)
+    if (!s || !(s in STATE_KO) || s === "UNKNOWN") return cssVar("--muted");
+    return cssVar("--st-" + s.toLowerCase().replace(/_/g, "-"));
+  };
+  window.stateBadge = function (s) {
+    var b = document.createElement("span"); b.className = "badge st-" + s; b.textContent = STATE_KO[s] || s; return b;
+  };
+  window.onThemeChange = function (fn) {        // 머리글 토글(data-theme) · 시스템 설정 둘 다
+    new MutationObserver(function () { fn(); }).observe(document.documentElement, {attributes: true, attributeFilter: ["data-theme"]});
+    if (window.matchMedia) {
+      var mq = matchMedia("(prefers-color-scheme: dark)");
+      if (mq.addEventListener) mq.addEventListener("change", fn); else if (mq.addListener) mq.addListener(fn);
+    }
+  };
+  window.copyText = function (btn, text) {
+    function done(ok) { var o = btn.textContent; btn.textContent = ok ? "복사됨" : "복사 실패"; setTimeout(function () { btn.textContent = o; }, 1200); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { done(false); });
+    } else {
+      var ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+      var ok = false; try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+      document.body.removeChild(ta); done(ok);
+    }
+  };
+  window.openStream = function (handlers, statusEl) {
+    if (window.agentdashAlerts && window.agentdashAlerts.subscribe) return window.agentdashAlerts.subscribe(handlers, statusEl);
+    (window.agentdashStreamQueue = window.agentdashStreamQueue || []).push({h: handlers, el: statusEl});
+    if (statusEl) statusEl.textContent = "실시간: 연결 전";
+    return null;
+  };
+</script>

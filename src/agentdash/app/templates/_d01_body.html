@@ -1,95 +1,123 @@
-{# D-01 관제판 본문 — /?part=body 로 다시 받아 바꿔 끼운다 #}
+{# D-01 관제판 본문 — /?part=body 로 다시 받아 바꿔 끼운다. 배치 스타일은 dashboard.html head (색 · 간격 = base 토큰) #}
 {% if budget %}
-<div id="budget-band" class="card band {{ budget.cls }}" role="status"
-     style="border-left:6px solid var(--c);padding:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-3)">
+<div id="budget-band" class="card band {{ budget.cls }}" role="status">
   {% if budget.error %}
-  <strong style="color:var(--c-fg)">예산 설정 오류</strong> — {{ budget.error }} · <code>config/budget.yaml</code> 확인 · <a href="/insights">D-07 비용 · 효율</a>
+  <strong class="band-t">예산 설정 오류</strong> — {{ budget.error }} · <code>config/budget.yaml</code> 확인 · <a href="/insights">D-07 비용 · 효율</a>
   {% else %}
-  <strong style="color:var(--c-fg)">{{ "예산 초과" if budget.level == "over" else "예산 경고" }}</strong>
+  <strong class="band-t">{{ "예산 초과" if budget.level == "over" else "예산 경고" }}</strong>
   {% for it in budget.cells %}{% if not loop.first %} · {% endif %}<span title="{{ it.title }}">{{ it.text }}</span>{% endfor %}
   <span class="muted">{{ budget.label }}</span> · <a href="/insights">D-07 비용 · 효율 →</a>
   {% endif %}
 </div>
 {% endif %}
-<section aria-label="상태별">
-  <div class="cards">
+
+<section aria-label="상태별" class="stack-sm">
+  <div class="grid kpis">
     {% for s in card_states %}
-    <div class="card st" style="--c:var(--st-{{ s }})" data-state="{{ s }}">
-      <div class="n">{{ sm.states.get(s, 0) }}</div><div class="k">{{ state_ko[s] }} <code>{{ s }}</code></div>
+    <div class="card kpi st-{{ s }}" data-state="{{ s }}">
+      <div class="k"><span class="dot"></span>{{ state_ko[s] }}</div>
+      <div class="n">{{ sm.states.get(s, 0) }}</div>
+      <div class="k"><code>{{ s }}</code></div>
     </div>
     {% endfor %}
-    <div class="card st" style="--c:var(--st-DONE)" data-state="DONE_TODAY">
+    <div class="card kpi st-DONE" data-state="DONE_TODAY">
+      <div class="k"><span class="dot"></span>오늘 끝남</div>
       <div class="n">{{ sm.done_today.DONE + sm.done_today.FAILED }}</div>
-      <div class="k">오늘 끝남 (실패 {{ sm.done_today.FAILED }})</div>
+      <div class="k">실패 {{ sm.done_today.FAILED }}</div>
     </div>
     {% for s, n in sm.states.items() if s not in card_states and s not in ("DONE", "FAILED") %}
-    <div class="card st" style="--c:var(--st-UNKNOWN)"><div class="n">{{ n }}</div><div class="k">{{ s }} (규칙 밖 상태)</div></div>
+    <div class="card kpi"><div class="k">{{ s }} (규칙 밖 상태)</div><div class="n">{{ n }}</div></div>
     {% endfor %}
   </div>
-  <p class="muted" style="font-size:13px">에이전트 {{ sm.agents_total }} (살아 있음 {{ sm.alive }} · 누적 끝남 {{ sm.states.get("DONE", 0) }} · 실패 {{ sm.states.get("FAILED", 0) }}) · 워크플로 노드는 세지 않음 · 판정 {{ now_kst }}</p>
+  {% set ns = namespace(alive=0) %}{% for s in card_states %}{% set ns.alive = ns.alive + sm.states.get(s, 0) %}{% endfor %}
+  {% set alive_n = ns.alive %}
+  <div class="card">
+    <h2>살아 있는 상태 분포 <span class="sub">{{ alive_n }} · 판정 {{ now_kst }}</span></h2>
+    {% if alive_n %}
+    <div class="chart statebar" role="img" aria-label="상태 분포 {% for s in card_states if sm.states.get(s, 0) %}{{ state_ko[s] }} {{ sm.states.get(s, 0) }} {% endfor %}">
+      {% for s in card_states if sm.states.get(s, 0) %}<i class="st-{{ s }}" style="flex-grow:{{ sm.states.get(s, 0) }}" title="{{ state_ko[s] }} {{ sm.states.get(s, 0) }}"></i>{% endfor %}
+    </div>
+    <p class="legend">{% for s in card_states if sm.states.get(s, 0) %}<span class="badge st-{{ s }}">{{ state_ko[s] }} {{ sm.states.get(s, 0) }}</span> {% endfor %}</p>
+    {% else %}<p class="muted">살아 있는 상태 없음.</p>{% endif %}
+    <p class="muted note">에이전트 {{ sm.agents_total }} (살아 있음 {{ sm.alive }} · 누적 끝남 {{ sm.states.get("DONE", 0) }} · 실패 {{ sm.states.get("FAILED", 0) }}) · 워크플로 노드는 세지 않음</p>
+  </div>
 </section>
 
-<div class="grid2">
-<div>
-  <h2>내 차례 <span class="muted" style="font-weight:400">— 권한 대기 먼저, 그다음 기다린 시간 긴 순</span></h2>
-  {% if my_turn %}
-  <div class="tablewrap"><table>
-    <thead><tr><th>상태</th><th>프로젝트</th><th>이름</th><th>마지막 도구</th><th>기다린 시간</th><th>복사</th></tr></thead>
-    <tbody>
-    {% for r in my_turn %}
-    <tr data-key="{{ r.agent_key }}">
-      <td><span class="pill" style="--c:var(--st-{{ r.state }})">{{ state_ko.get(r.state, r.state) }}</span> <code>{{ r.state_reason }}</code></td>
-      <td>{{ r.project }}</td>
-      <td><a href="/agents/{{ r.agent_key }}">{{ r.name or r.agent_key }}</a></td>
-      <td>{% if r.last_tool %}{{ r.last_tool.tool }} <span class="ev">{{ r.last_tool.target }}</span>{% else %}<span class="muted">없음</span>{% endif %}</td>
-      <td title="기준: {{ r.wait_basis }}">{{ r.wait }}</td>
-      <td>
-        <button class="copy" type="button" data-copy="{{ r.cwd }}" {% if not r.cwd %}disabled title="cwd 없음"{% endif %}>cwd</button>
-        <button class="copy" type="button" data-copy="{{ r.name or r.agent_key }}">이름</button>
-      </td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table></div>
-  {% else %}
-  <p class="muted">기다리는 세션 없음 (WAITING_INPUT · WAITING_PERMISSION 0).{% if not hooks_seen %} 훅이 설치되지 않아 권한 대기는 입력 대기로 합쳐진다 (spec §9.3).{% endif %}</p>
-  {% endif %}
+<div class="cols">
+<div class="stack">
+  <section class="card">
+    <h2>내 차례 <span class="sub">권한 대기 먼저, 그다음 기다린 시간 긴 순</span></h2>
+    {% if my_turn %}
+    <div class="tbl wide"><table>
+      <thead><tr><th>상태</th><th>프로젝트</th><th>이름</th><th>마지막 도구</th><th class="num">기다린 시간</th><th>복사</th></tr></thead>
+      <tbody>
+      {% for r in my_turn %}
+      <tr data-key="{{ r.agent_key }}">
+        <td><span class="badge st-{{ r.state }}">{{ state_ko.get(r.state, r.state) }}</span> <code>{{ r.state_reason }}</code></td>
+        <td>{{ r.project }}</td>
+        <td><a href="/agents/{{ r.agent_key }}">{{ r.name or r.agent_key }}</a></td>
+        <td>{% if r.last_tool %}{{ r.last_tool.tool }} <span class="ev">{{ r.last_tool.target }}</span>{% else %}<span class="muted">없음</span>{% endif %}</td>
+        <td class="num" title="기준: {{ r.wait_basis }}">{{ r.wait }}</td>
+        <td class="nowrap">
+          <button class="copy" type="button" data-copy="{{ r.cwd }}" {% if not r.cwd %}disabled title="cwd 없음"{% endif %}>cwd</button>
+          <button class="copy" type="button" data-copy="{{ r.name or r.agent_key }}">이름</button>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+    <p class="muted">기다리는 세션 없음 (WAITING_INPUT · WAITING_PERMISSION 0).{% if not hooks_seen %} 훅이 설치되지 않아 권한 대기는 입력 대기로 합쳐진다 (spec §9.3).{% endif %}</p>
+    {% endif %}
+  </section>
 
-  <h2>살아 있는 에이전트 {{ live|length }}</h2>
-  {% if live %}
-  <div class="live">
-    {% for a in live %}
-    <div class="agent{% if a.state_reason == 'R-12' %} slow{% endif %}" style="--c:var(--st-{{ a.state }})" data-key="{{ a.agent_key }}">
-      <div><span class="pill" style="--c:var(--st-{{ a.state }})">{{ state_ko.get(a.state, a.state) }}</span>
-        <code>{{ a.state_reason }}</code>{% if a.state_reason == 'R-12' %} <span class="warn">응답 느림</span>{% endif %}</div>
-      <div><a class="name" href="/agents/{{ a.agent_key }}">{{ a.name or a.agent_key }}</a></div>
-      <div class="meta">{{ a.project }} · {{ a.kind }}{% if a.agent_type %} · {{ a.agent_type }}{% endif %}</div>
-      <div>{% if a.tool %}{% if a.tool.running %}<b>실행 중</b>{% else %}마지막{% endif %} {{ a.tool.tool }} <span class="ev">{{ a.tool.target }}</span>{% else %}<span class="muted">도구 호출 없음</span>{% endif %}</div>
-      <div class="meta">경과 {{ a.elapsed }} · 무기록 {{ a.idle }} · 출력 {{ "{:,}".format(a.out) }} · 자식 {{ a.children }}</div>
+  <section class="card">
+    <h2>살아 있는 에이전트 {{ live|length }}</h2>
+    {% if live %}
+    <div class="grid">
+      {% for a in live %}
+      <div class="agent st-{{ a.state }}{% if a.state_reason == 'R-12' %} slow{% endif %}" data-key="{{ a.agent_key }}">
+        <div><span class="badge st-{{ a.state }}">{{ state_ko.get(a.state, a.state) }}</span>
+          <code>{{ a.state_reason }}</code>{% if a.state_reason == 'R-12' %} <span class="warn">응답 느림</span>{% endif %}</div>
+        <div><a class="name" href="/agents/{{ a.agent_key }}">{{ a.name or a.agent_key }}</a></div>
+        <div class="meta">{{ a.project }} · {{ a.kind }}{% if a.agent_type %} · {{ a.agent_type }}{% endif %}</div>
+        <div>{% if a.tool %}{% if a.tool.running %}<b>실행 중</b>{% else %}마지막{% endif %} {{ a.tool.tool }} <span class="ev">{{ a.tool.target }}</span>{% else %}<span class="muted">도구 호출 없음</span>{% endif %}</div>
+        <div class="meta">경과 {{ a.elapsed }} · 무기록 {{ a.idle }} · 출력 {{ "{:,}".format(a.out) }} · 자식 {{ a.children }}</div>
+      </div>
+      {% endfor %}
     </div>
-    {% endfor %}
-  </div>
-  {% else %}
-  <p class="muted">살아 있는 에이전트 없음.</p>
-  {% endif %}
+    {% else %}
+    <p class="muted">살아 있는 에이전트 없음.</p>
+    {% endif %}
+  </section>
 </div>
-<aside>
-  <h2>오늘 (KST)</h2>
-  <dl class="kv">
-    <dt>출력 토큰</dt><dd>{{ "{:,}".format(sm.today.output_tokens) }}</dd>
-    <dt>요청</dt><dd>{{ "{:,}".format(sm.today.requests) }}</dd>
-    <dt>도구 호출</dt><dd>{{ "{:,}".format(sm.today.tool_calls) }}</dd>
-    <dt>작성 파일</dt><dd>{{ "{:,}".format(sm.today.files_written) }}</dd>
-  </dl>
-  <h2>상위 5 에이전트 (오늘 출력)</h2>
-  {% if sm.today.top %}
-  <ol style="padding-left:18px; font-size:13px; margin:0">
-    {% for t in sm.today.top %}
-    <li><a href="/agents/{{ t.agent_key }}">{{ t.name or t.agent_key }}</a> <span class="muted">{{ t.project }}</span> — {{ "{:,}".format(t.out or 0) }}</li>
-    {% endfor %}
-  </ol>
-  {% else %}<p class="muted">오늘 기록 없음.</p>{% endif %}
-  <h2>파싱 오류</h2>
-  <p class="{{ 'warn' if sm.parse_errors else 'muted' }}">{{ sm.parse_errors }} 건</p>
+
+<aside class="stack">
+  <section class="card">
+    <h2>오늘 <span class="sub">KST</span></h2>
+    <div class="mini">
+      <div class="kpi"><span class="k">출력 토큰</span><span class="n">{{ "{:,}".format(sm.today.output_tokens) }}</span></div>
+      <div class="kpi"><span class="k">요청</span><span class="n">{{ "{:,}".format(sm.today.requests) }}</span></div>
+      <div class="kpi"><span class="k">도구 호출</span><span class="n">{{ "{:,}".format(sm.today.tool_calls) }}</span></div>
+      <div class="kpi"><span class="k">작성 파일</span><span class="n">{{ "{:,}".format(sm.today.files_written) }}</span></div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>상위 5 에이전트 <span class="sub">오늘 출력</span></h2>
+    {% if sm.today.top %}
+    {% set top_max = sm.today.top|map(attribute="out")|map("default", 0, true)|max %}
+    <ol class="hbars">
+      {% for t in sm.today.top %}
+      <li><div class="hb-t"><a href="/agents/{{ t.agent_key }}">{{ t.name or t.agent_key }}</a> <span class="muted">{{ t.project }}</span></div>
+        <div class="chart hb" role="img" aria-label="출력 {{ t.out or 0 }}"><i style="width:{{ '%.1f' % (100 * (t.out or 0) / top_max) if top_max else 0 }}%"></i></div>
+        <div class="hb-n">{{ "{:,}".format(t.out or 0) }}</div></li>
+      {% endfor %}
+    </ol>
+    {% else %}<p class="muted">오늘 기록 없음.</p>{% endif %}
+  </section>
+  <section class="card kpi">
+    <span class="k">파싱 오류</span>
+    <span class="n {{ 'warn' if sm.parse_errors else '' }}">{{ sm.parse_errors }} 건</span>
+  </section>
 </aside>
 </div>

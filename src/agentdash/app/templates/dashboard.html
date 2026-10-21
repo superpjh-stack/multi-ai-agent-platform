@@ -1,17 +1,68 @@
 {% extends "base.html" %}
+{% block head %}
+{% include "_live.html" %}
+<style>
+  /* D-01 배치만 — 색 · 간격 · 글꼴은 base.html 토큰 · 공통 부품 (spec.md v0.3 §7.3). 상태 색 = .st-<STATE> 의 --c · --c-fg */
+  .page-h { display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--sp-1) var(--sp-3); margin:var(--sp-2) 0 var(--sp-5); }
+  .page-h h1 { font-size:22px; margin:0; }
+  .live-st { font-size:12px; color:var(--muted); }
+  #d01, .stack, .stack-sm { display:flex; flex-direction:column; min-width:0; }
+  #d01, .stack { gap:var(--sp-5); }
+  .stack-sm { gap:var(--sp-3); }
+  .cols { display:grid; gap:var(--sp-5); grid-template-columns:minmax(0, 1fr); }
+  @media (min-width: 1000px) { .cols { grid-template-columns:minmax(0, 2fr) minmax(0, 1fr); } }
+  .card h2 { font-size:15px; margin:0 0 var(--sp-3); }
+  h2 .sub { font-weight:400; font-size:13px; color:var(--muted); }
+  .band { border-left:6px solid var(--c); padding:var(--sp-2) var(--sp-4); }
+  .band-t { color:var(--c-fg); }
+  .grid.kpis { grid-template-columns:repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
+  .kpis .card.kpi[class*="st-"] { border-top:3px solid var(--c); }
+  .kpi .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--c, var(--muted)); margin-right:var(--sp-1); }
+  .kpi code { font-size:11px; }
+  .statebar { display:flex; height:14px; border-radius:999px; overflow:hidden; background:var(--line); gap:2px; }
+  .statebar i { display:block; min-width:3px; background:var(--c); }
+  .legend { display:flex; flex-wrap:wrap; gap:var(--sp-1) var(--sp-2); margin:var(--sp-3) 0 0; }
+  .note { font-size:13px; margin:var(--sp-3) 0 0; }
+  .agent { border:1px solid var(--line); border-left:4px solid var(--c, var(--line)); border-radius:var(--radius-sm);
+           padding:var(--sp-2) var(--sp-3); font-size:13px; min-width:0; overflow-wrap:anywhere; display:flex; flex-direction:column; gap:2px; }
+  .agent a.name { font-weight:600; color:var(--fg); text-decoration:none; }
+  .agent .meta { color:var(--muted); }
+  .agent.slow { border-style:dashed; border-left-style:solid; }
+  .mini { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--sp-4) var(--sp-3); }
+  .mini .n { font-size:20px; }
+  .hbars { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--sp-3); font-size:13px; }
+  .hbars li { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:2px var(--sp-2); }
+  .hb-t { grid-column:1 / -1; overflow-wrap:anywhere; }
+  .hb { height:8px; border-radius:999px; background:var(--line); overflow:hidden; align-self:center; }
+  .hb i { display:block; height:100%; background:var(--accent); border-radius:999px; }
+  .hb-n { font-variant-numeric:tabular-nums; color:var(--muted); font-size:12px; }
+  .feed { list-style:none; padding:0; margin:0; font-size:13px; max-height:360px; overflow:auto; }
+  .feed li { padding:var(--sp-1) 0; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+  .feed li.new { background:color-mix(in srgb, var(--accent) 10%, transparent); }
+  .ev { color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+  .warn { color:var(--st-waiting-permission-fg); }
+  code { font-family:var(--font-mono); font-size:12px; overflow-wrap:anywhere; }
+  .nowrap { white-space:nowrap; }
+  .tbl.wide table { min-width:600px; }               /* 좁은 폭에서는 칸을 짓누르지 않고 표 안에서 가로로 민다 */
+  button.copy { font:inherit; font-size:12px; padding:1px var(--sp-2); border:1px solid var(--line); border-radius:var(--radius-sm);
+                background:var(--bg); color:var(--fg); cursor:pointer; }
+  button.copy:disabled { color:var(--muted); cursor:default; }
+</style>
+{% endblock %}
 {% block body %}
-{% include "_dev2_style.html" %}
-<h1>D-01 관제판 <span class="sse" id="sse">실시간: 연결 전</span></h1>
+<div class="page-h"><h1>D-01 관제판</h1><span class="live-st" id="sse">실시간: 연결 전</span></div>
 <div id="d01">{% include "_d01_body.html" %}</div>
-<h2>최근 상태 변화</h2>
-<ul class="feed" id="feed">
-  {% for f in feed %}
-  <li><span class="muted">{{ f.at_kst }}</span> <span class="pill" style="--c:var(--st-{{ f.state }})">{{ state_ko.get(f.state, f.state) }}</span>
-    <a href="/agents/{{ f.agent_key }}">{{ f.name or f.agent_key }}</a> <span class="ev">{{ f.reason }}</span></li>
-  {% else %}
-  <li class="muted">상태 변화 기록 없음.</li>
-  {% endfor %}
-</ul>
+<section class="card" style="margin-top:var(--sp-5)">
+  <h2>최근 상태 변화</h2>
+  <ul class="feed" id="feed">
+    {% for f in feed %}
+    <li><span class="muted">{{ f.at_kst }}</span> <span class="badge st-{{ f.state }}">{{ state_ko.get(f.state, f.state) }}</span>
+      <a href="/agents/{{ f.agent_key }}">{{ f.name or f.agent_key }}</a> <span class="ev">{{ f.reason }}</span></li>
+    {% else %}
+    <li class="muted">상태 변화 기록 없음.</li>
+    {% endfor %}
+  </ul>
+</section>
 <script>
 (function () {
   var root = document.getElementById("d01"), feed = document.getElementById("feed"), timer = null;
@@ -30,11 +81,9 @@
     var li = document.createElement("li"); li.className = "new";
     var t = new Date().toLocaleTimeString("ko-KR", {hour12: false});
     var a = document.createElement("a"); a.href = "/agents/" + encodeURIComponent(d.agent_key); a.textContent = d.agent_key;
-    var p = document.createElement("span"); p.className = "pill"; p.style.setProperty("--c", stColor(d.state));
-    p.textContent = STATE_KO[d.state] || d.state;
     var ev = document.createElement("span"); ev.className = "ev"; ev.textContent = " " + (d.reason || "");
     var m = document.createElement("span"); m.className = "muted"; m.textContent = t + " ";
-    li.append(m, p, " ", a, ev); feed.insertBefore(li, feed.firstChild);
+    li.append(m, stateBadge(d.state), " ", a, ev); feed.insertBefore(li, feed.firstChild);
     while (feed.children.length > 100) feed.removeChild(feed.lastChild);
   }
   openStream({"agent.state": function (d) { addFeed(d); soon(); }, "agent.new": soon}, document.getElementById("sse"));

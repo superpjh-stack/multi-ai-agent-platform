@@ -1,6 +1,6 @@
-{# 원본 보기 조각 — 요청 때 원천을 읽어 응답으로만 보낸다 (저장 안 함) #}
-{% if error %}<p class="warn">{{ error }}</p>{% else %}
-<p class="muted" style="font-size:12px">원천 줄 {{ r.lines }} · 메시지 {{ r.total }} 중 {{ r.offset + 1 if r.messages else 0 }}~{{ r.offset + r.messages|length }} · 읽은 시각 {{ read_at }}</p>
+{# 원본 보기 조각 — 요청 때 원천을 읽어 응답으로만 보낸다 (저장 안 함). 스타일은 agent.html head (base 토큰 · .msg · .ev · .err) #}
+{% if error %}<p class="err">{{ error }}</p>{% else %}
+<p class="muted ev">원천 줄 {{ r.lines }} · 메시지 {{ r.total }} 중 {{ r.offset + 1 if r.messages else 0 }}~{{ r.offset + r.messages|length }} · 읽은 시각 {{ read_at }}</p>
 {% for m in r.messages %}
 <details class="msg">
   <summary><b>{{ "사용자" if m.role == "user" else "assistant" }}</b> <span class="muted">#{{ m.n }} · {{ m.at }}{% if m.model %} · {{ m.model }}{% endif %} ·
@@ -9,7 +9,7 @@
     {% if b.t == "text" %}<pre>{{ b.text }}</pre>{% if b.more %}<p class="muted">… {{ "{:,}".format(b.more) }} 자 더 (줄임)</p>{% endif %}
     {% elif b.t == "thinking" %}<p class="muted">thinking {{ "{:,}".format(b.size) }} 자 — 보이지 않음</p>
     {% elif b.t == "tool_use" %}<p><code>{{ b.name }}</code>{% if b.path %} <code>{{ b.path }}</code>{% endif %}{% if b.first %} <span class="ev">{{ b.first }}</span>{% endif %}</p>
-    {% elif b.t == "tool_result" %}<p class="{{ 'warn' if b.error else 'muted' }}">도구 결과 {{ "{:,}".format(b.size) }} 자{% if b.error %} · 오류{% endif %} — 본문은 보이지 않음</p>
+    {% elif b.t == "tool_result" %}<p class="{{ 'err' if b.error else 'muted' }}">도구 결과 {{ "{:,}".format(b.size) }} 자{% if b.error %} · 오류{% endif %} — 본문은 보이지 않음</p>
     {% else %}<p class="muted">{{ b.name }} 블록</p>{% endif %}
   {% endfor %}
 </details>

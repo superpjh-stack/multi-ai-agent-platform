@@ -1,10 +1,49 @@
 {% extends "base.html" %}
+{% block head %}
+{% include "_live.html" %}
+<style>
+  /* D-03 배치만 — 색 · 간격 · 글꼴은 base.html 토큰 · 공통 부품 (spec.md v0.3 §7.3). 상태 색 = .st-<STATE> 의 --c · --c-fg */
+  .crumbs { font-size:13px; overflow-wrap:anywhere; margin:var(--sp-2) 0 var(--sp-2); color:var(--muted); }
+  .page-h { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-2) var(--sp-3); margin:0 0 var(--sp-5); }
+  .page-h h1 { font-size:22px; margin:0; overflow-wrap:anywhere; min-width:0; }
+  .live-st { font-size:12px; color:var(--muted); }
+  .stack { display:flex; flex-direction:column; gap:var(--sp-5); min-width:0; }
+  .cols { display:grid; gap:var(--sp-5); grid-template-columns:minmax(0, 1fr); margin-top:var(--sp-5); }
+  @media (min-width: 1000px) { .cols { grid-template-columns:minmax(0, 2fr) minmax(0, 1fr); } }
+  .card h2 { font-size:15px; margin:0 0 var(--sp-3); }
+  h2 .sub { font-weight:400; font-size:13px; color:var(--muted); }
+  .grid.kpis { grid-template-columns:repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
+  .kpi .est { font-size:12px; }
+  .kv { display:grid; grid-template-columns:max-content minmax(0, 1fr); gap:var(--sp-2) var(--sp-4); font-size:13px; margin:0; }
+  .kv dt { color:var(--muted); } .kv dd { margin:0; overflow-wrap:anywhere; }
+  @media (max-width: 520px) { .kv { grid-template-columns:minmax(0, 1fr); gap:0; } .kv dd { margin-bottom:var(--sp-2); } }
+  .est { color:var(--muted); font-size:12px; white-space:nowrap; }
+  .bars { display:flex; align-items:flex-end; gap:2px; height:120px; border-bottom:1px solid var(--line); overflow-x:auto; }
+  .bars i { display:block; background:var(--accent); flex:1 0 6px; max-width:28px; border-radius:3px 3px 0 0; }
+  .feed { list-style:none; padding:0; margin:0; font-size:13px; max-height:360px; overflow:auto; }
+  .feed li { padding:var(--sp-1) 0; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+  .ev { color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+  .warn { color:var(--st-waiting-permission-fg); }
+  .err { color:var(--st-failed-fg); }
+  code { font-family:var(--font-mono); font-size:12px; overflow-wrap:anywhere; }
+  .tbl.scroll { max-height:480px; overflow:auto; }
+  .tbl.wide table { min-width:600px; }               /* 좁은 폭에서는 칸을 짓누르지 않고 표 안에서 가로로 민다 */
+  .tbl td.ev { max-width:420px; }
+  .btns { display:flex; flex-wrap:wrap; gap:var(--sp-2); margin:var(--sp-3) 0; }
+  button.copy { font:inherit; font-size:13px; padding:var(--sp-1) var(--sp-3); border:1px solid var(--line); border-radius:var(--radius-sm);
+                background:var(--bg); color:var(--fg); cursor:pointer; }
+  details.msg { border:1px solid var(--line); border-radius:var(--radius-sm); margin:var(--sp-1) 0; padding:var(--sp-1) var(--sp-2); background:var(--surface); }
+  details.msg summary { cursor:pointer; font-size:13px; overflow-wrap:anywhere; }
+  details.msg pre { white-space:pre-wrap; overflow-wrap:anywhere; font-family:var(--font-mono); font-size:12px; margin:var(--sp-1) 0; }
+</style>
+{% endblock %}
 {% block body %}
-{% include "_dev2_style.html" %}
 {% if not d.found %}
-<h1>D-03 에이전트 상세</h1>
-<p class="warn">에이전트 없음: <code>{{ d.key }}</code> — {{ d.reason }}</p>
-<p><a href="/">관제판으로</a> · <a href="/graph">구성도로</a></p>
+<div class="page-h"><h1>D-03 에이전트 상세</h1></div>
+<div class="card">
+  <p class="warn">에이전트 없음: <code>{{ d.key }}</code> — {{ d.reason }}</p>
+  <p><a href="/">관제판으로</a> · <a href="/graph">구성도로</a></p>
+</div>
 {% else %}
 {% set a = d.agent %}{% set u = d.usage %}
 <p class="crumbs">
@@ -14,90 +53,125 @@
   {% if d.link_note %}<span class="warn">부모 미확인</span> › {% endif %}
   <b>{{ a.name or a.agent_key }}</b>
 </p>
-<h1>{{ a.name or a.agent_key }} <span class="pill" style="--c:var(--st-{{ a.state }})">{{ state_ko.get(a.state, a.state) }}</span>
-  <span class="sse" id="sse">실시간: 연결 전</span></h1>
-<div class="grid2">
-<div>
-  <dl class="kv">
-    <dt>키</dt><dd><code>{{ a.agent_key }}</code></dd>
-    <dt>종류 · 유형</dt><dd>{{ a.kind }}{% if a.agent_type %} · {{ a.agent_type }}{% endif %}{% if a.request_shape %} · {{ a.request_shape }}{% endif %} · 깊이 {{ a.depth }}</dd>
-    <dt>프로젝트</dt><dd>{{ a.project }} <span class="muted">{{ a.project_path or a.project_key }}</span></dd>
-    <dt>모델 · 버전</dt><dd>{{ a.model or "—" }} · {{ a.cc_version or "—" }}{% if a.git_branch %} · {{ a.git_branch }}{% endif %}</dd>
-    <dt>시작 · 끝 · 마지막 기록</dt><dd>{{ d.started_kst }} · {{ d.ended_kst }} · {{ d.last_kst }}</dd>
-    <dt>벽시계 · 실행 시간</dt><dd>{{ u.wall }} · {{ u.active }} <span class="muted">(간격 ≤ 5 분 구간 합, D-06)</span></dd>
-    <dt>판정 (저장)</dt><dd><code>{{ d.state.rule }}</code> · 상태가 된 시각 {{ d.state.since or "—" }}<br><span class="ev">{{ d.state.evidence or "근거 기록 없음" }}</span></dd>
-    <dt>판정 (지금)</dt><dd><span class="pill" style="--c:var(--st-{{ d.state.now.state }})">{{ state_ko.get(d.state.now.state, d.state.now.state) }}</span>
-      <code>{{ d.state.now.rule }}</code>{% if not d.state.now.matches_db %} <span class="warn">저장값과 다름 — 다음 판정(10 초)에서 반영</span>{% endif %}<br>
-      <span class="ev">{{ d.state.now.evidence }}</span></dd>
-    <dt>부모</dt><dd>{% if d.parent %}{% if d.parent.missing %}<span class="warn">{{ d.parent.agent_key }} (DB 에 없음)</span>{% else %}<a href="/agents/{{ d.parent.agent_key }}">{{ d.parent.name or d.parent.agent_key }}</a> <span class="muted">{{ d.parent.kind }}</span>{% endif %}{% elif d.link_note %}<span class="warn">{{ d.link_note }}</span>{% else %}<span class="muted">없음 (세션)</span>{% endif %}</dd>
-  </dl>
-
-  <h2>직계 자식 {{ d.children|length }} <span class="muted" style="font-weight:400">(전체 자손 {{ u.descendants_all }})</span></h2>
-  {% if d.children %}
-  <div class="tablewrap"><table>
-    <thead><tr><th>이름</th><th>종류</th><th>상태</th><th>시작</th><th>출력 토큰</th></tr></thead>
-    <tbody>{% for c in d.children %}
-      <tr><td><a href="/agents/{{ c.agent_key }}">{{ c.name or c.agent_key }}</a></td><td>{{ c.kind }}{% if c.agent_type %} · {{ c.agent_type }}{% endif %}</td>
-        <td><span class="pill" style="--c:var(--st-{{ c.state }})">{{ state_ko.get(c.state, c.state) }}</span> <code>{{ c.state_reason }}</code></td>
-        <td>{{ c.started_kst }}</td><td>{{ "{:,}".format(c.output_tokens) }}</td></tr>
-    {% endfor %}</tbody>
-  </table></div>
-  {% else %}<p class="muted">자식 없음.</p>{% endif %}
-
-  <h2>작업량 <span class="muted" style="font-weight:400">— 비용은 {{ u.cost_label }}</span></h2>
-  <div class="tablewrap"><table>
-    <thead><tr><th>지표</th><th>자기</th><th>자손 포함</th></tr></thead>
-    <tbody>
-      <tr><td>입력 토큰</td><td>{{ "{:,}".format(u.own.input_tokens) }}</td><td>{{ "{:,}".format(u.with_descendants.input_tokens) }}</td></tr>
-      <tr><td>캐시 읽기</td><td>{{ "{:,}".format(u.own.cache_read) }}</td><td>{{ "{:,}".format(u.with_descendants.cache_read) }}</td></tr>
-      <tr><td>캐시 쓰기</td><td>{{ "{:,}".format(u.own.cache_write) }}</td><td>{{ "{:,}".format(u.with_descendants.cache_write) }}</td></tr>
-      {%- macro est_out(t) %} <span class="est" data-est title="spec §6.2 — 의심 요청은 output_est, 나머지는 기록값의 합 (decisions.md D-17)">[추정] {{ t.est_note }} {{ "{:,}".format(t.output_est_total) }}</span>{% endmacro %}
-      {%- macro est_cost(t) %} <span class="est" data-est title="spec §6.2 — 출력 자리에 output_est 를 넣은 비용 (단가 없는 행은 더하지 않음)">[추정] {{ t.est_note }} {{ "$%.4f"|format(t.cost_est_usd) if t.cost_est_usd is not none else "단가 없음" }}</span>{% endmacro %}
-      <tr><td>출력 토큰 (그중 thinking)</td><td>{{ "{:,}".format(u.own.output_tokens) }} ({{ "{:,}".format(u.own.thinking_tokens) }}){{ est_out(u.own) }}</td><td>{{ "{:,}".format(u.with_descendants.output_tokens) }} ({{ "{:,}".format(u.with_descendants.thinking_tokens) }}){{ est_out(u.with_descendants) }}</td></tr>
-      <tr><td>캐시 적중률</td><td>{{ "%.1f%%"|format(u.cache_hit_own * 100) if u.cache_hit_own is not none else "—" }}</td><td>{{ "%.1f%%"|format(u.cache_hit_all * 100) if u.cache_hit_all is not none else "—" }}</td></tr>
-      <tr><td>요청 (requestId)</td><td>{{ "{:,}".format(u.own.requests) }}</td><td>{{ "{:,}".format(u.with_descendants.requests) }}</td></tr>
-      <tr><td>추정 비용 <span class="muted">{{ u.cost_label }}</span></td>
-        <td>{{ "$%.4f"|format(u.own.cost_usd) if u.own.cost_usd is not none else "단가 없음" }}{% if u.own.unpriced %} <span class="warn">단가 없음 {{ u.own.unpriced }} 건</span>{% endif %}{{ est_cost(u.own) }}</td>
-        <td>{{ "$%.4f"|format(u.with_descendants.cost_usd) if u.with_descendants.cost_usd is not none else "단가 없음" }}{% if u.with_descendants.unpriced %} <span class="warn">단가 없음 {{ u.with_descendants.unpriced }} 건</span>{% endif %}{{ est_cost(u.with_descendants) }}</td></tr>
-      <tr><td>도구 호출</td><td colspan="2">{{ "{:,}".format(u.tool_calls) }} —
-        {% for t in u.tools_by_name[:12] %}{{ t.tool }} {{ t.n }}{% if t.err %} (<span class="warn">오류 {{ t.err }}</span>){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
-      <tr><td>작성 파일</td><td colspan="2">{{ u.files_written }}</td></tr>
-      <tr><td>하위 에이전트</td><td colspan="2">직계 {{ u.children_direct }} · 전체 {{ u.descendants_all }}</td></tr>
-    </tbody>
-  </table></div>
-  <h2>시간대별 출력 토큰 <span class="muted" style="font-weight:400">(KST, 기록 있는 마지막 {{ u.hourly_output|length }} 시간)</span></h2>
-  {% if u.hourly_output %}
-  {% set mx = u.hourly_output|map(attribute=1)|max %}
-  <div class="bars" role="img" aria-label="시간대별 출력 토큰">
-    {% for h, n in u.hourly_output %}<div title="{{ h }} — {{ '{:,}'.format(n) }}" style="height:{{ (4 + 86 * n / mx)|int if mx else 4 }}px; width:{{ [6, (600 / u.hourly_output|length)|int]|max }}px"></div>{% endfor %}
-  </div>
-  <p class="muted" style="font-size:12px">{{ u.hourly_output[0][0] }} ~ {{ u.hourly_output[-1][0] }} · 최대 {{ "{:,}".format(mx) }}</p>
-  {% else %}<p class="muted">토큰 기록 없음.</p>{% endif %}
+<div class="page-h">
+  <h1>{{ a.name or a.agent_key }}</h1>
+  <span class="badge st-{{ a.state }}">{{ state_ko.get(a.state, a.state) }}</span>
+  <span class="live-st" id="sse">실시간: 연결 전</span>
 </div>
-<aside>
-  <h2>상태 이력</h2>
-  <ul class="feed">{% for l in d.state_log %}<li><span class="muted">{{ l.at }}</span> <span class="pill" style="--c:var(--st-{{ l.state }})">{{ state_ko.get(l.state, l.state) }}</span> <span class="ev">{{ l.reason }}</span></li>{% else %}<li class="muted">없음</li>{% endfor %}</ul>
-  <h2>작성 파일 {{ d.files|length }}</h2>
-  <ul class="feed">{% for f in d.files %}<li><code>{{ f.op }}</code> {{ f.path }} <span class="muted">{{ f.at_kst }}</span></li>{% else %}<li class="muted">없음</li>{% endfor %}</ul>
+
+{%- macro est_out(t) %} <span class="est" data-est title="spec §6.2 — 의심 요청은 output_est, 나머지는 기록값의 합 (decisions.md D-17)">[추정] {{ t.est_note }} {{ "{:,}".format(t.output_est_total) }}</span>{% endmacro %}
+{%- macro est_cost(t) %} <span class="est" data-est title="spec §6.2 — 출력 자리에 output_est 를 넣은 비용 (단가 없는 행은 더하지 않음)">[추정] {{ t.est_note }} {{ "$%.4f"|format(t.cost_est_usd) if t.cost_est_usd is not none else "단가 없음" }}</span>{% endmacro %}
+{%- macro money(v) %}{{ "$%.4f"|format(v) if v is not none else "단가 없음" }}{% endmacro %}
+
+<section class="grid kpis" aria-label="요약">
+  <div class="card kpi"><span class="k">출력 토큰 · 자손 포함 (기록)</span><span class="n">{{ "{:,}".format(u.with_descendants.output_tokens) }}</span>
+    <span class="k">[추정] {{ u.with_descendants.est_note }} {{ "{:,}".format(u.with_descendants.output_est_total) }}</span></div>
+  <div class="card kpi"><span class="k">비용 · 자손 포함 (기록)</span><span class="n">{{ money(u.with_descendants.cost_usd) }}</span>
+    <span class="k">[추정] {{ u.with_descendants.est_note }} {{ money(u.with_descendants.cost_est_usd) }}</span></div>
+  <div class="card kpi"><span class="k">도구 호출</span><span class="n">{{ "{:,}".format(u.tool_calls) }}</span>
+    <span class="k">작성 파일 {{ u.files_written }}</span></div>
+  <div class="card kpi"><span class="k">실행 시간</span><span class="n">{{ u.active }}</span><span class="k">벽시계 {{ u.wall }}</span></div>
+  <div class="card kpi"><span class="k">하위 에이전트</span><span class="n">{{ u.descendants_all }}</span><span class="k">직계 {{ u.children_direct }}</span></div>
+</section>
+
+<div class="cols">
+<div class="stack">
+  <section class="card">
+    <h2>정보 · 판정</h2>
+    <dl class="kv">
+      <dt>키</dt><dd><code>{{ a.agent_key }}</code></dd>
+      <dt>종류 · 유형</dt><dd>{{ a.kind }}{% if a.agent_type %} · {{ a.agent_type }}{% endif %}{% if a.request_shape %} · {{ a.request_shape }}{% endif %} · 깊이 {{ a.depth }}</dd>
+      <dt>프로젝트</dt><dd>{{ a.project }} <span class="muted">{{ a.project_path or a.project_key }}</span></dd>
+      <dt>모델 · 버전</dt><dd>{{ a.model or "—" }} · {{ a.cc_version or "—" }}{% if a.git_branch %} · {{ a.git_branch }}{% endif %}</dd>
+      <dt>시작 · 끝 · 마지막 기록</dt><dd>{{ d.started_kst }} · {{ d.ended_kst }} · {{ d.last_kst }}</dd>
+      <dt>벽시계 · 실행 시간</dt><dd>{{ u.wall }} · {{ u.active }} <span class="muted">(간격 ≤ 5 분 구간 합, D-06)</span></dd>
+      <dt>판정 (저장)</dt><dd><code>{{ d.state.rule }}</code> · 상태가 된 시각 {{ d.state.since or "—" }}<br><span class="ev">{{ d.state.evidence or "근거 기록 없음" }}</span></dd>
+      <dt>판정 (지금)</dt><dd><span class="badge st-{{ d.state.now.state }}">{{ state_ko.get(d.state.now.state, d.state.now.state) }}</span>
+        <code>{{ d.state.now.rule }}</code>{% if not d.state.now.matches_db %} <span class="warn">저장값과 다름 — 다음 판정(10 초)에서 반영</span>{% endif %}<br>
+        <span class="ev">{{ d.state.now.evidence }}</span></dd>
+      <dt>부모</dt><dd>{% if d.parent %}{% if d.parent.missing %}<span class="warn">{{ d.parent.agent_key }} (DB 에 없음)</span>{% else %}<a href="/agents/{{ d.parent.agent_key }}">{{ d.parent.name or d.parent.agent_key }}</a> <span class="muted">{{ d.parent.kind }}</span>{% endif %}{% elif d.link_note %}<span class="warn">{{ d.link_note }}</span>{% else %}<span class="muted">없음 (세션)</span>{% endif %}</dd>
+    </dl>
+  </section>
+
+  <section class="card">
+    <h2>작업량 <span class="sub">비용은 {{ u.cost_label }} · 기록 숫자 옆 [추정] 은 {{ u.own.est_note }}</span></h2>
+    <div class="tbl"><table>
+      <thead><tr><th>지표</th><th class="num">자기</th><th class="num">자손 포함</th></tr></thead>
+      <tbody>
+        <tr><td>입력 토큰</td><td class="num">{{ "{:,}".format(u.own.input_tokens) }}</td><td class="num">{{ "{:,}".format(u.with_descendants.input_tokens) }}</td></tr>
+        <tr><td>캐시 읽기</td><td class="num">{{ "{:,}".format(u.own.cache_read) }}</td><td class="num">{{ "{:,}".format(u.with_descendants.cache_read) }}</td></tr>
+        <tr><td>캐시 쓰기</td><td class="num">{{ "{:,}".format(u.own.cache_write) }}</td><td class="num">{{ "{:,}".format(u.with_descendants.cache_write) }}</td></tr>
+        <tr><td>출력 토큰 (그중 thinking)</td><td class="num">{{ "{:,}".format(u.own.output_tokens) }} ({{ "{:,}".format(u.own.thinking_tokens) }}){{ est_out(u.own) }}</td><td class="num">{{ "{:,}".format(u.with_descendants.output_tokens) }} ({{ "{:,}".format(u.with_descendants.thinking_tokens) }}){{ est_out(u.with_descendants) }}</td></tr>
+        <tr><td>캐시 적중률</td><td class="num">{{ "%.1f%%"|format(u.cache_hit_own * 100) if u.cache_hit_own is not none else "—" }}</td><td class="num">{{ "%.1f%%"|format(u.cache_hit_all * 100) if u.cache_hit_all is not none else "—" }}</td></tr>
+        <tr><td>요청 (requestId)</td><td class="num">{{ "{:,}".format(u.own.requests) }}</td><td class="num">{{ "{:,}".format(u.with_descendants.requests) }}</td></tr>
+        <tr><td>추정 비용 <span class="muted">{{ u.cost_label }}</span></td>
+          <td class="num">{{ money(u.own.cost_usd) }}{% if u.own.unpriced %} <span class="warn">단가 없음 {{ u.own.unpriced }} 건</span>{% endif %}{{ est_cost(u.own) }}</td>
+          <td class="num">{{ money(u.with_descendants.cost_usd) }}{% if u.with_descendants.unpriced %} <span class="warn">단가 없음 {{ u.with_descendants.unpriced }} 건</span>{% endif %}{{ est_cost(u.with_descendants) }}</td></tr>
+        <tr><td>도구 호출</td><td colspan="2">{{ "{:,}".format(u.tool_calls) }} —
+          {% for t in u.tools_by_name[:12] %}{{ t.tool }} {{ t.n }}{% if t.err %} (<span class="err">오류 {{ t.err }}</span>){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+        <tr><td>작성 파일</td><td colspan="2">{{ u.files_written }}</td></tr>
+        <tr><td>하위 에이전트</td><td colspan="2">직계 {{ u.children_direct }} · 전체 {{ u.descendants_all }}</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="card">
+    <h2>시간대별 출력 토큰 <span class="sub">KST, 기록 있는 마지막 {{ u.hourly_output|length }} 시간 · 기록값</span></h2>
+    {% if u.hourly_output %}
+    {% set mx = u.hourly_output|map(attribute=1)|max %}
+    <div class="chart bars" role="img" aria-label="시간대별 출력 토큰">
+      {% for h, n in u.hourly_output %}<i title="{{ h }} — {{ '{:,}'.format(n) }}" style="height:{{ '%.1f' % (3 + 97 * n / mx) if mx else 3 }}%"></i>{% endfor %}
+    </div>
+    <p class="muted" style="font-size:12px; margin:var(--sp-2) 0 0">{{ u.hourly_output[0][0] }} ~ {{ u.hourly_output[-1][0] }} · 최대 {{ "{:,}".format(mx) }}</p>
+    {% else %}<p class="muted">토큰 기록 없음.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2>직계 자식 {{ d.children|length }} <span class="sub">전체 자손 {{ u.descendants_all }}</span></h2>
+    {% if d.children %}
+    <div class="tbl wide"><table>
+      <thead><tr><th>이름</th><th>종류</th><th>상태</th><th>시작</th><th class="num">출력 토큰</th></tr></thead>
+      <tbody>{% for c in d.children %}
+        <tr><td><a href="/agents/{{ c.agent_key }}">{{ c.name or c.agent_key }}</a></td><td>{{ c.kind }}{% if c.agent_type %} · {{ c.agent_type }}{% endif %}</td>
+          <td><span class="badge st-{{ c.state }}">{{ state_ko.get(c.state, c.state) }}</span> <code>{{ c.state_reason }}</code></td>
+          <td>{{ c.started_kst }}</td><td class="num">{{ "{:,}".format(c.output_tokens) }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="muted">자식 없음.</p>{% endif %}
+  </section>
+</div>
+<aside class="stack">
+  <section class="card">
+    <h2>상태 이력</h2>
+    <ul class="feed">{% for l in d.state_log %}<li><span class="muted">{{ l.at }}</span> <span class="badge st-{{ l.state }}">{{ state_ko.get(l.state, l.state) }}</span> <span class="ev">{{ l.reason }}</span></li>{% else %}<li class="muted">없음</li>{% endfor %}</ul>
+  </section>
+  <section class="card">
+    <h2>작성 파일 {{ d.files|length }}</h2>
+    <ul class="feed">{% for f in d.files %}<li><code>{{ f.op }}</code> {{ f.path }} <span class="muted">{{ f.at_kst }}</span></li>{% else %}<li class="muted">없음</li>{% endfor %}</ul>
+  </section>
 </aside>
 </div>
 
-<h2>도구 타임라인 {{ tools.total }}{% if tools.total > tools.tools|length %} <span class="muted" style="font-weight:400">(처음 {{ tools.tools|length }} 개 — 전체는 <a href="/api/v1/agents/{{ a.agent_key }}/tools?limit=5000">API</a>)</span>{% endif %}</h2>
-{% if tools.tools %}
-<div class="tablewrap" style="max-height:480px; overflow:auto"><table>
-  <thead><tr><th>#</th><th>시각</th><th>도구</th><th>대상</th><th>결과</th><th>걸린 시간</th></tr></thead>
-  <tbody>{% for t in tools.tools %}
-    <tr><td>{{ loop.index }}</td><td>{{ t.at_kst }}</td><td>{{ t.tool }}</td><td class="ev">{{ t.target or "" }}</td>
-      <td class="{{ 'warn' if t.ok == 0 else '' }}">{{ t.result }}</td><td>{{ "%.1f초"|format(t.seconds) if t.seconds is not none else "—" }}</td></tr>
-  {% endfor %}</tbody>
-</table></div>
-{% else %}<p class="muted">도구 호출 없음.</p>{% endif %}
+<section class="card" style="margin-top:var(--sp-5)">
+  <h2>도구 타임라인 {{ tools.total }}{% if tools.total > tools.tools|length %} <span class="sub">처음 {{ tools.tools|length }} 개 — 전체는 <a href="/api/v1/agents/{{ a.agent_key }}/tools?limit=5000">API</a></span>{% endif %}</h2>
+  {% if tools.tools %}
+  <div class="tbl scroll wide"><table>
+    <thead><tr><th class="num">#</th><th>시각</th><th>도구</th><th>대상</th><th>결과</th><th class="num">걸린 시간</th></tr></thead>
+    <tbody>{% for t in tools.tools %}
+      <tr><td class="num">{{ loop.index }}</td><td>{{ t.at_kst }}</td><td>{{ t.tool }}</td><td class="ev">{{ t.target or "" }}</td>
+        <td class="{{ 'err' if t.ok == 0 else '' }}">{{ t.result }}</td><td class="num">{{ "%.1f초"|format(t.seconds) if t.seconds is not none else "—" }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted">도구 호출 없음.</p>{% endif %}
+</section>
 
-<h2>원본 보기</h2>
-<p class="muted" style="font-size:13px">누르면 그때 원천 .jsonl 을 읽기 전용으로 읽어 보여 준다. 저장 · 캐시하지 않는다. 메시지는 접힌 채로, 도구 입력은 경로와 첫 줄 120 자, 도구 결과 · thinking 은 크기만.</p>
-<p><button type="button" class="copy" id="rawbtn" data-src="/agents/{{ a.agent_key }}/raw">원본 보기 (마지막 200 메시지)</button>
-   <button type="button" class="copy" id="rawall" data-src="/agents/{{ a.agent_key }}/raw?offset=0&limit=1000">처음부터 1000</button></p>
-<div id="raw"></div>
+<section class="card" style="margin-top:var(--sp-5)">
+  <h2>원본 보기</h2>
+  <p class="muted" style="font-size:13px; margin:0">누르면 그때 원천 .jsonl 을 읽기 전용으로 읽어 보여 준다. 저장 · 캐시하지 않는다. 메시지는 접힌 채로, 도구 입력은 경로와 첫 줄 120 자, 도구 결과 · thinking 은 크기만.</p>
+  <div class="btns"><button type="button" class="copy" id="rawbtn" data-src="/agents/{{ a.agent_key }}/raw">원본 보기 (마지막 200 메시지)</button>
+     <button type="button" class="copy" id="rawall" data-src="/agents/{{ a.agent_key }}/raw?offset=0&limit=1000">처음부터 1000</button></div>
+  <div id="raw"></div>
+</section>
 <script>
 (function () {
   var raw = document.getElementById("raw");

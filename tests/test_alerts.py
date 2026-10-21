@@ -38,6 +38,17 @@ def test_every_screen_includes_alerts_once(client, path):
     assert r.text.count(MARK) == 1, path
     assert r.text.index(MARK) > r.text.index("</main>")          # 머리글 버튼 · 본문이 그려진 뒤
     assert 'id="alerts-btn"' in r.text
+    assert r.text.count("new EventSource(") == 1, path             # 탭당 SSE 1 연결 — 화면은 openStream 으로 같이 쓴다 (R-2A-dev2-3)
+
+
+def test_screens_share_one_stream():
+    """화면 스크립트 구독(openStream)이 _alerts 의 EventSource 에 붙는다 — 먼저 부른 구독은 줄에 있다가 붙는다."""
+    s = src()
+    assert "A.subscribe = function" in s and "window.agentdashStreamQueue" in s
+    for name in ("agent.new", "agent.usage", "edge.new"):
+        assert f'"{name}"' in s, name
+    live = (TPL.parent / "_live.html").read_text(encoding="utf-8")
+    assert "new EventSource" not in live and "agentdashAlerts.subscribe" in live and "agentdashStreamQueue" in live
 
 
 def test_partial_body_has_no_second_copy(client):
