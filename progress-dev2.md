@@ -120,6 +120,22 @@ twin.scope_count(resp) -> int   # Σ 칸 + Σ machine.folded + Σ inlet.folded +
 - 범위: 살아 있는 것 + `max(last_event_at, started_at) ≥ since`(기본 24h) · 프로젝트 = project_key 같음 또는 라인 이름에 포함 (D-02 와 같음). **조상은 끌어오지 않는다** — 부모가 범위 밖 · 다른 라인 · 순환이면 반입구 행(0 열) 옆 1 열에 뿌리로. 다른 라인 부모(범위 안)는 links `spawn` 만(반입구 배관 없음).
 - T-05: DONE/FAILED · ended_at < now − 30 분 · **자손 전부 DONE/FAILED** 일 때만 접는다(살아 있는 자손을 숨기지 않는다 — 해석). 뿌리(세션)는 접지 않는다. 반입구 아래 뿌리는 반입구 `folded` 로.
 
+### 2차-T 웨이브 D 공표 변경 (2026-10-21, spec v0.4.1) — **개발1 check_twin 은 아래를 따른다**
+```python
+twin.build(con, *, since=None, project=None, now=None, limit=MACHINE_LIMIT, width: int = 1400) -> dict
+twin.GRID_WIDTH = 1400 · GRID_WIDTH_MAX = 100_000
+twin.check_width(w) -> int          # 1~100000 정수(문자열 숫자 허용) 아니면 TwinError → API 422 {"error": "width …"}
+twin.grid(sizes: list[(w, h)], width) -> (cols, [(x, y, 행 높이)])   # T-08
+graph.project_names(rows: (project_key, project_path)…) -> {project_key: 라인 이름}   # D-28 — 트윈 · D-02 · D-01 프로젝트 목록 공용
+graph.project_match(필터, project_key, 라인 이름) -> bool                              # 필터 = 라인 단위 (DEF-QA1-401)
+```
+- `GET /api/v1/twin?…&width=<px>` — 없으면 1400. 응답 ★`grid: {width, cols, rows}`.
+- 좌표 (T-08): 라인마다 자기 원점에서 짠 뒤 격자로 옮긴다. 설비 x = **라인 box.x** + LINE_PAD + 열 × (BOX_W + GAP_X), y = 라인 box.y + LINE_HEAD + 행 × (BOX_H + GAP_Y). 열 = `(box.x − 라인 box.x − LINE_PAD) // (BOX_W + GAP_X)`. 라인 box.h = 그 격자 행의 최대 높이(접힌 라인도). 다음 열 x = 앞 열들 최대 너비 합 + 열 수 × LINE_GAP.
+- 라인 이름 (D-28): 그 project_key 의 **DB 전체** 에이전트 project_path 중 가장 짧은 것(같으면 사전순)의 마지막 이름, 없으면 project_key — 범위 · 행 순서와 무관.
+- 프로젝트 필터: project_key 같음 또는 **라인 이름**에 포함 → 그 라인 에이전트 전부(하위 폴더 cwd 포함). (전에는 에이전트마다 자기 폴더 이름으로 걸렀다.)
+- 설비 ★`ended_ago_s` = now − ended_at (DONE · FAILED 만, 아니면 null) · ★`last_ago_s` = now − last_event_at · `elapsed_s` = now − state_since (지금 상태가 이어진 시간 — 백필 직후엔 백필 시각부터). 모두 미래면 0, 시각 없으면 null.
+- 끝난 설비(DONE · FAILED) `tool` · `target` = null.
+
 ## 2. 진행 (웨이브 A, 2026-10-17)
 
 | 항목 | 실측 | 검증 방법 |
@@ -407,3 +423,36 @@ twin.scope_count(resp) -> int   # Σ 칸 + Σ machine.folded + Σ inlet.folded +
 - **R-2T-dev2-3 → 아키텍트**: `base.html` 머리글 링크 「D-01 관제판」 → 「D-01 공장 평면도」 (spec v0.4 D-01 이름, 화면 제목 · h1 은 바꿨음).
 - **R-2T-dev2-4 → QA2 (G-33 · G-35)**: 측정 손잡이 = `window.agentdashTwin` (`machineEl` · `flows` · `flowsReduced` · `redraws` · `lastPaintMs` · `stateLog[{key,state,at}]`). 가짜 루트 도우미 꼴은 위 표(세션 jsonl + `subagents/agent-*.{meta.json,jsonl}` · 훅 curl · task-notification 덧붙임).
 - **R-2T-dev2-5 → 개발1 (참고)**: twin 응답에 ★`wake_at` 이 늘었다 — check_twin 의 키 비교가 있으면 맞춰 달라 (지금 G-32 PASS).
+
+
+## 11. 2차-T 웨이브 D — 결함 수정 (2026-10-21, spec v0.4.1 · D-28 · D-30)
+
+| 결함 | 커밋 | 테스트 |
+|---|---|---|
+| DEF-QA1-402 · D-28 라인 이름 · T-07 행 순서 | `feea67e` | `test_twin.py::test_line_name_shortest_path` · `test_T07_row_order_independent` (agent · usage_event · tool_call · edge · state_log 를 rowid 역순으로 넣은 사본 — 기본 · all · project) · `test_graph.py::test_project_label_shortest_path_d28` |
+| DEF-QA1-401 필터 = 라인 단위 | `fa337d3` | `test_project_filter_whole_line` (D-02 와 같은 집합) |
+| DEF-QA1-403 빠진 테스트 | `c3043d9` | `test_T05_exactly_30m_stays` · `test_T05_failed_after_30m_folds` · `test_D25_parent_outside_24h` · `test_T06_after_T05` (+ T-07 은 feea67e) — 코드 변경 없이 통과(동작은 이미 맞음) |
+| D-30 / DEF-QA2-402 T-08 격자 | `cae284e` · `734cf60` | `test_T08_grid_1400_two_or_more_cols` · `test_T08_narrow_one_col` · `test_T08_same_row_height` · `test_T08_column_width_is_widest_in_column` · `test_T08_300_no_overlap_fast[1·360·1400·4000]` · `test_T08_bad_width` · `test_twin_api_width` · `test_twin_page.py::test_grid_width_sent_and_resize_refetch` |
+| DEF-QA2-401 경과 | `1caf4e1` | `test_elapsed_meaning_after_backfill` · `test_elapsed_text_by_state` |
+| DEF-QA2-404 지금 도구 | `960f76b` · `734cf60` | `test_final_machine_has_no_current_tool` · `test_tool_line_ellipsis_and_final_empty` |
+| DEF-QA2-403 두 번째 반환 역흐름 | `bc82a4e` | `test_done_transition_reverse_flow_once` (정적 계약 — 실제 흐름은 QA2 가짜 루트 재측정 필요) |
+
+| 항목 | 실측 | 명령 |
+|---|---|---|
+| pytest 전체 | **443 passed** | `uv run pytest -q` |
+| check_twin (24h · all) | PASS 설비 11 · 라인 6 · 범위 26=26=26 · 겹침 0 · 1.7 ms / all 설비 83 · 라인 32 · 327=327=327 · 4.6 ms | `AGENTDASH_DB=data/agentdash-v2a-verify.db uv run python src/agentdash/tools/check_twin.py [--since all]` |
+| 대비 | G-30 PASS 48 쌍 · 글자 5.6:1 · 도형 3.3:1 | `check_contrast.py` |
+| make gate | **PASS 34 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 1** (G-15 송신 — 8095 사람 서버) | `AGENTDASH_DB=data/agentdash-v2a-verify.db make gate` |
+| 브라우저 (8097, verify DB 백업 사본 `data/agentdash-dev2-twin-d.db` · 감시기 끔) | 창 안쪽 1352 px · 카드 866 px → width 1083 · **cols 2 · rows 3** · 맞춤 배율 0.73 · 첫 화면 라인 4 (온전히 2) · 가로 스크롤 0 · 두 테마 / 390 px iframe: wrap 307 → width 384 · cols 1 · 375/375 · 두 테마 / iframe 390→1100 px: 1 초 뒤 다시 받기 1 회 · 콘솔 오류 0 | 스크린샷 `outputs/e2e/dev2-twin-d/` 5 장 (커밋 안 함) |
+| 실제 라인 이름 (24h) | Multi-agent Dashboard · lcomFine MES · Standard ML Platform · Standard MES Platform · **SongWol QR Platform** (전 「contracts」) · 00 PM Agent | `/api/v1/twin` |
+| 경과 (백필 사본) | 끝남 「28분 전」 · 멈춤 의심 「기록 6일 11시간 전」 · 「기록 8일 12시간 전」 … 서로 다름 · ended_at 없는 DONE 세션 1 은 상태 지속 「15분」 | 같은 화면 |
+| 정리 | 띄운 PID 만 kill (uv 30275 · python 30277) · 8097 LISTEN 0 · 8095 (사람) 그대로 · 탭 닫음 | `lsof -iTCP:8097` |
+
+### 해석 (사람 확인 — decisions.md D-31)
+- 화면이 보내는 width = 평면도 카드 실제 너비 ÷ 0.8. 카드 실제 px 그대로면 1400 px 창(카드 ≈ 866 px)에서 504 px 라인 2 개(1032)가 안 들어가 1 열 → QA2-402 가 그대로. 0.8 = 맞춤이 폭 맞춤으로 떨어질 때의 배율 하한(글자 12 px → 9.6 px).
+- 멈춤 의심(STALE)은 「기록 n 전」(last_ago_s) — 상태 지속(state_since)은 백필 직후 전부 같은 값이라. 그 밖 살아 있는 설비는 state_since.
+- ended_at 이 없는 DONE 은 「끝남 · 상태 지속」 (지어내지 않음).
+
+### 3 요청 (웨이브 D)
+- **R-2T-dev2-6 → 개발1 (check_twin)**: `direct_scope` 의 프로젝트 필터가 에이전트마다 `project_label(pk, pp)` 로 거른다 — 트윈은 이제 라인 단위(`graph.project_names` + `graph.project_match`). `--project` 를 줄 때만 범위 수가 어긋난다(기본 · `--since all` 은 PASS). 바꾸지 않았다.
+- **R-2T-dev2-7 → QA1 · QA2 재검증**: DEF-QA1-401~403 · DEF-QA2-401~404. QA2 는 가짜 루트에서 「다시 깨운 서브에이전트의 두 번째 반환」 역흐름 1 회(+ 첫 반환 중복 0)를 실측해 달라 — 이번엔 정적 계약만.
