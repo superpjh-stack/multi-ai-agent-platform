@@ -2,6 +2,22 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 2차-A — 웨이브 C · D (QA1 · QA2 r4 · DEF-QA1-301 수정, 2026-10-21) — EXIT 판정 회전 1
+
+### 지금 해야 할 것
+- **EXIT 판정 회전 2** — 같은 명령으로 다시 재서 판정 30 개 · pytest 수가 같으면 최종 보고 후 루프 정지 (goal.md §4.4).
+- 사람 결정 대기 (게이트 영향 없음): D-23 · D-24.
+
+| 항목 | 실측 | 검증 명령 |
+|---|---|---|
+| QA1 r4 | 16 게이트 PASS (G-04~G-08 · G-13~G-16 · G-19 · G-20 · G-24~G-28) · 치명 0 · 중대 0 · 경미 1 (DEF-QA1-301) · D-23 단위 지지 (파일별 0.52 %p · 세션 안 requestId 0.00 %p) · 행 대조 26,019 | `outputs/qa1-데이터안전-r4.md` |
+| DEF-QA1-301 수정 | DB 옆 파일 `-wal` · `-shm` · `-journal` 이 이미 하드 링크면 거부 — 테스트 3 (먼저 FAIL 확인) · QA1 재현 스크립트 거부 · 원천 변화 없음 · 정상 경로 허용 | `uv run pytest tests/test_settings.py -q` · `uv run python outputs/qa1/r4_hardlink.py <빈 폴더>` |
+| QA2 r4 | G-09 · G-10 · G-11 · G-12 (표본 30 spec v0.3 글자 오판 0 · 전수 318 0) · G-17 · G-18 · G-21 · G-29 (첫 로드 0 · 전이 1 · 재수신 0 · 두 탭 1 · 거부 → 배지만 · 탭당 SSE 1) · G-30 (7 화면 × 밝은/다크 토글/다크 시스템 · 상태 색 ΔE ≥ 27.9) PASS · 치명 0 · 중대 0 · 경미 1 (DEF-QA2-301 D-02 계층 보기 라벨 겹침) | `outputs/qa2-상태대조-r4.md` · `outputs/e2e/{alerts,design}.md` |
+| G-22 자기 관찰 | QA2 `A:a666066d…` RUNNING R-09 01:43:03Z~ (spawn 엣지, 이 폴더 프로젝트) → 반환 02:03:04Z → DONE R-08 (증분 동기화 02:03:15Z) · 파일 감시만 (hook_event 0) · QA1 `A:a19dae7c…` 도 DONE R-08 | `outputs/e2e/self-observe-r5.md` |
+| 전체 테스트 | **375 passed** | `uv run pytest -q` |
+| make gate (새 DB) | **PASS 30 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0** | `AGENTDASH_DB=data/agentdash-v2a-verify.db make gate` |
+| 원천 무접촉 | `~/.claude/settings.json` sha1 `8641eb22e8f5…` · `config/budget.yaml` 변경 0 · 서버 0 | `shasum` · `git diff config/budget.yaml` |
+
 ## 2차-A — 웨이브 B (개발1 Task 12 · 개발2 Task 13 · 요청 처리, 2026-10-21) — 오케스트레이터 재검증
 
 ### 지금 해야 할 것
