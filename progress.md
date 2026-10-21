@@ -2,6 +2,16 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## Hostinger 현재 Mac 기록 배포 — 2026-10-21 (사용자 「1번」, D-38)
+
+- 주소: `https://srv1934103.hstgr.cloud:8443/`. VPS 프로젝트 `/docker/multi-ai-agent-platform`, `gateway` 컨테이너 **healthy**. Hostinger Docker Manager 3페이지에서도 프로젝트 실행 중 확인.
+- Mac `local.agentdash.hostinger-tunnel` **running**, VPS listen `127.0.0.1:18095`. 데스크톱의 키를 LaunchAgent가 읽지 못해 전용 키를 `~/.ssh/agentdash_hostinger_ed25519`에 설치한 후 재연결 성공. 기존 dashboard 서비스는 유지.
+- 공개 HTTPS 검증: 비인증 `/` **401**, 인증 `/`·summary·twin **200**, 원격 hooks·raw **404**, 루트 POST **403**. TLS 인증서 검증 생략 없이 실행.
+- SSE: `Accept: text/event-stream`, 25초 관찰에서 **200 · hello · ping** 확인. 최초 7초 검증은 실패했으며 시간 여유를 늘려 재검증 PASS. summary는 시각 필드 `at` 제외 **Mac과 완전 일치**.
+- 이미지: `nginx@sha256:970364228b1e4f932abc22d321932816782cca8a20b85a77552a7cfe9acfb3b5`. `docker compose config --quiet`, nginx `-t`, `git diff --check`, `check_decisions.py` PASS. 앱 코드 변경 없음.
+- 비밀번호·키는 Git 제외, 로컬 `data/hostinger/access.txt` 권한 600. DB/원천 파일 복사 없음. 기존 Caddy 설정 변경 없음. Mac 중지/잠자기 시 원격 화면 사용 불가. 실제 재부팅·로그아웃·인증서 갱신은 미시험.
+- 운영 안내: `deploy/hostinger/README.md`. 실행 확인 화면: `outputs/e2e/hostinger-20261021/docker-manager.png` (Git 제외).
+
 ## 화면 명칭·시스템 제목 변경 — 2026-10-21 (사용자 요청)
 
 - 공통 상단 첫 줄 왼쪽: **멀티 에이전트 플랫폼 대시보드**. 데스크톱 32px · 390px 화면 24px, 왼쪽 여백 16px. 메뉴 위에 배치하고 좁은 화면에서 줄바꿈 허용.

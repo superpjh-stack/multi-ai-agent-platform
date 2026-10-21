@@ -283,3 +283,10 @@
 - 실행: `/opt/homebrew/bin/uv run --frozen --offline python -m agentdash.app`, 작업 폴더 = 저장소, 운영 DB `data/agentdash.db`, 포트 8095 · 호스트 127.0.0.1. RunAtLoad/KeepAlive true · ThrottleInterval 10 · 로그 `data/agentdash-server.{stdout,stderr}.log`.
 - 검증: launchctl running · launchd 관리 PID 3421 (Python 3438) · HTTP 200 · 기존 브라우저 탭 새로고침 후 「실시간: 연결됨」 · 콘솔 오류 0. DB 무결성 ok · 파싱 오류 0 · 사용량 30,404 · 추정 비용 NULL 0 (19:20 KST).
 - 이 운영 서비스는 검증용 임시 서버가 아니므로 작업 종료 후에도 유지한다. 개발/검증의 8096/8097 규칙과 타인 서버 종료 금지는 계속 적용한다. 실제 로그아웃/재로그인은 수행하지 않았으며 자동 실행 등록 속성을 확인했다.
+## D-38 Hostinger에서 현재 Mac 기록 원격 모니터링
+
+- 상태: 확정 (2026-10-21 사용자 VPS 배포 요청 후 기록 범위 「1번」 선택).
+- 승인 범위: 지정 VPS 1934103에 현재 Mac의 모니터링 화면을 연결한다. 종전 외부 배포 금지의 이번 사용자 요청 예외이며 원천 쓰기·본문 저장 금지는 유지한다.
+- 구성: Mac의 기존 loopback 8095 → 전용 SSH 역방향 터널 → VPS loopback 18095 → Docker nginx HTTPS 8443. 기존 VPS 서비스·Caddy 설정과 앱 바인드는 변경하지 않는다.
+- 보호: TLS와 Basic 인증, 원격 GET/HEAD만 허용, 훅·원본 대화 보기 차단. DB/원천은 복사하지 않는다. 전용 SSH 키는 셸 실행 불가·listen 포트 제한.
+- 운영: Mac 사용자 LaunchAgent 자동 재연결. Mac 전원·네트워크에 의존한다. 접속 정보와 키는 Git 제외, 인증서 갱신은 기존 Caddy에 의존한다. 상세: `deploy/hostinger/README.md`.

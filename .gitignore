@@ -11,3 +11,6 @@ outputs/e2e/**/*.jpg
 outputs/e2e/**/*.jpeg
 # 루프 하네스 잠금 파일
 .claude/*.lock
+# Hostinger deployment credentials (provision separately).
+/deploy/hostinger/.env
+/deploy/hostinger/.htpasswd

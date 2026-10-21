@@ -1,5 +1,8 @@
 # 로컬 운영 안내
 
+Hostinger 원격 모니터링은 [배포 운영 안내](../deploy/hostinger/README.md)를 참고한다.
+사용자가 선택한 현재 Mac 기록을 SSH 터널로 연결하며, Mac의 로컬 운영 서비스는 계속 유지한다.
+
 ## 운영 기준
 
 - 운영 DB: `data/agentdash.db`. 삭제된 원천의 보관 기록도 포함한다.
