@@ -212,6 +212,34 @@ def totals(con: sqlite3.Connection, agent_key: str, *, descendants: bool = False
     return out
 
 
+# ── 스파크 (spec v0.4 §5.4 — 2차-T 디지털 트윈) ──────────────────────────
+SPARK_MINUTES = 30
+_SPARK = ("SELECT agent_key, substr(at,1,16) AS m, COALESCE(SUM(COALESCE(output_est, output_tokens)),0) FROM usage_event "
+          "WHERE agent_key IN ({}) AND at >= ? AND at < ? AND COALESCE(model,'') != '<synthetic>' GROUP BY agent_key, m")
+
+
+def spark(con: sqlite3.Connection, keys: list[str], now: datetime, minutes: int = SPARK_MINUTES) -> dict[str, list[int]]:
+    """키마다 길이 minutes 리스트. 칸 i = [now_floor − (minutes−1−i) 분, +1 분) 의 COALESCE(output_est, output_tokens) 합
+    (가장 오래된 칸 → 지금 분이 마지막). `<synthetic>` 제외. 기록 없는 키도 0 리스트.
+    분은 UTC 기준 — usage_event.at 은 UTC ISO `YYYY-MM-DDTHH:MM:SS.sssZ` 문자열이라 문자열 비교 · 앞 16 자로 분을 자른다.
+    now 는 시간대가 있어야 한다(없으면 ValueError — 조용한 기본값 금지)."""
+    if now.tzinfo is None:
+        raise ValueError("usage.spark: now 에 시간대가 없다")
+    if minutes < 1:
+        raise ValueError("usage.spark: minutes ≥ 1")
+    end = now.astimezone(timezone.utc).replace(second=0, microsecond=0) + timedelta(minutes=1)
+    start = end - timedelta(minutes=minutes)
+    idx = {(start + timedelta(minutes=i)).strftime("%Y-%m-%dT%H:%M"): i for i in range(minutes)}
+    lo, hi = start.strftime("%Y-%m-%dT%H:%M"), end.strftime("%Y-%m-%dT%H:%M")
+    out = {k: [0] * minutes for k in keys}
+    uniq = list(out)
+    for i in range(0, len(uniq), 500):
+        part = uniq[i:i + 500]
+        for key, m, v in con.execute(_SPARK.format(",".join("?" * len(part))), [*part, lo, hi]):
+            out[key][idx[m]] += int(v)
+    return out
+
+
 # ── 일별 집계 ─────────────────────────────────────────────────────────
 def kst_day(ts: str) -> str:
     return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(KST).strftime("%Y-%m-%d")

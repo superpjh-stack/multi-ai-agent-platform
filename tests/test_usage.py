@@ -321,3 +321,72 @@ def test_unpriced_est_null(con):
     assert tuple(con.execute("SELECT cost_usd, cost_est_usd FROM usage_event").fetchone()) == (None, None)
     assert con.execute("SELECT cost_est_usd FROM usage_daily").fetchone()[0] is None
     assert U.totals(con, "A:u")["cost_est_usd"] is None
+
+
+# ── 2차-T: usage.spark (spec v0.4 §5.4 — 최근 30 분 분당 추정 보정 출력) ─────────────────
+def _ue(con, key, rid, at, out, est=None, model="claude-opus-5-5"):
+    con.execute("INSERT INTO usage_event (agent_key, request_id, at, model, output_tokens, output_est) VALUES (?,?,?,?,?,?)",
+                (key, rid, at, model, out, est))
+
+
+def test_spark_buckets(con):
+    from datetime import datetime, timezone
+    now = datetime(2026, 10, 21, 10, 30, 20, tzinfo=timezone.utc)
+    _ue(con, "S:a", "r1", "2026-10-21T10:30:05.000Z", 7)            # 지금 분 → 마지막 칸
+    _ue(con, "S:a", "r2", "2026-10-21T10:30:59.999Z", 3)            # 지금 분 (미래 초 포함)
+    _ue(con, "S:a", "r3", "2026-10-21T10:01:00.000Z", 11)           # 첫 칸
+    _ue(con, "S:a", "r4", "2026-10-21T10:00:59.999Z", 1000)         # 범위 밖
+    _ue(con, "S:a", "r5", "2026-10-21T10:15:30.000Z", 2, est=50)    # output_est 우선
+    _ue(con, "S:a", "r6", "2026-10-21T10:31:00.000Z", 900)          # 다음 분 → 제외
+    sp = U.spark(con, ["S:a"], now)
+    assert U.SPARK_MINUTES == 30
+    assert len(sp["S:a"]) == 30
+    assert sp["S:a"][-1] == 10
+    assert sp["S:a"][0] == 11
+    assert sp["S:a"][14] == 50                                      # 10:15 = 10:01 + 14
+    assert sum(sp["S:a"]) == 71
+
+
+def test_spark_synthetic_excluded(con):
+    from datetime import datetime, timezone
+    now = datetime(2026, 10, 21, 10, 30, 0, tzinfo=timezone.utc)
+    _ue(con, "S:a", "r1", "2026-10-21T10:29:00.000Z", 5)
+    _ue(con, "S:a", "r2", "2026-10-21T10:29:10.000Z", 999, model="<synthetic>")
+    assert U.spark(con, ["S:a"], now)["S:a"][-2] == 5
+
+
+def test_spark_unknown_key_zeros(con):
+    from datetime import datetime, timezone
+    now = datetime(2026, 10, 21, 10, 30, 0, tzinfo=timezone.utc)
+    sp = U.spark(con, ["S:none", "A:x"], now, minutes=5)
+    assert sp == {"S:none": [0] * 5, "A:x": [0] * 5}
+    assert U.spark(con, [], now) == {}
+
+
+def test_spark_kst_now_same_and_naive_rejected(con):
+    """now 가 KST 이든 UTC 이든 같은 칸 (내부는 UTC 분). 시간대 없는 now 는 거부 (조용한 기본값 금지)."""
+    from datetime import datetime, timezone
+    _ue(con, "S:a", "r1", "2026-10-21T10:29:30.000Z", 4)
+    utc = datetime(2026, 10, 21, 10, 30, 0, tzinfo=timezone.utc)
+    assert U.spark(con, ["S:a"], utc) == U.spark(con, ["S:a"], utc.astimezone(U.KST))
+    assert U.spark(con, ["S:a"], utc)["S:a"][-2] == 4
+    with pytest.raises(ValueError):
+        U.spark(con, ["S:a"], utc.replace(tzinfo=None))
+
+
+def test_spark_sum_equals_events(con):
+    import random
+    from datetime import datetime, timedelta, timezone
+    rnd = random.Random(7)
+    now = datetime(2026, 10, 21, 12, 0, 40, tzinfo=timezone.utc)
+    keys = ["S:a", "A:b", "A:c"]
+    for i in range(50):
+        at = now - timedelta(seconds=rnd.randint(0, 45 * 60))
+        _ue(con, rnd.choice(keys), f"r{i}", at.strftime("%Y-%m-%dT%H:%M:%S.") + f"{at.microsecond // 1000:03d}Z",
+            rnd.randint(0, 500), est=rnd.choice([None, None, rnd.randint(0, 900)]))
+    sp = U.spark(con, keys, now)
+    lo = (now.replace(second=0, microsecond=0) - timedelta(minutes=29)).strftime("%Y-%m-%dT%H:%M")
+    for k in keys:
+        direct = con.execute("SELECT COALESCE(SUM(COALESCE(output_est, output_tokens)),0) FROM usage_event "
+                             "WHERE agent_key=? AND at >= ? AND model != '<synthetic>'", (k, lo)).fetchone()[0]
+        assert sum(sp[k]) == direct

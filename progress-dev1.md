@@ -173,6 +173,22 @@ table(...)                            # 행 · total · trend(일) 에 output_es
 - 수집기 누적기 키는 계획의 `(agent_key, request_id)` 에 **DB 파일을 더한** `(DB, agent_key) → {requestId: [max_output, json_len, est_chars]}` (테스트 · 도구가 한 프로세스에서 DB 를 여럿 연다). 다른 프로세스가 이어 읽으면 그 기록 앞부분 길이를 다시 잰다.
 - 증분 수집(`ingest_all` · 감시기 묶음)이 바뀐 키의 `usage_daily` 를 다시 만든다 (`ingest_all(daily=True)` 기본, backfill 만 False 후 전체 재생성).
 
+### 2차-T 공표 (2026-10-21 · Task 2 `usage.spark`) — **개발2 Task 3 (`core/twin.py`) 은 이것을 쓴다**
+
+```python
+# agentdash.core.usage (spec v0.4 §5.4 스파크)
+SPARK_MINUTES = 30
+spark(con, keys: list[str], now: datetime, minutes: int = SPARK_MINUTES) -> dict[str, list[int]]
+    # 키마다 길이 minutes 의 int 리스트 (keys 순서대로 dict, 중복 키는 한 번). keys == [] → {}
+    # 칸 i = [now_floor − (minutes−1−i) 분, +1 분) — i=0 가장 오래된 분, i=minutes−1 = 지금 분 (now 의 초는 버림)
+    # 값 = SUM(COALESCE(output_est, output_tokens)) — 추정 보정 출력 [추정]. model '<synthetic>' 제외 (NULL 모델은 포함)
+    # 기록 없는 키도 [0]*minutes. 자기 몫만 (자손 합 아님). 지금 분 다음(미래) 기록은 넣지 않는다
+    # 분은 UTC — usage_event.at (UTC ISO "…Z") 앞 16 자. now 는 tz-aware 필수 (naive → ValueError), KST 로 줘도 같은 결과
+    # 쿼리: keys 500 개씩 GROUP BY agent_key, 분 한 번 (설비마다 쿼리 아님)
+```
+
+- 테스트: `tests/test_usage.py::test_spark_*` 5 개 (칸 경계 10:01:00 첫 칸 · 10:00:59 제외 · 10:31:00 제외 · output_est 우선 · synthetic 제외 · 빈 키 0 · KST/UTC 같음 · 임의 50 행 합 = 직접 SQL 합).
+
 ## 2B2. 2차-A 웨이브 B — Task 12 (D-04~D-07 공통 틀) · R-2A-1 후속 (2026-10-21 10:30, DB `data/agentdash-dev1.db`)
 
 | 항목 | 실측 | 검증 명령 |
