@@ -1,4 +1,4 @@
--- spec.md §3 정규화 모델 — 11 테이블을 글자 그대로 옮겼다 (사람만 고치는 정본에서 복사).
+-- spec.md v0.3 §3 정규화 모델 — 11 테이블을 글자 그대로 옮겼다 (사람만 고치는 정본에서 복사).
 -- 아키텍트만 고친다. 바꿀 일이 생기면 decisions.md 에 먼저 올린다.
 
 -- 에이전트: 세션 · 서브에이전트 · 워크플로 에이전트를 하나로
@@ -40,6 +40,8 @@ CREATE TABLE usage_event (           -- assistant 메시지 한 건의 토큰 (r
   output_tokens INTEGER, thinking_tokens INTEGER, web_search INTEGER, web_fetch INTEGER,
   cost_usd REAL,                     -- §6.1 로 계산. 단가표에 없는 모델이면 NULL
   pricing_ver TEXT,                  -- 계산에 쓴 단가표 버전
+  output_est INTEGER,                -- §6.2 하한 추정 출력 토큰. 의심 요청만, 아니면 NULL
+  cost_est_usd REAL,                 -- output_est 를 출력에 쓴 §6.1 비용. 의심 아니면 cost_usd 와 같다
   PRIMARY KEY (agent_key, request_id)
 );
 
@@ -58,6 +60,8 @@ CREATE TABLE usage_daily (           -- 집계 (KST 일자)
   day TEXT, agent_key TEXT, model TEXT,
   input_tokens INTEGER, cache_read INTEGER, cache_write INTEGER, output_tokens INTEGER,
   tool_calls INTEGER, files_written INTEGER, active_seconds INTEGER, cost_usd REAL,
+  output_est INTEGER,                -- 그날 의심 요청의 output_est 합 (없으면 0)
+  cost_est_usd REAL,                 -- cost_est_usd 합
   PRIMARY KEY (day, agent_key, model)
 );
 

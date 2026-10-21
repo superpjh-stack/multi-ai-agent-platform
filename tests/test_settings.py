@@ -189,3 +189,22 @@ def test_samepath_helper(tmp_path):
     assert settings.same_or_under(tmp_path / "A", tmp_path / "a")
     assert not settings.same_or_under(tmp_path / "ab", tmp_path / "a")
     assert not settings.same_or_under(tmp_path, tmp_path / "a")
+
+
+def test_hardlinked_db_refused(tmp_path):
+    """G-25 · DEF-QA1-201 — 이미 있는 DB 파일이 하드 링크(st_nlink > 1)면 거부한다 (원천 파일의 링크일 수 있다)."""
+    import os
+
+    from agentdash.db import conn
+
+    a = tmp_path / "a.db"
+    a.write_bytes(b"")
+    b = tmp_path / "b.db"
+    os.link(a, b)
+    with pytest.raises(RuntimeError, match="하드 링크"):
+        conn.connect(b)
+    with pytest.raises(RuntimeError, match="하드 링크"):
+        conn.init_db(b)
+    fresh = conn.init_db(tmp_path / "new.db")       # 링크 없는 새 경로는 통과
+    c = conn.connect(fresh)
+    c.close()

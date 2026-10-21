@@ -45,3 +45,35 @@ def test_db_under_source_refused(fake_claude_home):
 
     with pytest.raises(RuntimeError):
         conn.connect(fake_claude_home / "x.db")
+
+
+V02_USAGE = """
+CREATE TABLE usage_event (agent_key TEXT, request_id TEXT, at TEXT, model TEXT, speed TEXT,
+  input_tokens INTEGER, cache_read INTEGER, cache_write_5m INTEGER, cache_write_1h INTEGER,
+  output_tokens INTEGER, thinking_tokens INTEGER, web_search INTEGER, web_fetch INTEGER,
+  cost_usd REAL, pricing_ver TEXT, PRIMARY KEY (agent_key, request_id));
+CREATE TABLE usage_daily (day TEXT, agent_key TEXT, model TEXT,
+  input_tokens INTEGER, cache_read INTEGER, cache_write INTEGER, output_tokens INTEGER,
+  tool_calls INTEGER, files_written INTEGER, active_seconds INTEGER, cost_usd REAL,
+  PRIMARY KEY (day, agent_key, model));
+INSERT INTO usage_event (agent_key, request_id, output_tokens) VALUES ('A:x', 'r1', 5);
+"""
+
+
+def test_init_db_adds_v03_columns(tmp_path):
+    """G-01 (v0.3) — v0.2 스키마의 기존 DB 에 init_db 가 빠진 열을 덧붙인다 (행은 그대로)."""
+    p = tmp_path / "old.db"
+    c = sqlite3.connect(p)
+    c.executescript(V02_USAGE)
+    c.commit()
+    c.close()
+    conn.init_db(p)
+    conn.init_db(p)                                   # 두 번 돌려도 깨지지 않는다
+    c = sqlite3.connect(p)
+    ue = {r[1]: r[2] for r in c.execute("PRAGMA table_info(usage_event)")}
+    ud = {r[1]: r[2] for r in c.execute("PRAGMA table_info(usage_daily)")}
+    row = c.execute("SELECT output_tokens, output_est, cost_est_usd FROM usage_event").fetchone()
+    c.close()
+    assert ue["output_est"] == "INTEGER" and ue["cost_est_usd"] == "REAL"
+    assert ud["output_est"] == "INTEGER" and ud["cost_est_usd"] == "REAL"
+    assert row == (5, None, None)
