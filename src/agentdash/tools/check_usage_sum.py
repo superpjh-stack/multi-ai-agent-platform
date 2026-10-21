@@ -12,7 +12,9 @@
 DB 쪽은 `usage.totals(세션, descendants=True)` (= 자기 + 자손). 그리고
   · 세션 합계 = 자기 + Σ 자손 각자 · 에이전트별 소유 합 = DB 에이전트 행 (불일치 에이전트 수)
   · 한 세션 안에서 같은 requestId 가 두 에이전트에 들어간 수 = 0 (이중 계산 없음)
-표본: 에이전트가 많은 세션 5 + 나머지에서 고정 시드 무작위 5 (워크플로 · 포크 세션이 들어가게).
+표본: **원천 파일이 지금 다 있는 세션**(메인 기록이 있고, src_file 에 기록된 그 세션 에이전트들의 기록 경로가 전부 있음) 중
+      에이전트가 많은 세션 5 + 나머지에서 고정 시드 무작위 5 (워크플로 · 포크 세션이 들어가게). Claude Code 가 지운 기록의
+      세션은 DB 가 숫자를 보관할 뿐(problem.md Q10 · decisions.md D-22) 원천 직접 합을 낼 수 없으므로 후보에서 빼고 수를 찍는다.
 출력: `G-07  토큰 합 (<세션 앞 8 자>)  PASS|FAIL  …` 10 행 + 요약 1 행.
 """
 
@@ -132,14 +134,35 @@ def main(argv: list[str] | None = None) -> int:
     from agentdash.core import usage as U
 
     offsets = {r[0]: r[1] for r in con.execute("SELECT path, offset FROM src_file")}
-    sess = [(r[0], r[1], r[2]) for r in con.execute(
+    all_sess = [(r[0], r[1], r[2]) for r in con.execute(
         "SELECT a.session_id, a.project_key, (SELECT COUNT(*) FROM agent b WHERE b.session_id=a.session_id) n "
         "FROM agent a WHERE a.kind='SESSION' AND EXISTS (SELECT 1 FROM usage_event u WHERE u.agent_key=a.agent_key) "
         "ORDER BY n DESC, a.session_id")]
-    if len(sess) < a.n:
-        print(f"G-07  토큰 합  FAIL  토큰 있는 세션 {len(sess)} < 표본 {a.n}")
-        return 1
+    from agentdash.tools.check_counts import recorded_paths
+
+    recorded = recorded_paths(con, s.claude_home)
+    members: dict[str, list[str]] = defaultdict(list)
+    for k, sid in con.execute("SELECT agent_key, session_id FROM agent"):
+        members[sid].append(k)
+    sess, gone_all, gone_part = [], 0, 0
+    for sid, pk, n in all_sess:
+        paths = [s.claude_home / "projects" / pk / f"{sid}.jsonl"]
+        paths += [p for k in members[sid] for p in recorded.get(k, [])]
+        present = [p.exists() for p in paths]
+        if all(present):
+            sess.append((sid, pk, n))
+        elif any(present):
+            gone_part += 1
+        else:
+            gone_all += 1
     half = a.n // 2
+    rule = (f"# 표본 선정 — 원천 파일이 지금 다 있는 세션 후보 {len(sess)} (토큰 있는 세션 {len(all_sess)} 중 제외 "
+            f"{gone_all + gone_part}: 원천 전부 지움 {gone_all} · 일부 지움 {gone_part} — DB 보관 숫자, Q10 · D-22) · "
+            f"에이전트 많은 순 {half} + 나머지에서 시드 20261017 무작위 {a.n - half}")
+    if len(sess) < a.n:
+        print(f"G-07  토큰 합  FAIL  원천 파일이 지금 다 있는 세션 {len(sess)} < 표본 {a.n}")
+        print(rule)
+        return 1
     sample = sess[:half] + random.Random(20261017).sample(sess[half:], a.n - half)
     ok_all = True
     dedupe_gain = 0
@@ -173,10 +196,11 @@ def main(argv: list[str] | None = None) -> int:
               f"· 입력 {src['input_tokens']}/{dbt['input_tokens']} · 캐시읽기 {src['cache_read']}/{dbt['cache_read']} "
               f"· 캐시쓰기 {src['cache_write']}/{dbt['cache_write']} · 자기+자손 {'=' if sums else '≠'} · 에이전트 {n_agents} "
               f"· 파일 {nfiles} · 에이전트별 소유 불일치 {agent_bad} · 세션 안 requestId 중복 {dup}{diff}")
+    print(rule)
     print(f"# 표본 {len(sample)} 세션 · requestId 중복 제거(세션 단위 · 최종본)로 뺀 출력 토큰 {dedupe_gain} (D-01 근거) · "
           f"규칙 = 세션 안 requestId 한 번 · 소유 = 처음 나온 기록 · 값 = 사본 포함 output 최대 (수집기 규칙 복제 아님)")
     pct = {k: (100 * v[1] / v[0] if v[0] else 0.0) for k, v in suspect.items()}
-    print(f"# D-17 (차단) 표본 안 출력 과소 의심 요청 (output < {SUSPECT_OUT} · content 길이 > {SUSPECT_LEN}): "
+    print(f"# D-17 (확정 — 추정 열은 G-24) 표본 안 출력 과소 의심 요청 (output < {SUSPECT_OUT} · content 길이 > {SUSPECT_LEN}): "
           f"메인 {suspect['main'][1]}/{suspect['main'][0]} ({pct['main']:.1f}%) · "
           f"서브·워크플로 {suspect['sub'][1]}/{suspect['sub'][0]} ({pct['sub']:.1f}%) — G-07 판정과 무관(숫자는 원천 그대로)")
     con.close()
