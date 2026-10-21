@@ -254,3 +254,10 @@ Accept: text/event-stream (또는 ?follow=1) 이면 붙잡고 실시간, 그 밖
 - **R-2A-dev2-2 → 개발1 (메모)**: 공표의 띠 warn 색 「st-WAITING_INPUT(주황)」 은 노랑 — D-01 은 spec 주황(`st-WAITING_PERMISSION`)을 썼다. D-07 게이지도 같은 색으로 맞추면 좋다.
 - **R-2A-dev2-3 → 아키텍트 · QA2 (메모)**: 알림은 탭마다 SSE 를 하나 더 연다(D-01 · D-02 · D-03 은 탭당 2). HTTP/1.1 호스트당 6 연결 — 같은 화면 탭 3 개 넘게면 막힐 수 있음. 웨이브 B Task 13 에서 `openStream` 이 `agentdashAlerts.stream` 을 같이 쓰게 합친다.
 - **R-2A-dev2-4 → QA2 (G-29)**: 리더 수단은 Web Locks(`agentdashAlerts.mode == "locks"`) 우선, 없으면 BroadcastChannel. E2E 는 `window.agentdashAlerts.{waiting, seen, leader, notified}` 를 읽으면 된다.
+
+## 8. 2차-A 웨이브 B (2026-10-21, 계획 Task 13 · R-2A-1 · R-2A-dev2-3)
+
+### R-2A-1 완료 (개발1 요청) — D-03 「추정 보정 (D-17)」
+- `templates/agent.html`: 「기록상 과소 (D-17)」 매크로(`under` · `data-undercount`)를 지우고, 작업량 표 출력 · 비용 칸마다 기록 숫자 옆에 `[추정] 추정 보정 (D-17) <값>` (`usage.totals()` 의 `output_est_total` · `cost_est_usd` · `est_note`, 비용 NULL 이면 「단가 없음」). 자기 · 자손 포함 두 칸 모두, 늘 나란히 (spec §6.2 표기).
+- D-03 은 이제 `undercount` · `undercount_note` · `undercount_output` 을 읽지 않는다 → **개발1 이 `totals()` 의 `undercount*` 키 · `LEGACY_UNDERCOUNT_NOTE` 를 지워도 된다** (`tests/test_usage.py:230~237` 은 개발1 소유 — 같이 정리).
+- 테스트: `tests/test_dashboard.py::test_d03_undercount_note_d17` → `test_d03_estimate_note_d17` (A:kid output_est 4,321 · cost_est $0.25 → 칸별 표기 2 · 자손 포함 5,555 · $0.3750 · 「기록상 과소」 0). `uv run pytest -q tests/test_dashboard.py` 12 passed · 전체 370 passed · 1 xfailed.

@@ -214,23 +214,30 @@ def _row(page: str, head: str) -> str:
     return page[i:page.index("</tr>", i)]
 
 
-def test_d03_undercount_note_d17(db):
-    """D-17 임시 ①: API usage.own · with_descendants 의 undercount 가 참인 칸만 출력 · 비용 옆에 「기록상 과소 (D-17)」. 숫자는 그대로."""
+def test_d03_estimate_note_d17(db):
+    """D-17 확정 (spec v0.3 §6.2 · R-2A-1): 출력 · 비용 칸마다 기록 숫자 옆에 「[추정] 추정 보정 (D-17)」 +
+    usage.totals() 의 output_est_total · cost_est_usd. 기록 숫자는 그대로 · 1차 「기록상 과소 (D-17)」 0."""
     seed_d01(db)
+    db.execute("UPDATE usage_event SET output_est=4321, cost_est_usd=0.25 WHERE agent_key='A:kid'")
+    db.execute("UPDATE usage_event SET cost_est_usd=0.125 WHERE agent_key='S:run'")
+    db.commit()
     c = client()
-    note = "기록상 과소 (D-17)"
+    note = "[추정] 추정 보정 (D-17)"
     k = c.get("/api/v1/agents/A:kid").json()["usage"]
-    assert k["own"]["undercount"] and k["with_descendants"]["undercount"]
+    assert k["own"]["output_est_total"] == 4321 and k["own"]["est_note"] == "추정 보정 (D-17)"
     page = c.get("/agents/A:kid").text
-    assert _row(page, "출력 토큰").count(note) == 2 and _row(page, "추정 비용").count(note) == 2
-    assert "777" in _row(page, "출력 토큰")
-    s = c.get("/api/v1/agents/S:run").json()["usage"]
-    assert not s["own"]["undercount"] and s["with_descendants"]["undercount"]          # 세션 자기 몫은 아님 · 자손 포함은 과소
+    assert "기록상 과소" not in page
+    out, cost = _row(page, "출력 토큰"), _row(page, "추정 비용")
+    assert out.count(note) == 2 and cost.count(note) == 2
+    assert "777" in out and "4,321" in out and out.index("777") < out.index(note) < out.index("4,321")
+    assert "$0.2500" in cost
     page = c.get("/agents/S:run").text
-    assert _row(page, "출력 토큰").count(note) == 1 and _row(page, "추정 비용").count(note) == 1
-    out = _row(page, "출력 토큰")
-    assert out.index("1,234") < out.index(note)                                         # 자손 포함 칸에만 (자기 칸 뒤)
-    assert note not in c.get("/agents/S:done").text                                     # 자손 없는 세션 — 표기 없음
+    out, cost = _row(page, "출력 토큰"), _row(page, "추정 비용")
+    assert out.count(note) == 2 and cost.count(note) == 2
+    assert "1,234" in out and "5,555" in out                     # 자기 기록 1,234 · 자손 포함 추정 1,234 + 4,321
+    assert "$0.3750" in cost                                     # 0.125 + 0.25
+    page = c.get("/agents/S:done").text                          # 기록 없는 세션 — 추정 0 · 단가 없음
+    assert _row(page, "추정 비용").count(note + " 단가 없음") == 2
 
 
 # ── 2차-A Task 9 — D-18 확정 (spec v0.3 §4.2): 「가설 D-18」 표시 · `hypothesis` 키 제거 (DEF-QA2-201) ──────
