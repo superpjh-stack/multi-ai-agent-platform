@@ -4,8 +4,9 @@
     twin.overlaps(resp) -> int          설비 상자 쌍 + 라인 상자 쌍 겹침 수 (check_twin · 테스트 공용)
     twin.scope_count(resp) -> int       칸 + 접힌 수 (설비 folded · 반입구 folded · 접힌 라인 hidden) = 범위 안 에이전트 수
 
-라인 = 프로젝트(`project_label`), 설비 = 에이전트(SESSION · SUBAGENT · WORKFLOW_AGENT · WORKFLOW).
-범위 = D-02 와 같다: 살아 있는 것(DONE · FAILED 아님) + `since`(기본 24h) 안에 기록이 있는 것, 프로젝트 필터.
+라인 = 프로젝트(`graph.project_names` — D-28), 설비 = 에이전트(SESSION · SUBAGENT · WORKFLOW_AGENT · WORKFLOW).
+범위 = D-02 와 같다: 살아 있는 것(DONE · FAILED 아님) + `since`(기본 24h) 안에 기록이 있는 것,
+프로젝트 필터 = project_key 같음 또는 라인 이름에 포함 (라인 단위 — 하위 폴더 에이전트도 함께, DEF-QA1-401).
 조상은 끌어오지 않는다 — 부모가 범위 밖이거나 다른 라인이면 그 설비는 자기 라인의 미확인 반입구(`U:<project_key>`) 아래 1 열.
   · 다른 라인의 부모(범위 안) → `links` 에 {src: 부모, dst: 자식, kind: "spawn", count} (배관 `pipes` 에는 안 넣는다 — 이중 0)
   · 부모 사슬 순환 · 자기 부모 → 깊이 우선 탐색에서 닿지 않는 설비를 키 순으로 반입구 아래에 뿌리로 세워 끊는다 (각 한 번)
@@ -23,7 +24,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from agentdash.core import usage
-from agentdash.core.graph import GraphError, parse_since, project_label, project_names
+from agentdash.core.graph import GraphError, parse_since, project_match, project_names
 
 # 배치 상수 (spec T-04 「상수」 — 값은 계획 docs/superpowers/plans/2026-10-21-agentdash-twin.md Global Constraints)
 BOX_W = 208
@@ -101,10 +102,8 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
     rows = [dict(zip(_COLS, r)) for r in con.execute(_AGENT_SQL)]
     names = project_names((a["project_key"], a["project_path"]) for a in rows)     # D-28 — 범위와 무관, 행 순서와 무관
     for a in rows:
-        if proj_filter:
-            label = project_label(a["project_key"], a["project_path"])
-            if not (a["project_key"] == proj_filter or proj_filter in label):
-                continue
+        if proj_filter and not project_match(proj_filter, a["project_key"], names[a["project_key"]]):
+            continue                                        # 라인(project_key) 단위 — D-02 와 같음 (DEF-QA1-401)
         alive = a["state"] not in FINAL
         recent = since_iso is None or max(a["last_event_at"] or "", a["started_at"] or "") >= since_iso
         if alive or recent:

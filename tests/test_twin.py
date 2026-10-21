@@ -563,3 +563,17 @@ def test_T07_row_order_independent(db, tmp_path):
             assert a == b, kw
     finally:
         other.close()
+
+
+# ── DEF-QA1-401 프로젝트 필터 = 라인 단위 (D-02 와 같음) ─────────────────────
+def test_project_filter_whole_line(db):
+    seed_names(Synth(db))
+    for f in ("Proj", "-x-Proj", "roj"):
+        r = build(db, project=f)
+        assert [ln["key"] for ln in r["lines"]] == ["-x-Proj"], f
+        assert set(machines(r)) == {"S:s0", "A:sub", "A:deep"}, f          # 하위 폴더 에이전트도 라인에 남는다
+        assert r["lines"][0]["inlet"] is None                              # 부모가 빠져 반입구로 가지 않는다
+    assert build(db, project="contracts")["lines"] == []                   # 하위 폴더 이름은 라인 이름이 아니다
+    from agentdash.core import graph as G
+    g = {n["data"]["id"] for n in G.build(db, project="Proj", now=NOW)["nodes"] if n["data"]["kind"] != "PROJECT"}
+    assert g == set(machines(build(db, project="Proj")))                   # D-02 와 같은 집합
