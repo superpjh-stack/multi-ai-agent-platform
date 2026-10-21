@@ -202,6 +202,23 @@ spark(con, keys: list[str], now: datetime, minutes: int = SPARK_MINUTES) -> dict
 
 - 300 설비 응답 시간은 실제 DB 에 설비가 300 개 없어 여기서 못 잰다 — 합성 300 은 개발2 `test_twin.py::test_build_300_under_300ms`.
 
+### 2T-D. 2차-T 웨이브 D — R-2T-dev2-6 check_twin 라인 단위 범위 · 새 응답 키 (2026-10-21)
+
+- `direct_scope` 프로젝트 필터 = 라인 단위 (DEF-QA1-401): project_key 같음 또는 **라인 이름**에 포함. 라인 이름 D-28 은 `direct_line_names` 로 독립 구현(`graph.project_names` · `twin` 안 부름 — DB 전체 project_path 중 (길이, 사전순) 첫 번째의 마지막 이름 앞 60 자, 경로 없으면 project_key 앞 60 자).
+- 새 대조: 시간 키(`elapsed_s` · `last_ago_s` · `ended_ago_s` ↔ agent 행, 끝난 설비 tool · target = null) · 격자 T-08(`grid.width` = `--width` · cols = 들어가는 최대 열 수 · rows · 라인 상자 x · y · h 독립 계산). `--width` 인자 추가(기본 `twin.GRID_WIDTH`).
+- TDD: 새 테스트 먼저 추가 → 10 failed 확인 → 구현 → 13 passed.
+
+| 항목 | 실측 | 검증 명령 |
+|---|---|---|
+| `tests/test_check_twin.py` | 13 passed — `--project "SongWol QR"` 하위 폴더 2 개 포함 3 PASS · `--project contracts`(하위 폴더 이름) 0 PASS · 라인 이름 독립 · twin `project_match` 를 project_key 만으로 틀리게 → FAIL(응답 0 / DB 직접 3) · `last_ago_s` +7 → FAIL · width 1 · 360 · 1400 · 4000 PASS · `grid.rows` +1 → FAIL | `uv run pytest -q tests/test_check_twin.py` |
+| 고치기 전 (HEAD 사본) `--project "SongWol QR"` | **FAIL** — 응답 1 / DB 직접 0 (R-2T-dev2-6 재현) | scratchpad 사본 실행 |
+| G-32 `agentdash-v2a-verify.db` 기본 | PASS — 설비 13 · 라인 6 · 접힘 16+0 · 범위 29/29/29 · 시간 키 불일치 0 · 격자 불일치 0 (width 1400 · cols 2 · rows 3) · 겹침 0 · TEXT>300 0 · 1.7 ms | `AGENTDASH_DB=data/agentdash-v2a-verify.db uv run python src/agentdash/tools/check_twin.py` |
+| 같은 DB `--since all` | PASS — 설비 85 · 라인 32 · 접힘 245+0 · 범위 330 · 격자 cols 2 · rows 16 · 4.7 ms | `… check_twin.py --since all` |
+| 같은 DB `--project "SongWol QR"` | PASS — 설비 1 · 라인 1 · 범위 1/1/1 · 1.0 ms | `… check_twin.py --project "SongWol QR"` |
+| 같은 DB `--width 360` | PASS — 설비 13 · 라인 6 · cols 1 · rows 6 · 1.6 ms | `… check_twin.py --width 360` |
+| 같은 DB `--since all --project "SongWol QR" --width 360` | PASS — 설비 5 · 접힘 43+0 · 범위 48/48/48 | |
+| pytest 전체 | 453 passed | `uv run pytest -q` |
+
 ## 2B2. 2차-A 웨이브 B — Task 12 (D-04~D-07 공통 틀) · R-2A-1 후속 (2026-10-21 10:30, DB `data/agentdash-dev1.db`)
 
 | 항목 | 실측 | 검증 명령 |
