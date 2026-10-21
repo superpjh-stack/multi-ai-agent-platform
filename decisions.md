@@ -49,12 +49,14 @@
 - 확인 방법: 표본 세션 체감 대조. 담당 개발1.
 
 ## D-07 `.gitignore` 범위 (`data/` · `outputs/e2e/` 스크린샷에 경로 노출)
-- 상태: 가설
+- 상태: 확정 (2026-10-20 사람 승인 — `spec.md` v0.3 머리 버전 줄 「결정 D-07 … 확정 반영」 · `docs/superpowers/specs/2026-10-20-agentdash-v2a-design.md` 결정 표 「현재 `.gitignore` 확정」)
+- 확정: 지금 `.gitignore` 그대로 (`data/` · `.env` · `.venv/` · `__pycache__/` · `outputs/e2e/*.png`). 아키텍트 반영 2026-10-21.
 - 기본값: `data/` 제외, 스크린샷(`outputs/e2e/*.png`)은 커밋하지 않음. Phase 0 의 `.gitignore` 가 이대로다(`data/` · `.env` · `.venv/` · `__pycache__/` · `outputs/e2e/*.png`).
 - 확인 방법: 사람 확인.
 
 ## D-08 Haiku 5.5 캐시 읽기 단가 (`[추정: 0.1 배]`)
-- 상태: 가설
+- 상태: 확정 (아키텍트, 2026-10-21 — 공식 단가 페이지 대조, 읽기만 · 코드에 외부 전송 없음)
+- 확정: 출처 https://platform.claude.com/docs/en/about-claude/pricing (2026-10-21 읽음) 「Model pricing」 표 — Claude Haiku 5.5 (prompts up to 100,000 tokens) Cache hits and refreshes **$0.01 / MTok** · (over 100,000 tokens) **$0.05 / MTok**. 기존 값 0.01 · 0.05 와 같다 → 값 변경 없음 · `make reprice` 불필요 · `config/pricing.yaml` 의 `cache_read_estimated` 표시 제거. 같은 표의 입력 0.10 · 0.50 · 출력 0.50 · 2.50 도 `spec.md` §6.1 과 같다. 근거 절 = `spec.md` v0.3 §6.1 (D-08) · 2026-10-20 사람 승인.
 - 기본값: 0.01 (≤100K) · 0.05 (>100K) — `config/pricing.yaml` 에 `cache_read_estimated: true` 로 표시.
 - 확인 방법: 공식 단가 페이지 대조 (외부 전송 아님 — 읽기). 지금 기록에 Haiku 5.5 메시지는 없다(`spec.md` §6.1 표).
 
@@ -88,13 +90,15 @@
 - 메인 세션 77 · 서브에이전트(워크플로 제외) 233 · 워크플로 에이전트 6 · 프로젝트 폴더 43. `spec.md` · `intro.md` 의 232 · 41 보다 늘었다 — 백필 대조(V-01)는 같은 시각에 다시 센다.
 
 ## D-13 세션 이름 2 순위 — 첫 사용자 메시지 앞 40 자 대신 `agent-name` 줄
-- 상태: 가설 (개발1 제안, 사람 확인 대기 — 차단 아님)
+- 상태: 확정 (2026-10-20 사람 승인 — `spec.md` v0.3 §3.1 세션 이름 행 「… 마지막 `agent-name` 줄 … 첫 사용자 메시지는 본문이므로 읽지 않는다 (D-13)」 · `problem.md` Q9)
+- 확정: 아래 기본값이 spec 글자가 되었다. 구현 변경 없음.
 - 관찰: `spec.md` §3.1 은 세션 이름을 "S1 `name` → 첫 사용자 메시지 앞 40 자 → 프로젝트 폴더 마지막 이름" 으로 정하지만, 첫 사용자 메시지는 프롬프트 본문이다(CLAUDE.md 「본문을 저장 · 복사하지 않는다」 와 충돌). 기록에는 `agent-name` 줄(1,078 줄, `agentName` = S1 `name` 과 같은 꼴의 이름)이 있다.
 - 기본값: S1 `name` → 그 세션 기록의 마지막 `agent-name` → `cwd` 마지막 이름(없으면 프로젝트 폴더명). 첫 사용자 메시지는 읽지 않는다 (`collect/ingest.py`).
 - 담당: 개발1. 사람이 spec 쪽을 정하면 따른다.
 
 ## D-14 S1 `busy` 가 턴이 끝난 뒤에도 남는다 (A1 `sessions/*.json` status 갱신)
-- 상태: 가설 반박 (개발2, 2026-10-17 관찰 1 건) → 대안 규칙으로 진행
+- 상태: 확정 (2026-10-20 사람 승인 — `spec.md` v0.3 §4.2 세션 평가 순서 「R-03 · R-04 를 R-02b 보다 먼저 (D-14)」 · R-03 · R-04 행 「잠잠한 busy」 · `problem.md` Q12). 1차 기록: 가설 반박 (개발2, 2026-10-17 관찰 1 건) → 대안 규칙으로 진행
+- 확정: 아래 대안 규칙이 spec R-04 글자가 되었다.
 - 관찰: 오케스트레이터 세션(이 루프)의 S1 은 `status: busy` · `updatedAt` 15:58 그대로인데, 기록 마지막 줄은 16:16 의 `system/turn_duration`(턴 끝)이고 그 뒤 새 줄이 없었다. 그동안 그 세션이 띄운 백그라운드 서브에이전트 2(개발1 · 개발2)가 실행 중이었다. 즉 S1 `busy` 는 "모델이 지금 생각 중" 이 아니라 백그라운드 자식 작업까지 포함해 남는다 — spec §4.2 R-02b 를 그대로 쓰면 자식을 기다리는 세션이 5 분 뒤 `STALE` 로 오판된다.
 - 대안 규칙 (`core/state.py` `_session`): S1 `busy` · 5 분 넘게 기록 없음 · 훅 도구 실행 중 아님이어도 **미종료 백그라운드 자식(RUNNING · WAITING_* — STALE 자식은 빼고) ≥ 1** 이면 `WAITING_CHILD`(규칙 코드 R-04, 근거에 `S1 status=busy · 미종료 백그라운드 자식 N · D-14`). 자식이 없으면 spec 대로 R-02b `STALE`.
 - 테스트: `tests/test_state.py::test_rule_table[R-04 busy · 턴 끝 · 자식 (D-14)]` 외 1. 실측: 개발2 백필 DB 에서 그 세션 = WAITING_CHILD R-04. 사람이 spec R-02b 를 고칠지 정한다. 담당 개발2.
@@ -118,7 +122,8 @@
 - 확인 방법: `tests/test_usage_page.py::test_timeline_segments`. 담당 개발1.
 
 ## D-17 서브에이전트 · 워크플로 기록의 `output_tokens` 는 스트리밍 시작값인 경우가 많다 — D-01 반박 (서브에이전트 한정)
-- 상태: 차단 (아키텍트, 2026-10-17 — DEF-QA1-002. 원천에 최종값이 없어 정확히 고칠 수 없다. 사람이 대안을 고른다)
+- 상태: 확정 (2026-10-20 사람 승인 — 대안 ② 「길이 기반 하한 추정을 별도 열로 `[추정]`」 · `spec.md` v0.3 §6.2 · §3 `usage_event` · `usage_daily` 의 `output_est` · `cost_est_usd` · §2.3 · `problem.md` Q11). 1차 기록: 차단 (아키텍트, 2026-10-17 — DEF-QA1-002)
+- 확정: 기록값은 그대로, 의심 요청(output 최대 < 30 · content JSON 길이 합 > 400)에 `output_est` · `cost_est_usd` (spec §6.2). 표기 「추정 보정 (D-17)」. 구현 = 개발1 Task 5 · 6 (계획 `docs/superpowers/plans/2026-10-20-agentdash-v2a.md`). 스키마 열은 Phase 0 Task 1 에서 반영.
 - 관찰 (QA1 `outputs/qa1/stream_heuristic.py` — 요청 = 같은 기록 · 같은 requestId, 의심 = output 최대 < 30 이면서 content 블록 JSON 길이 > 400 자, 길이만 잼):
   - QA1 실측 (17:2x): 메인 세션 요청 10,175 중 13 (0.1%) · **서브에이전트 17,299 중 11,840 (68.4%)** · 워크플로 에이전트 85 중 60 (70.6%). 의심 요청의 기록 output 합 121,024 vs text + 도구 입력 길이 ÷ 4 합 4,226,667 → **하한 추정 ≈ 4.1M 출력 토큰 과소** (DB 서브에이전트 출력 합 8.18M 의 절반 규모).
   - 아키텍트 재실행 (웨이브 D, 같은 스크립트): 메인 10,186 중 13 (0.1%) · 서브 17,492 중 11,999 (68.6%) · 워크플로 85 중 60 (70.6%) · 하한 추정 4,138,268.
@@ -137,7 +142,8 @@
 - 확인 방법: `.venv/bin/python -I outputs/qa1/stream_heuristic.py` · `uv run python src/agentdash/tools/check_usage_sum.py` 끝 줄. 담당 아키텍트(결정) · 개발1(표기) · 개발2(D-03 표기).
 
 ## D-18 S1 `busy` 인데 미래 시각 `ScheduleWakeup` 을 걸고 잠든 세션 (QA2 DEF-QA2-004)
-- 상태: 가설 (개발2, 2026-10-17 웨이브 D) — **사람 확인 필요 — spec R-03 은 idle 만 명시**
+- 상태: 확정 (2026-10-20 사람 승인 — `spec.md` v0.3 §4.2 R-03 행 「(`status = idle` 또는 잠잠한 busy) · … `ScheduleWakeup` … 미래 (D-18)」 · 「마지막 assistant 는 마지막 `tool_use` (D-18)」 · `problem.md` Q12). 1차 기록: 가설 (개발2, 2026-10-17 웨이브 D)
+- 확정: 아래 채택 규칙이 spec 글자가 되었다. 화면 · API 의 「가설 D-18」 표시 · `D18_NOTE` 는 개발2 Task 9 에서 지운다 (G-23).
 - 관찰: 오케스트레이터 세션 `S:2bee9170…` 은 S1 `busy` · pid 살아 있음 · 마지막 기록 뒤 5 분 넘게 새 줄 없음 · 가장 늦은 tool_use 가 `ScheduleWakeup`(깰 시각 미래). spec 글자(R-02b)대로면 STALE 이지만 실제로는 루프가 잠든 것 — D-14 대로 턴 뒤에도 busy 가 남는다.
 - 근거: spec §4.1 SLEEPING 정의(「ScheduleWakeup · 루프로 예약된 시각까지 잠듦」) · §13-5 수용 기준(「/loop 세션이 ScheduleWakeup 으로 잠들면 SLEEPING 과 깰 시각」) · §9.2 Stop 행(예약 있으면 SLEEPING 이 미종료 자식 WAITING_CHILD 보다 먼저) · D-14.
 - 채택 (`core/state.py` `_session`): S1 busy · 5 분 넘게 기록 없음 · 훅 도구 실행 중 아님 · **가장 늦은 tool_use 가 ScheduleWakeup 이고 깰 시각 > 지금** → `SLEEPING`(규칙 코드 R-03, 근거에 `D-18` · 깰 시각). 순서: R-02a(5 분 안 RUNNING) > 훅 도구 실행 중 RUNNING > **D-18 SLEEPING** > D-14 WAITING_CHILD > R-02b STALE. "마지막 assistant" 는 마지막 tool_use 로 본다(예약 뒤 마지막 인사 텍스트 줄은 DB 에 없고 활동이 아니다 — D-04 와 같은 해석). idle 계열 R-03 도 같은 조건으로 좁혔다.
@@ -145,7 +151,8 @@
 - 테스트: `tests/test_state.py::test_rule_table[D-18 …]` 5 행 · `test_db_wakeup_must_be_last_assistant`. 사람이 spec R-03 을 busy 까지 넓힐지 정한다. 담당 개발2.
 
 ## D-19 S1 파일은 있는데 pid 가 죽은 세션 (QA2 DEF-QA2-005)
-- 상태: 가설 (개발2, 2026-10-17 웨이브 D)
+- 상태: 확정 (2026-10-20 사람 승인 — `spec.md` v0.3 §4.2 「S1 없음 = S1 파일 없음 또는 pid 소멸 (D-19)」 · R-06 · R-07 행 · `problem.md` Q12). 1차 기록: 가설 (개발2, 2026-10-17 웨이브 D)
+- 확정: 아래 채택 규칙이 spec 글자가 되었다.
 - 관찰: spec R-02a 는 pid 생존을 요구하고 R-02b 는 pid 를 말하지 않으며, R-06/R-07 은 「S1 없음(프로세스 소멸)」. S1 있음 · pid 소멸 · 5 분 안은 어느 규칙에도 안 걸리고, 5 분 뒤는 R-02b 글자로 STALE 이 된다. 지금 실제 S1 3 개는 모두 pid 살아 있어 영향 0.
 - 채택 (현재 구현 유지): pid 소멸 = 「S1 없음(프로세스 소멸)」 — R-06(마지막 항목 결과 없는 tool_use → STALE) / R-07(DONE). S1 status · 예약 시각은 보지 않는다. R-01 훅도 SessionEnd 밖에는 쓰지 않는다(Stop 등은 프로세스가 사라진 뒤 의미 없음). 근거 문구 `S1 있음 · pid 소멸 (D-19)`.
 - 테스트: `tests/test_state.py::test_rule_table[D-19 …]` 4 행 + 기존 `R-06 pid 소멸`. 사람이 spec R-02b/R-06 문구를 정한다. 담당 개발2.

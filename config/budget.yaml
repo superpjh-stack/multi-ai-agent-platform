@@ -1,0 +1,5 @@
+# 예산 한도 · 경고 비율 — spec.md v0.3 §6.3 블록 그대로.
+# 금액은 사람이 넣는다 (null = 「한도 미설정」, 경고 없음). 코드 · 테스트 밖에서 금액을 지어내지 않는다.
+warn_ratio: 0.8                  # 이 비율부터 주황, 1.0 부터 빨강
+total:    { daily_usd: null, monthly_usd: null }
+projects: {}                     # "<project_path 마지막 이름>": { daily_usd: …, monthly_usd: … }

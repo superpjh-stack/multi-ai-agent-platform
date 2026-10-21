@@ -21,7 +21,7 @@ models:
     tiers:                       # 프롬프트(입력+캐시 읽기+캐시 쓰기) 크기 기준
       - { max_prompt: 100000, in: 0.10, out: 0.50, cache_read: 0.01 }
       - { max_prompt: null,   in: 0.50, out: 2.50, cache_read: 0.05 }
-    cache_read_estimated: true   # [추정: 입력의 0.1 배] — D-08 공식 단가 대조 대기
+    # cache_read 0.01 · 0.05 = 공식 단가 페이지 대조 확정 (D-08, 2026-10-21)
   claude-haiku-4-5:  { in: 1.00,  out: 5.00,  cache_read: 0.10 }
 aliases:                         # 날짜 · 접미사가 붙은 ID 를 위 키로 모은다 (spec.md §6.1 발췌에 있는 것만)
   "claude-opus-5-5[1m]": claude-opus-5-5
