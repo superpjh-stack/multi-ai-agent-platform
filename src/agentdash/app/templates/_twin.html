@@ -171,8 +171,10 @@
   }
   function agoNow(v) { return v == null ? null : v + (Date.now() - fetchedAt) / 1000; }   // 응답 뒤 흐른 시간을 더한다
   // 경과 글자 (DEF-QA2-401) — 끝난 설비: ended_at 로부터 n 전 · 멈춤 의심: 마지막 기록부터 n 전 · 그 밖: 상태 지속(state_since)
+  // ended_at 없는 끝난 설비(D-33 · DEF-QA2-502)는 마지막 기록부터 「기록 n 전」 — 백필 시각부터 센 상태 지속을 쓰지 않는다
   function timeText(m) {
     if (FINAL[m.state] && m.ended_ago_s != null) return dur(agoNow(m.ended_ago_s)) + " 전";
+    if (FINAL[m.state] && m.last_ago_s != null) return "기록 " + dur(agoNow(m.last_ago_s)) + " 전";
     if (m.state === "STALE" && m.last_ago_s != null) return "기록 " + dur(agoNow(m.last_ago_s)) + " 전";
     return dur(agoNow(m.elapsed_s));
   }
