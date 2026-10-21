@@ -555,7 +555,17 @@
   }
   svg.addEventListener("pointerup", endDrag);
   svg.addEventListener("pointercancel", endDrag);
-  if (window.ResizeObserver) new ResizeObserver(function () { if (T.last) applyVB(); }).observe(wrap);
+  // T-08 격자 너비 — 서버가 라인 격자를 이 너비에 맞춰 짠다(브라우저는 열을 계산하지 않는다). 평면도 카드 실제 너비 ÷ GRID_SCALE
+  // (맞춤이 폭 맞춤으로 떨어질 때의 배율 — 글자가 읽히는 크기에서 카드 폭을 채우게). 카드 크기가 바뀌면 1 초 묶음으로 다시 받는다.
+  var GRID_SCALE = 0.85, sentW = null, tResize = null;
+  function gridWidth() { return Math.max(1, Math.round((wrap.clientWidth || 1) / GRID_SCALE)); }
+  if (window.ResizeObserver) new ResizeObserver(function () {
+    if (T.last) applyVB();
+    if (sentW !== null && gridWidth() !== sentW) {
+      clearTimeout(tResize);
+      tResize = setTimeout(function () { tResize = null; if (gridWidth() !== sentW) { vbInit = false; load(); } }, 1000);
+    }
+  }).observe(wrap);
 
   // ── 선택 · 이동 (누르기 = 패널 요약 · 두 번 / Enter = D-03 · Tab 순회 · Esc 해제) ──
   function target(e) { return e.target.closest ? e.target.closest("g.machine, g.inlet") : null; }
@@ -726,10 +736,16 @@
     if (projSel && projSel.value) p.set("project", projSel.value);
     return p.toString();
   }
+  function apiParams() {                           // 주소창에는 넣지 않는 화면 너비 (T-08)
+    var p = new URLSearchParams(params());
+    sentW = gridWidth();
+    p.set("width", String(sentW));
+    return p.toString();
+  }
   function load() {
     if (loading) { again = true; return; }
     loading = true; T.loads += 1;
-    fetch("/api/v1/twin?" + params(), {cache: "no-store"}).then(function (r) {
+    fetch("/api/v1/twin?" + apiParams(), {cache: "no-store"}).then(function (r) {
       return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ("HTTP " + r.status)); return j; });
     }).then(function (j) {
       errEl.textContent = "";

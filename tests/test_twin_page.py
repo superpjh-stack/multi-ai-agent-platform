@@ -169,3 +169,12 @@ def test_no_client_side_layout():
     for c in ("BOX_W", "BOX_H", "GAP_X", "GAP_Y", "LINE_HEAD", "LINE_PAD", "LINE_GAP", "208", "92"):
         assert not re.search(r"\b" + c + r"\b", s), c
     assert ".box.x" in s and ".box.y" in s
+
+
+def test_grid_width_sent_and_resize_refetch():
+    """T-08 (D-30): 평면도 카드 실제 너비를 width 로 보내고, 크기가 바뀌면 1 초 묶음으로 다시 받는다 (격자는 서버가)."""
+    s = src("_twin.html")
+    assert re.search(r'p\.set\("width",', s)
+    assert "wrap.clientWidth" in s
+    m = re.search(r"new ResizeObserver\(function \(\) \{[\s\S]{0,600}?\}\)\.observe\(wrap\)", s)
+    assert m and re.search(r"setTimeout\([\s\S]*?\}, 1000\)", m.group(0)) and "load()" in m.group(0)

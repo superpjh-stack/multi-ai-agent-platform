@@ -36,6 +36,8 @@ LINE_PAD = 16
 LINE_GAP = 24
 FOLD_AFTER_SEC = 1800      # T-05
 MACHINE_LIMIT = 300        # T-06
+GRID_WIDTH = 1400          # T-08 기본 평면도 너비 (px)
+GRID_WIDTH_MAX = 100_000   # 잘못된 값 거부 상한
 NAME_MAX = 24
 FINAL = ("DONE", "FAILED")
 INLET_NAME = "부모 미확인"
@@ -88,9 +90,48 @@ def _box(x: int, y: int, w: int = BOX_W, h: int = BOX_H) -> dict:
     return {"x": int(x), "y": int(y), "w": int(w), "h": int(h)}
 
 
+def check_width(width) -> int:
+    """T-08 `width` — 1 이상 정수 (평면도 너비 px). 아니면 TwinError (API 422) — 조용히 기본값으로 바꾸지 않는다."""
+    if isinstance(width, str):
+        w = width.strip()
+        if not w.isdigit():
+            raise TwinError(f"width 는 1~{GRID_WIDTH_MAX} 정수 (받은 값 {width[:20]!r})")
+        width = int(w)
+    if isinstance(width, bool) or not isinstance(width, int) or not 1 <= width <= GRID_WIDTH_MAX:
+        raise TwinError(f"width 는 1~{GRID_WIDTH_MAX} 정수 (받은 값 {str(width)[:20]!r})")
+    return width
+
+
+def grid(sizes: list[tuple[int, int]], width: int) -> tuple[int, list[tuple[int, int, int]]]:
+    """T-08: 라인 (w, h) 들을 T-01 순서대로 왼 → 오른 · 위 → 아래 격자에. cols = width 에 들어가는 최대 열 수(≥ 1),
+    한 열 너비 = 그 열 라인 중 가장 넓은 것, 행 높이 = 그 행 가장 높은 것. 돌려줌: cols, 라인마다 (x, y, 행 높이)."""
+    n = len(sizes)
+    cols = 1
+    for c in range(n, 1, -1):
+        colw = [max(sizes[i][0] for i in range(j, n, c)) for j in range(c)]
+        if sum(colw) + (c - 1) * LINE_GAP <= width:
+            cols = c
+            break
+    colw = [max(sizes[i][0] for i in range(j, n, cols)) for j in range(cols)] if n else []
+    xs = [sum(colw[:j]) + j * LINE_GAP for j in range(cols)]
+    out = []
+    y = 0
+    for r0 in range(0, n, cols):
+        rh = max(h for _w, h in sizes[r0:r0 + cols])
+        out.extend((xs[i - r0], y, rh) for i in range(r0, min(n, r0 + cols)))
+        y += rh + LINE_GAP
+    return cols, out
+
+
+def _shift(b: dict, dx: int, dy: int) -> None:
+    b["x"] += dx
+    b["y"] += dy
+
+
 def build(con, *, since: str | None = None, project: str | None = None, now: datetime | None = None,
-          limit: int = MACHINE_LIMIT) -> dict:
+          limit: int = MACHINE_LIMIT, width: int = GRID_WIDTH) -> dict:
     t0 = time.perf_counter()
+    width = check_width(width)                              # 형식 오류 → TwinError
     now = now or _now()
     since_t = parse_since(since, now)                      # 형식 오류 → GraphError(= TwinError)
     since_iso = _iso(since_t) if since_t else None
@@ -270,7 +311,7 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
     for s, d, kd, at, _c in raw_edges:
         edge_at[(s, d, kd)] = at
 
-    # ── 좌표 ──
+    # ── 좌표 (라인마다 자기 원점 0,0 에서 — T-08 격자로 옮기는 것은 아래) ──
     out_lines = []
     y = 0
     folded_lines = 0
@@ -286,7 +327,6 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
             folded_lines += 1
             out_lines.append({**base, "box": _box(0, y, BOX_W + 2 * LINE_PAD, LINE_HEAD), "machines": [], "pipes": [],
                               "inlet": None, "folded_line": True, "hidden": len(members)})
-            y += LINE_HEAD + LINE_GAP
             continue
         mach = []
         pipes = []
@@ -324,7 +364,13 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
         w = 2 * LINE_PAD + (max_col + 1) * BOX_W + max_col * GAP_X
         out_lines.append({**base, "box": _box(0, y, w, h), "machines": mach, "pipes": pipes, "inlet": inlet,
                           "folded_line": False, "hidden": 0})
-        y += h + LINE_GAP
+
+    # ── T-08 라인 격자 ──
+    cols, cells = grid([(ln["box"]["w"], ln["box"]["h"]) for ln in out_lines], width)
+    for ln, (gx, gy, rh) in zip(out_lines, cells):
+        for b in [m["box"] for m in ln["machines"]] + ([ln["inlet"]["box"]] if ln["inlet"] else []):
+            _shift(b, gx, gy)
+        ln["box"].update(x=gx, y=gy, h=rh)
 
     # 같은 라인 안 handback → pipes · message 와 라인 간 spawn/workflow/handback → links
     line_of = {m["key"]: ln for ln in out_lines for m in ln["machines"]}
@@ -356,6 +402,7 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
         "lines": out_lines,
         "links": [{"src": s, "dst": d, "kind": kd, "count": c} for (s, d, kd), c in sorted(links.items())],
         "folded_lines": folded_lines,
+        "grid": {"width": width, "cols": cols, "rows": -(-len(out_lines) // cols) if out_lines else 0},
         "agents_in_scope": len(agents),
         "filters": {"since": since_iso, "since_arg": since or "24h", "project": proj_filter or None},
         "elapsed_ms": round((time.perf_counter() - t0) * 1000, 1),

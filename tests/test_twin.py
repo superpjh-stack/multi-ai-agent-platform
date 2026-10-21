@@ -79,7 +79,13 @@ def build(con, **kw):
     return T.build(con, **kw)
 
 
+_LINE_X: dict[str, int] = {}          # 설비 키 → 자기 라인 상자 x (T-08 격자에서 열 계산용)
+
+
 def machines(resp) -> dict[str, dict]:
+    for ln in resp["lines"]:
+        for m in ln["machines"]:
+            _LINE_X[m["key"]] = ln["box"]["x"]
     return {m["key"]: m for ln in resp["lines"] for m in ln["machines"]}
 
 
@@ -88,7 +94,7 @@ def line_of(resp, key) -> dict:
 
 
 def col(m) -> int:
-    return (m["box"]["x"] - T.LINE_PAD) // (T.BOX_W + T.GAP_X)
+    return (m["box"]["x"] - _LINE_X.get(m["key"], 0) - T.LINE_PAD) // (T.BOX_W + T.GAP_X)
 
 
 def rows_order(line) -> list[str]:
@@ -254,7 +260,9 @@ def test_T06_fold_lines_over_limit(db):
     assert [ln["name"] for ln in r["lines"]] == ["p-l0", "p-l1", "p-l2"]      # 접힌 라인도 머리 한 줄로 남는다
     folded = [ln for ln in r["lines"] if ln["folded_line"]]
     assert [ln["name"] for ln in folded] == ["p-l2"]                          # 뒤 라인부터
-    assert folded[0]["hidden"] == 5 and folded[0]["machines"] == [] and folded[0]["box"]["h"] == T.LINE_HEAD
+    assert folded[0]["hidden"] == 5 and folded[0]["machines"] == []
+    narrow = [ln for ln in build(db, limit=10, width=360)["lines"] if ln["folded_line"]]
+    assert narrow[0]["box"]["h"] == T.LINE_HEAD                               # 1 열이면 머리 한 줄 (같은 행 높이 맞춤 없음)
     assert T.scope_count(r) == 14
     assert T.overlaps(r) == 0
 
@@ -643,3 +651,124 @@ def test_T06_after_T05(db):
     assert all(machines(r)[f"S:{li}"]["folded"] == 3 for li in (0, 1))
     assert T.scope_count(r) == r["agents_in_scope"] == 24
     assert T.overlaps(r) == 0
+
+
+# ── T-08 라인 격자 (v0.4.1 · D-30 · DEF-QA2-402) ──────────────────────────────
+def six_lines(con, extra_rows=None):
+    s = Synth(con)
+    for li in range(6):
+        proj = f"-p-g{li}"
+        sk = s.agent(f"S:g{li}", "SESSION", proj=proj, sid=f"g{li}", last=1 + li)       # T-01: g0 가장 최근
+        for i in range((extra_rows or {}).get(li, 1)):
+            s.agent(f"A:g{li}-{i}", proj=proj, sid=f"g{li}", parent=sk, last=1 + li)
+    con.commit()
+
+
+def inside(ln, b):
+    lb = ln["box"]
+    return lb["x"] <= b["x"] and b["x"] + b["w"] <= lb["x"] + lb["w"] and lb["y"] <= b["y"] and b["y"] + b["h"] <= lb["y"] + lb["h"]
+
+
+def test_T08_grid_1400_two_or_more_cols(db):
+    six_lines(db)
+    r = build(db)                                                   # width 기본 1400
+    ls = r["lines"]
+    assert [ln["key"] for ln in ls] == [f"-p-g{i}" for i in range(6)]
+    xs = sorted({ln["box"]["x"] for ln in ls})
+    assert len(xs) >= 2 and r["grid"]["cols"] == len(xs) and r["grid"]["width"] == 1400
+    cols = r["grid"]["cols"]
+    widths = [ln["box"]["w"] for ln in ls]
+    assert sum(sorted(widths)[-cols:]) + (cols - 1) * T.LINE_GAP <= 1400  # 들어간다
+    # T-01 순서대로 왼 → 오른, 위 → 아래
+    for i, ln in enumerate(ls):
+        row, c = divmod(i, cols)
+        assert ln["box"]["x"] == xs[c]
+        if row == 0:
+            assert ln["box"]["y"] == 0
+        else:
+            assert ln["box"]["y"] > ls[(row - 1) * cols]["box"]["y"]
+    for ln in ls:
+        for m in ln["machines"]:
+            assert inside(ln, m["box"])
+    assert T.overlaps(r) == 0
+    a, b = build(db), build(db, width=1400)
+    a.pop("elapsed_ms"), b.pop("elapsed_ms")
+    assert a == b                                                   # width 없으면 1400
+
+
+def test_T08_narrow_one_col(db):
+    six_lines(db)
+    r = build(db, width=360)
+    assert r["grid"]["cols"] == 1
+    ys = [ln["box"]["y"] for ln in r["lines"]]
+    assert all(ln["box"]["x"] == 0 for ln in r["lines"]) and ys == sorted(ys) and len(set(ys)) == 6
+    y = 0
+    for ln in r["lines"]:                                             # v0.4 과 같은 세로 쌓기
+        assert ln["box"]["y"] == y
+        y += ln["box"]["h"] + T.LINE_GAP
+    assert T.overlaps(r) == 0
+
+
+def test_T08_same_row_height(db):
+    six_lines(db, extra_rows={0: 4, 1: 1, 2: 2})
+    r = build(db, width=1400)
+    cols = r["grid"]["cols"]
+    assert cols >= 2
+    ls = r["lines"]
+    for i in range(0, len(ls), cols):
+        row = ls[i:i + cols]
+        assert len({ln["box"]["y"] for ln in row}) == 1
+        assert len({ln["box"]["h"] for ln in row}) == 1                # 그 행에서 가장 높은 라인에 맞춘다
+    assert ls[0]["box"]["h"] == T.LINE_HEAD + 5 * (T.BOX_H + T.GAP_Y) - T.GAP_Y + T.LINE_PAD
+    assert T.overlaps(r) == 0
+
+
+def test_T08_column_width_is_widest_in_column(db):
+    """한 열 너비 = 그 열에 놓인 라인 중 가장 넓은 라인 — 다음 열 x = 앞 열 최대 너비 + LINE_GAP."""
+    s = Synth(db)
+    s.agent("S:w0", "SESSION", proj="-p-w0", sid="w0", last=1)
+    s.agent("S:w1", "SESSION", proj="-p-w1", sid="w1", last=2)
+    s.agent("S:w2", "SESSION", proj="-p-w2", sid="w2", last=3)
+    a = s.agent("A:w2a", proj="-p-w2", sid="w2", parent="S:w2", last=3)
+    s.agent("A:w2b", proj="-p-w2", sid="w2", parent=a, last=3)          # 3 열짜리 라인 — 0 열 2 행째
+    s.agent("S:w3", "SESSION", proj="-p-w3", sid="w3", last=4)
+    db.commit()
+    r = build(db, width=1100)
+    assert r["grid"]["cols"] == 2
+    ls = {ln["key"]: ln["box"] for ln in r["lines"]}
+    assert ls["-p-w1"]["x"] == ls["-p-w3"]["x"] == ls["-p-w2"]["w"] + T.LINE_GAP
+    assert T.overlaps(r) == 0
+
+
+@pytest.mark.parametrize("width", [1, 360, 1400, 4000])
+def test_T08_300_no_overlap_fast(db, width):
+    synth_300(db)
+    build(db, width=width)
+    r = build(db, width=width)
+    assert sum(len(ln["machines"]) for ln in r["lines"]) == 300
+    assert T.overlaps(r) == 0
+    for ln in r["lines"]:
+        for m in ln["machines"]:
+            assert inside(ln, m["box"])
+        if ln["inlet"]:
+            assert inside(ln, ln["inlet"]["box"])
+    assert r["elapsed_ms"] <= 300
+    assert r["grid"]["cols"] >= (3 if width >= 4000 else 1)          # 300 합성 라인 폭 1296
+
+
+def test_T08_bad_width(db):
+    for w in (0, -5, True, 1.5, "x"):
+        with pytest.raises(T.TwinError):
+            build(db, width=w)
+
+
+def test_twin_api_width(client):
+    con = conn.connect()
+    six_lines(con)
+    con.close()
+    assert client.get("/api/v1/twin", params={"width": "360"}).json()["grid"]["cols"] == 1
+    assert client.get("/api/v1/twin").json()["grid"] == client.get("/api/v1/twin", params={"width": 1400}).json()["grid"]
+    for bad in ("abc", "0", "-3", "1.5", "99999999"):
+        r = client.get("/api/v1/twin", params={"width": bad})
+        assert r.status_code == 422, bad
+        assert "width" in r.json()["error"]
