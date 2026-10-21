@@ -57,8 +57,10 @@ def budget_band(con, now: datetime) -> dict | None:
 
 
 def _projects(con, project: str | None = None) -> list[dict]:
-    rows = con.execute("SELECT project_key, MAX(project_path) FROM agent GROUP BY project_key").fetchall()
-    projects = sorted(({"key": k, "label": Q.project_label(k, p)} for k, p in rows if k),
+    from agentdash.core.graph import project_names       # D-28 — 라인 이름과 같은 규칙
+
+    names = project_names(con.execute("SELECT project_key, project_path FROM agent").fetchall())
+    projects = sorted(({"key": k, "label": v} for k, v in names.items() if k),
                       key=lambda x: (x["label"].lower(), x["key"]))
     if project and project not in {x["key"] for x in projects}:
         projects.insert(0, {"key": project, "label": project[:60]})     # 모르는 키도 그대로 보낸다 (API 가 판단)

@@ -23,7 +23,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from agentdash.core import usage
-from agentdash.core.graph import GraphError, parse_since, project_label
+from agentdash.core.graph import GraphError, parse_since, project_label, project_names
 
 # 배치 상수 (spec T-04 「상수」 — 값은 계획 docs/superpowers/plans/2026-10-21-agentdash-twin.md Global Constraints)
 BOX_W = 208
@@ -74,7 +74,7 @@ _USAGE_SQL = ("SELECT agent_key, COALESCE(SUM(output_tokens),0), COALESCE(SUM(CO
               "SUM(cost_est_usd) FROM usage_event WHERE agent_key IN ({}) GROUP BY agent_key")
 _TOOL_SQL = ("SELECT agent_key, at, tool_use_id, tool, target FROM tool_call WHERE ok IS NULL AND agent_key IN ({})")
 # SLEEPING 깰 시각 (spec §7.4) — 마지막 state_log 근거의 「ScheduleWakeup [깰 시각] <ISO>」 (core.state 가 남기는 꼴)
-_WAKE_SQL = ("SELECT agent_key, reason FROM state_log WHERE agent_key IN ({}) ORDER BY agent_key, at DESC, rowid DESC")
+_WAKE_SQL = ("SELECT agent_key, reason FROM state_log WHERE agent_key IN ({}) ORDER BY agent_key, at DESC, reason DESC")
 _WAKE_RE = re.compile(r"ScheduleWakeup (?:깰 시각 )?(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z?)")
 
 
@@ -98,8 +98,9 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
 
     # ── 범위 ──
     agents: dict[str, dict] = {}
-    for r in con.execute(_AGENT_SQL):
-        a = dict(zip(_COLS, r))
+    rows = [dict(zip(_COLS, r)) for r in con.execute(_AGENT_SQL)]
+    names = project_names((a["project_key"], a["project_path"]) for a in rows)     # D-28 — 범위와 무관, 행 순서와 무관
+    for a in rows:
         if proj_filter:
             label = project_label(a["project_key"], a["project_path"])
             if not (a["project_key"] == proj_filter or proj_filter in label):
@@ -112,12 +113,10 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
     # ── 라인 묶기 ──
     lines: dict[str, dict] = {}
     for k, a in agents.items():
-        ln = lines.setdefault(a["project_key"], {"key": a["project_key"], "label": None, "members": []})
+        ln = lines.setdefault(a["project_key"], {"key": a["project_key"], "label": names[a["project_key"]], "members": []})
         ln["members"].append(k)
-        if ln["label"] is None and a["project_path"]:
-            ln["label"] = project_label(a["project_key"], a["project_path"])
-    for pk, ln in lines.items():
-        ln["label"] = ln["label"] or project_label(pk, None)
+    for ln in lines.values():
+        ln["members"].sort()                               # T-07 — SELECT 순서에 기대지 않는다
 
     # 자식 목록 (같은 라인 · 범위 안 · 자기 자신 아님)
     def tree_parent(k: str) -> str | None:
@@ -268,7 +267,7 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
 
     # ── 엣지 ──
     edge_at: dict[tuple, str | None] = {}
-    raw_edges = con.execute("SELECT src_key, dst_key, kind, at, count FROM edge").fetchall()
+    raw_edges = con.execute("SELECT src_key, dst_key, kind, at, count FROM edge ORDER BY src_key, dst_key, kind").fetchall()
     for s, d, kd, at, _c in raw_edges:
         edge_at[(s, d, kd)] = at
 

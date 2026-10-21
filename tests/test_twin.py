@@ -510,3 +510,56 @@ def test_twin_text_le_300(client):
     j = client.get("/api/v1/twin").json()
     assert j["lines"]
     assert max(len(x) for x in _strings(j)) <= 300
+
+
+# ── 웨이브 D (2차-T) — DEF-QA1-402 · D-28 라인 이름 · T-07 행 순서 ────────────
+TABLES = ("agent", "usage_event", "tool_call", "edge", "state_log")
+
+
+def reversed_copy(con, path):
+    """같은 DB 상태를 행 물리 순서만 뒤집어 새 DB 에 넣는다 (rowid 도 거꾸로)."""
+    p = conn.init_db(path)
+    dst = conn.connect(p)
+    for t in TABLES:
+        rows = con.execute(f"SELECT * FROM {t} ORDER BY rowid DESC").fetchall()
+        if rows:
+            dst.executemany(f"INSERT INTO {t} VALUES ({','.join('?' * len(rows[0]))})", [tuple(r) for r in rows])
+    dst.commit()
+    return dst
+
+
+def seed_names(s):
+    s.agent("A:sub", proj="-x-Proj", sid="s0", parent="S:s0", path="/x/Proj/dev")       # 하위 폴더 — 먼저 넣는다
+    s.agent("S:s0", "SESSION", proj="-x-Proj", path="/x/Proj")
+    s.agent("A:deep", proj="-x-Proj", sid="s0", parent="A:sub", path="/x/Proj/dev/contracts")
+    s.agent("S:t1", "SESSION", proj="-x-tie", path="/x/bb")                               # 길이 같음 → 사전순
+    s.agent("S:t2", "SESSION", proj="-x-tie", path="/x/aa")
+    s.agent("S:np", "SESSION", proj="-Users-me-NoPath", path="")                          # 경로 없음 → project_key
+    s.agent("S:z", "SESSION", state="SLEEPING", rule="R-03")
+    for reason in ("R-03 ScheduleWakeup 깰 시각 2026-10-21T11:00:00Z", "R-03 ScheduleWakeup 깰 시각 2026-10-21T12:00:00Z"):
+        s.con.execute("INSERT INTO state_log (agent_key, at, state, reason) VALUES ('S:z', ?, 'SLEEPING', ?)",
+                      (iso(ago(2)), reason))                                               # 같은 시각 두 줄
+    s.con.commit()
+
+
+def test_line_name_shortest_path(db):
+    """D-28: 그 project_key 의 project_path 중 가장 짧은 것(같으면 사전순)의 마지막 이름, 없으면 project_key."""
+    seed_names(Synth(db))
+    names = {ln["key"]: ln["name"] for ln in build(db)["lines"]}
+    assert names["-x-Proj"] == "Proj"
+    assert names["-x-tie"] == "aa"
+    assert names["-Users-me-NoPath"] == "-Users-me-NoPath"
+
+
+def test_T07_row_order_independent(db, tmp_path):
+    """T-07 (v0.4.1): DB 행 물리 순서만 다른 같은 상태 → 좌표까지 같은 응답."""
+    seed_names(Synth(db))
+    synth_300(db)
+    other = reversed_copy(db, tmp_path / "rev.db")
+    try:
+        for kw in ({}, {"since": "all"}, {"project": "Proj"}):
+            a, b = build(db, **kw), build(other, **kw)
+            a.pop("elapsed_ms"), b.pop("elapsed_ms")
+            assert a == b, kw
+    finally:
+        other.close()

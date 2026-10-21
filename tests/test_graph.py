@@ -201,7 +201,8 @@ def test_filters(db):
     s.agent("S:old", "SESSION", "-a", "old", state="DONE", rule="R-07", ago_min=60 * 48)
     s.agent("S:oldalive", "SESSION", "-a", "oldalive", state="WAITING_INPUT", rule="R-05", ago_min=60 * 48)
     s.agent("S:new", "SESSION", "-b", "new", state="DONE", rule="R-07", ago_min=30, out=50000, path="/x/02 Design Agent")
-    s.agent("A:new-1", "SUBAGENT", "-b", "new", parent="S:new", depth=1, state="DONE", ago_min=30, out=10)
+    s.agent("A:new-1", "SUBAGENT", "-b", "new", parent="S:new", depth=1, state="DONE", ago_min=30, out=10,
+            path="/x/02 Design Agent/sub")                 # 하위 폴더 cwd — D-28 라인 이름은 가장 짧은 경로
     db.commit()
     ids = lambda g: {n["data"]["id"] for n in g["nodes"] if n["data"]["kind"] != "PROJECT"}
     assert ids(G.build(db, now=NOW)) == {"S:oldalive", "S:new", "A:new-1"}         # 기본 24 시간 + 살아 있는 것
@@ -246,3 +247,33 @@ def test_graph_page_project_query_applied_on_first_load(db):
     assert "sel.options.length <= 1" not in t          # 옵션이 이미 있어도 API 목록으로 채우는 쪽이 값을 지우지 않는다
     t2 = TestClient(app).get("/graph?project=%22%3E%3Cscript%3E").text   # 이스케이프
     assert "<script>\"" not in t2 and '"><script>' not in t2
+
+
+# ── 웨이브 D (2차-T) — D-28 프로젝트 라벨 · 행 순서 무관 ──────────────────────
+def test_project_label_shortest_path_d28(db, tmp_path):
+    """D-02 프로젝트 라벨도 트윈 라인 이름과 같은 규칙 (D-28) · DB 행 순서와 무관."""
+    s = Synth(db)
+    s.agent("A:sub", "SUBAGENT", "-x-Proj", "s0", parent="S:s0", depth=1, path="/x/Proj/dev")
+    s.agent("S:s0", "SESSION", "-x-Proj", "s0", path="/x/Proj")
+    s.agent("S:t1", "SESSION", "-x-tie", "t1", path="/x/bb")
+    s.agent("S:t2", "SESSION", "-x-tie", "t2", path="/x/aa")
+    db.commit()
+    j = G.build(db, since="all", now=NOW)
+    labels = {n["data"]["project"]: n["data"]["label"] for n in j["nodes"] if n["data"]["kind"] == "PROJECT"}
+    assert labels == {"-x-Proj": "Proj", "-x-tie": "aa"}
+    assert {p["key"]: p["label"] for p in j["projects"]} == labels
+    # 같은 상태를 행 역순으로 넣은 DB 도 같은 응답
+    p = conn.init_db(tmp_path / "rev.db")
+    other = conn.connect(p)
+    for t in ("agent", "edge", "usage_event"):
+        rows = db.execute(f"SELECT * FROM {t} ORDER BY rowid DESC").fetchall()
+        if rows:
+            other.executemany(f"INSERT INTO {t} VALUES ({','.join('?' * len(rows[0]))})", [tuple(r) for r in rows])
+    other.commit()
+    a, b = G.build(db, since="all", now=NOW), G.build(other, since="all", now=NOW)
+    other.close()
+    a["stats"].pop("ms"), b["stats"].pop("ms")
+    assert a == b
+    # 프로젝트 필터는 라벨(라인 이름) 기준 — 하위 폴더 에이전트도 남는다
+    keys = {n["data"]["id"] for n in G.build(db, since="all", project="Proj", now=NOW)["nodes"]}
+    assert {"S:s0", "A:sub"} <= keys

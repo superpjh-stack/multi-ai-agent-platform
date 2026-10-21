@@ -73,9 +73,32 @@ def _csv(v) -> list[str]:
 
 
 def project_label(project_key: str, project_path: str | None) -> str:
+    """에이전트 한 행의 폴더 이름 (D-03 목록 등). 프로젝트(라인) 이름은 `project_names` — D-28."""
     if project_path:
         return project_path.rstrip("/").rsplit("/", 1)[-1][:60] or project_key[:60]
     return project_key.rsplit("-", 1)[-1][:60] or project_key[:60]
+
+
+def project_names(rows) -> dict[str, str]:
+    """D-28 (spec v0.4.1 §5.4): 프로젝트(= 라인) 이름 = 그 project_key 의 project_path 중 가장 짧은 것
+    (길이가 같으면 사전순 첫 번째)의 마지막 이름, 경로가 하나도 없으면 project_key. rows = (project_key, project_path) 들.
+    행 순서와 무관 (T-07). D-01 트윈 · D-02 구성도 · 프로젝트 필터가 같이 쓴다."""
+    best: dict[str, str | None] = {}
+    for pk, pp in rows:
+        if pk is None:
+            continue
+        p = (pp or "").rstrip("/")
+        cur = best.get(pk)
+        if p and (cur is None or (len(p), p) < (len(cur), cur)):
+            best[pk] = p
+        else:
+            best.setdefault(pk, None)
+    return {pk: (project_label(pk, p) if p else pk[:60]) for pk, p in best.items()}
+
+
+def project_match(proj_filter: str, project_key: str, name: str) -> bool:
+    """프로젝트 필터 (D-01 · D-02 공통, DEF-QA1-401): project_key 와 같거나 라인 이름(`project_names`)에 들어 있으면."""
+    return project_key == proj_filter or proj_filter in name
 
 
 def pipeline_col(label: str) -> int | None:
@@ -134,14 +157,12 @@ def build(con, *, since: str | None = None, project: str | None = None, view: st
         a["n_children"] = len(children.get(k, ()))
 
     proj_filter = (project or "").strip()
-    all_projects: dict[str, str] = {}
-    for a in agents.values():
-        all_projects.setdefault(a["project_key"], project_label(a["project_key"], a["project_path"]))
+    all_projects = project_names((a["project_key"], a["project_path"]) for a in agents.values())   # D-28
 
     def proj_ok(a) -> bool:
         if not proj_filter:
             return True
-        return a["project_key"] == proj_filter or proj_filter in all_projects.get(a["project_key"], "")
+        return project_match(proj_filter, a["project_key"], all_projects.get(a["project_key"], ""))
 
     def matches(a) -> bool:
         if not proj_ok(a):
@@ -168,7 +189,7 @@ def build(con, *, since: str | None = None, project: str | None = None, view: st
     # 부모 미확인(parent_key 없음) 서브에이전트는 세션에 억지로 잇지 않고 U:<project> 노드에 붙인다 (L-05)
 
     # ── 엣지 후보 ──
-    raw_edges = con.execute("SELECT src_key, dst_key, kind, at, count, label FROM edge").fetchall()
+    raw_edges = con.execute("SELECT src_key, dst_key, kind, at, count, label FROM edge ORDER BY src_key, dst_key, kind").fetchall()
 
     # ── 접기 ──
     def count_nodes(keys: set[str]) -> int:
@@ -181,7 +202,7 @@ def build(con, *, since: str | None = None, project: str | None = None, view: st
     folded_n: dict[str, int] = {}
     total_before = count_nodes(shown)
     if total_before > node_limit:
-        order = sorted(shown, key=lambda k: -(agents[k]["depth"] or 0))
+        order = sorted(shown, key=lambda k: (-(agents[k]["depth"] or 0), k))   # T-07 · 행 순서 무관
         remaining_children = {k: sum(1 for c in children.get(k, ()) if c in shown) for k in shown}
         for k in order:
             a = agents[k]
@@ -204,7 +225,7 @@ def build(con, *, since: str | None = None, project: str | None = None, view: st
     proj_used: dict[str, str] = {}
     for k in shown:
         proj_used.setdefault(agents[k]["project_key"], all_projects[agents[k]["project_key"]])
-    for pk, label in sorted(proj_used.items(), key=lambda x: x[1]):
+    for pk, label in sorted(proj_used.items(), key=lambda x: (x[1], x[0])):
         col = pipeline_col(label)
         nodes.append({"data": {"id": f"P:{pk}", "kind": "PROJECT", "label": label, "project": pk,
                                "col": col, "col_label": f"{col:02d}" if col is not None else "기타", "size": 30, "depth": 0},
@@ -267,7 +288,7 @@ def build(con, *, since: str | None = None, project: str | None = None, view: st
         cls = [f"e-{kind}"] + (["unresolved"] if unresolved_edge else [])
         edges.append({"data": d, "classes": " ".join(cls)})
 
-    for k in shown:
+    for k in sorted(shown):
         a = agents[k]
         if a["kind"] == "SESSION":
             continue
@@ -309,5 +330,5 @@ def build(con, *, since: str | None = None, project: str | None = None, view: st
                     "states": sorted(want_states), "kinds": sorted(want_kinds), "min_tokens": min_tok,
                     "expand": sorted(expand_set)},
         "projects": [{"key": k, "label": v, "col": pipeline_col(v)} for k, v in sorted(all_projects.items(),
-                                                                                    key=lambda x: x[1])],
+                                                                                    key=lambda x: (x[1], x[0]))],
     }
