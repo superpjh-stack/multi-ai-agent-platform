@@ -199,3 +199,40 @@ Accept: text/event-stream (또는 ?follow=1) 이면 붙잡고 실시간, 그 밖
 - **R8 → 받음**: `linker._activity` 가 원천 기록 꼬리를 다시 읽지 않는다 — max(tool_call 마지막, 반환 뒤 `last_event_at`), ingest 가 handback 뒤 꼬리를 뺀 마지막 기록을 남긴다(D-20). `record_activity_since` · `_record_path` · `_ACT_CACHE` 삭제. `state.build_ctx` 는 그대로(`return_of` 경유, 파일 안 엶). 테스트 `test_L07_incoming_message_after_handback_wakes_child`(파일 없이) · `test_L07_ingest_to_linker_rewake_end_to_end` 새로.
 - **D-17 D-03 표기**: `templates/agent.html` 작업량 표 — `usage.own` · `usage.with_descendants` 의 `undercount` 가 참인 칸의 출력 토큰 · 추정 비용 옆에 `undercount_note`(「기록상 과소 (D-17)」, title 에 그 몫 출력). 숫자 그대로. 테스트 `tests/test_dashboard.py::test_d03_undercount_note_d17`(빨강 → 초록).
 - judge.py 전수(재백필 기본 DB, WORKFLOW 제외 326): **불일치 1** = `S:2bee9170…` SLEEPING R-03 (D-18) vs spec 글자 STALE — 이전과 같음. pytest 266 passed.
+
+## 7. 2차-A 웨이브 A (2026-10-21, spec v0.3 · 계획 `docs/superpowers/plans/2026-10-20-agentdash-v2a.md` Task 9 · 10 · 11)
+
+### Task 9 — D-13 · D-14 · D-18 · D-19 확정 반영 (커밋 `512b463`)
+바꾼 파일: `core/state.py`(머리 주석 `[가설 …]` → `확정 spec v0.3 §4.2` + 세션 평가 순서, 규칙 코드 · 근거 문자열 그대로 — 근거에 `가설` 0) · `app/routers/agents.py`(`D18_NOTE` · `hypothesis_note` · `_last_evidence` · `hypothesis` 필드 3 곳 제거) · `templates/_d01_body.html` · `templates/agent.html`(`data-hypothesis` span 3 곳 제거) · `tests/test_dashboard.py`(옛 D-18 표시 테스트 3 → `test_no_hypothesis_label`) · `tests/test_state.py`(v0.3 순서 3 행).
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| 라벨 테스트 빨강 → 초록 | 구현 전 FAIL(`가설 D-18` 이 D-01 카드에) → 후 PASS. D-01 · `?part=body` · D-02 · D-03 HTML · `/api/v1/agents/{key}` · `/api/v1/agents` · `/api/v1/graph` 에 `가설 D-18` · `data-hypothesis` · `"hypothesis"` 0 | `uv run pytest -q tests/test_dashboard.py -k no_hypothesis` |
+| v0.3 순서 표 | busy·5 분+·미래 Wakeup·자식 1 → SLEEPING R-03 · busy·5 분+·자식 STALE 만 → STALE R-02b · S1 있음·pid 소멸·5 분 안 → DONE R-07 (구현 변경 없이 통과 — 1차 웨이브 D 구현이 이미 v0.3 순서) | `uv run pytest -q tests/test_state.py` |
+| G-23 | `G-23  결정 반영  PASS  확정 7/7 · D-08 출처 있음 · src/ 「가설 D-18」·D18_NOTE 0 곳` | `uv run python src/agentdash/tools/check_decisions.py` |
+
+### Task 10 — WAITING 알림 (커밋 `67373bf`)
+새 파일: `templates/_alerts.html` · `tests/test_alerts.py`(12). 서버 · base.html 변경 0 (Phase 0 `{% include "_alerts.html" ignore missing %}` 로 실림).
+- 공표: `window.agentdashAlerts = {waiting: Set, seen: Set, states, leader, mode, ready, notified, skipped, events, perm(), enabled(), stream}` · localStorage `agentdash.alerts`(on|off) · `agentdash.seen`(최근 200 `key|since`) · BroadcastChannel `agentdash-alerts`(생존 신호 · `seen` 공유) · Notification `tag = key|since`.
+- 리더 탭 = 먼저 잡은 탭. **Web Locks(`navigator.locks`, 잠금 이름 `agentdash-alerts`)가 있으면 그것**(탭이 닫히면 자동으로 다음 탭 — 숨은 탭 타이머 지연에 안 흔들림), 없으면 BroadcastChannel 생존 신호로 가장 먼저 열린 탭, 둘 다 없으면 그 탭. 계획의 「BroadcastChannel 로 먼저 잡은 탭」과 뜻은 같고 수단만 하나 더 — QA2 가 보는 값 `agentdashAlerts.mode` (`locks`|`channel`|`single`).
+- `agent.state` 는 개발1 `model.set_state` 가 **DB 커밋 전에** 내보낸다 → 상세 저장값이 이벤트 상태와 다르면 250 ms 간격 4 번까지 다시 읽는다.
+- 첫 로드 · SSE 재연결: `/api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000` 으로 배지만 채움(알림 0). `state.since` 가 화면을 연 시각보다 이르면 알리지 않고 seen 만.
+- 각 화면이 SSE 연결을 하나 더 연다(D-01 · D-02 · D-03 은 자기 `openStream` 과 합쳐 탭당 2). 탭 3 개 넘게 열면 HTTP/1.1 호스트당 6 연결에 닿을 수 있다 — 웨이브 B(Task 13)에서 `openStream` 이 `agentdashAlerts.stream` 을 같이 쓰게 합칠 예정.
+
+| 항목 | 실측 | 검증 방법 |
+|---|---|---|
+| 정적 계약 | 12 passed — 화면 7 (D-01~D-07) 에 스크립트 1 회 · `</main>` 뒤 · `?part=body` 0 · 계약 문자열 · `fetch(` 대상 `/api/v1/` 만 · EventSource 1 (`/api/v1/stream?follow=1`) · 외부 URL 0 · alert/confirm/prompt 0 | `uv run pytest -q tests/test_alerts.py` |
+| JS 문법 | OK | `node --check` (스크립트 부분만 스크래치로 빼서) |
+| 수동 확인 (Chrome, 2026-10-21 10:00 KST) | 가짜 루트 서버 8097 (`data/fake-alerts/` · `data/agentdash-dev2-alerts.db`, 세션 2 · S1 busy · pid 살아 있는 `sleep`), 훅은 `curl POST /hooks/event`. Notification 은 실제 권한 창을 띄우지 않으려고 로드 뒤 `window.Notification` 을 기록용 가짜(permission granted)로 바꿔 셈 (아래 숫자) | 탭 A `/` · 탭 B `/graph` · `javascript_tool` 로 `agentdashAlerts` · `document.title` 읽음 |
+| · 첫 로드 | 세션 1 이 이미 WAITING_INPUT 인 채 두 탭 열기 → 제목 `(1) …` 두 탭 · 알림 0 · 이벤트 0 | |
+| · 전이 | 세션 2 `Notification permission_prompt` → 알림 **1** (리더 탭 A, 제목 「권한 대기」 · 본문 `alert-proj · alert-2` · tag `S:…0002|2026-10-21T01:00:19Z`) · 탭 B 0 · 두 탭 제목 `(2)` · 탭 B seen 에 같은 키(채널 공유) | |
+| · 재전송 | 같은 훅 다시 POST → 서버 `changed:false` · SSE 이벤트 0 · 알림 추가 0 | |
+| · 새로고침 | 탭 A 새로고침 → 알림 0 · 이벤트 0 · 배지 `(2)` · 리더가 탭 B 로 넘어감(`leader` A false · B true) | |
+| · 두 탭 (리더 넘어간 뒤) | 세션 1 UserPromptSubmit → RUNNING → idle_prompt → 알림 **1** (탭 B 「입력 대기」 `alert-proj · alert-1`) · 탭 A 0 → 두 탭 합 1 | |
+| · 권한 거부 | 리더 탭 B 에서 permission `denied` (가짜 `requestPermission` → denied) 후 버튼 → 「알림 불가 — 배지만」 · disabled. 세션 2 RUNNING → WAITING_PERMISSION → 알림 0 · 배지 `(1)`→`(2)` · 파비콘 점 있음 | |
+| · 배지 꺼짐 | 둘 다 UserPromptSubmit → 제목 접두 없음 · waiting 0 | |
+| · 콘솔 오류 | 두 탭 0 | `read_console_messages onlyErrors` |
+| 정리 | 서버 · `sleep` 정지 (8097 LISTEN 0) · 탭 닫음 · `~/.claude/settings.json` mtime 1792131308 그대로 | `lsof -iTCP:8097` · `stat -f %m` |
+| pytest 전체 | 340 passed · 1 xfailed (개발1 작업 중 파일 포함) | `uv run pytest -q` |
+
+실제 브라우저 권한 창 · OS 알림 표시는 확인하지 않았다(대화상자 금지) — QA2 G-29 E2E 몫.
