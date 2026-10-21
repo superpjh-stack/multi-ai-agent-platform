@@ -208,3 +208,21 @@ def test_hardlinked_db_refused(tmp_path):
     fresh = conn.init_db(tmp_path / "new.db")       # 링크 없는 새 경로는 통과
     c = conn.connect(fresh)
     c.close()
+
+
+@pytest.mark.parametrize("suffix", ["-wal", "-shm", "-journal"])
+def test_hardlinked_side_file_refused(tmp_path, suffix):
+    """G-25 · DEF-QA1-301 — DB 옆 파일(-wal · -shm · -journal)이 이미 하드 링크면 거부한다 (SQLite 가 그 inode 에 쓴다)."""
+    import os
+
+    from agentdash.db import conn
+
+    src = tmp_path / "src.bin"
+    src.write_bytes(b"x")
+    db = tmp_path / "d.db"
+    os.link(src, tmp_path / f"d.db{suffix}")
+    with pytest.raises(RuntimeError, match="하드 링크"):
+        conn.connect(db)
+    with pytest.raises(RuntimeError, match="하드 링크"):
+        conn.init_db(db)
+    assert src.read_bytes() == b"x"

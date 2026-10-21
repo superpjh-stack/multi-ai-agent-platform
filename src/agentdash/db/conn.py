@@ -9,15 +9,18 @@ from pathlib import Path
 from agentdash import settings as _settings
 
 SCHEMA = Path(__file__).with_name("schema.sql")
+SIDE_SUFFIXES = ("-wal", "-shm", "-journal")
 
 
 def _refuse_source(path: Path) -> None:
     """원천(읽기 전용) 아래에 DB 를 만들려는 시도는 거부한다 — G-14. 디스크에 아무것도 만들기 전에 부른다."""
     if _settings.get().is_source_path(path):
         raise RuntimeError(f"DB 경로가 원천 루트 아래: {path}")
-    # 이미 있는 파일이 하드 링크면(다른 이름이 같은 inode 를 가리킴) 원천 파일의 링크일 수 있다 — 거부 (DEF-QA1-201 · G-25)
-    if path.exists() and path.stat().st_nlink > 1:
-        raise RuntimeError(f"DB 파일이 하드 링크 (st_nlink={path.stat().st_nlink}): {path}")
+    # 이미 있는 파일이 하드 링크면(다른 이름이 같은 inode 를 가리킴) 원천 파일의 링크일 수 있다 — 거부 (DEF-QA1-201 · G-25).
+    # SQLite 가 쓰는 옆 파일(-wal · -shm · -journal)도 같다 (DEF-QA1-301)
+    for f in (path, *(path.with_name(path.name + s) for s in SIDE_SUFFIXES)):
+        if f.exists() and f.stat().st_nlink > 1:
+            raise RuntimeError(f"DB 파일이 하드 링크 (st_nlink={f.stat().st_nlink}): {f}")
 
 
 def connect(path: str | Path | None = None) -> sqlite3.Connection:
