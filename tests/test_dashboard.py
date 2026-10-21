@@ -233,7 +233,7 @@ def test_d03_undercount_note_d17(db):
     assert note not in c.get("/agents/S:done").text                                     # 자손 없는 세션 — 표기 없음
 
 
-# ── 웨이브 D3 — DEF-QA2-102: D-18 가설로 SLEEPING 이 된 판정에 「가설 D-18」 표시 ──────────────
+# ── 2차-A Task 9 — D-18 확정 (spec v0.3 §4.2): 「가설 D-18」 표시 · `hypothesis` 키 제거 (DEF-QA2-201) ──────
 D18_NOTE = "가설 D-18"
 
 
@@ -248,31 +248,22 @@ def _seed_sleepers(con):
     con.commit()
 
 
-def test_hypothesis_note_rule():
-    from agentdash.app.routers import agents as Q
-    assert Q.hypothesis_note("SLEEPING", "R-03", "R-03 S1 status=busy · 깰 시각 … · D-18") == D18_NOTE
-    assert Q.hypothesis_note("SLEEPING", "R-03", "R-03 S1 status=busy · 깰 시각 " + "x" * 400) == D18_NOTE   # 잘려도
-    assert Q.hypothesis_note("SLEEPING", "R-03", "R-03 S1 status=idle · 깰 시각 …") is None
-    assert Q.hypothesis_note("STALE", "R-02b", "R-02b S1 status=busy · 300초") is None
-    assert Q.hypothesis_note("SLEEPING", "R-03", None) is None
-
-
-def test_d01_card_marks_d18_hypothesis(db):
-    _seed_sleepers(db)
-    page = client().get("/").text
-    i = page.index('data-key="S:d18"')
-    card = page[i:page.index("</div>\n    </div>", i)] if "</div>\n    </div>" in page[i:] else page[i:i + 1500]
-    assert D18_NOTE in card
-    j = page.index('data-key="S:idle"')
-    assert D18_NOTE not in page[j:j + 600]
-
-
-def test_d03_marks_d18_hypothesis(db):
+def test_no_hypothesis_label(db):
+    """D-01 · D-02(패널은 API) · D-03 HTML 과 API 에 「가설 D-18」 0 · `hypothesis` 키 없음 · data-hypothesis 0."""
     _seed_sleepers(db)
     c = client()
-    j = c.get("/api/v1/agents/S:d18").json()
-    assert j["state"]["hypothesis"] == D18_NOTE
+    pages = [c.get("/").text, c.get("/?part=body").text, c.get("/graph").text,
+             c.get("/agents/S:d18").text, c.get("/agents/S:idle").text]
+    for t in pages:
+        assert D18_NOTE not in t and "data-hypothesis" not in t
+    for key in ("S:d18", "S:idle"):
+        j = c.get(f"/api/v1/agents/{key}").json()
+        assert j["found"] and "hypothesis" not in j["state"] and "hypothesis" not in j["state"]["now"]
+        assert D18_NOTE not in json.dumps(j, ensure_ascii=False)
+    for path in ("/api/v1/agents", "/api/v1/agents?state=SLEEPING", "/api/v1/graph"):
+        r = c.get(path)
+        assert r.status_code == 200 and D18_NOTE not in r.text and '"hypothesis"' not in r.text, path
     page = c.get("/agents/S:d18").text
-    assert D18_NOTE in page[page.index("판정 (저장)"):page.index("판정 (지금)")]
-    assert c.get("/api/v1/agents/S:idle").json()["state"]["hypothesis"] is None
-    assert D18_NOTE not in c.get("/agents/S:idle").text
+    assert "R-03" in page[page.index("판정 (저장)"):page.index("판정 (지금)")]      # 규칙 코드는 그대로
+    from agentdash.app.routers import agents as Q
+    assert not hasattr(Q, "D18_NOTE") and not hasattr(Q, "hypothesis_note")

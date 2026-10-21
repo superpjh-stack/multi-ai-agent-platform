@@ -7,17 +7,18 @@
 · 기준 시간은 settings 의 `stale_after_sec`(300) · `slow_after_sec`(90). 경계: `< slow` 이면 R-09, `< stale` 이면 R-02a.
 · `STALE` 은 끝이 아니다 — 새 기록이 들어오면 같은 함수가 RUNNING 을 내고, `transition()` 이 state_log 사유에 "회복"을 붙인다.
 
-결정 반영
+결정 반영 (D-13 · D-14 · D-18 · D-19 는 확정 spec v0.3 §4.2 — 세션 평가 순서
+  R-01 → R-02a → (훅 도구 실행 중이면 RUNNING) → R-03 → R-04 → R-02b → R-05 → R-06 → R-07)
   D-09  S1 `status: "shell"` — 턴이 끝난 시각(turn_duration)에 찍히고 그 세션에 백그라운드 셸 자식 프로세스가 살아 있었다(실측 1 건).
         busy 가 아니므로 idle 계열(R-03 · R-04 · R-05)로 판정하고 근거에 `S1 status=shell (D-09)` 를 남긴다.
         busy · idle · shell 밖의 값도 idle 계열로 보되 근거에 `미지 값` 을 남긴다(조용히 삼키지 않는다).
-  D-14  S1 `busy` 인 채 5 분 넘게 기록이 없어도 미종료 백그라운드 자식(RUNNING · WAITING_* — STALE 자식은 빼고)이 있으면
+  D-14  확정 spec v0.3 §4.2 — S1 `busy` 인 채 5 분 넘게 기록이 없어도 미종료 백그라운드 자식(RUNNING · WAITING_* — STALE 자식은 빼고)이 있으면
         R-02b 의 STALE 대신 WAITING_CHILD(R-04) — 오케스트레이터가 턴을 끝내고(turn_duration) 자식을 기다리는 동안
         S1 이 busy · updatedAt 그대로 남는 실측(2026-10-17, 세션 1 건 · 자식 2).
-  D-18  [가설 — 사람 확인 필요, spec R-03 은 idle 만 명시] S1 `busy` · 5 분 넘게 기록 없음이어도 마지막 assistant 가 미래 시각의
+  D-18  확정 spec v0.3 §4.2 (R-03 「idle 또는 잠잠한 busy」) — S1 `busy` · 5 분 넘게 기록 없음이어도 마지막 assistant 가 미래 시각의
         `ScheduleWakeup` 을 예약했고 그 뒤 새 tool_use 가 없으면 SLEEPING(규칙 코드 R-03, 근거 `D-18`). R-02b STALE 보다 먼저,
         D-14 WAITING_CHILD 보다도 먼저(idle 계열의 R-03 > R-04 순서와 같게). 훅이 도구 실행 중이라 하면 RUNNING 이 이긴다.
-  D-19  [가설] S1 파일은 있는데 pid 가 죽었으면 "S1 없음"(R-06 · R-07)으로 본다 — R-01 훅도 SessionEnd 밖에는 쓰지 않는다.
+  D-19  확정 spec v0.3 §4.2 (「S1 없음 = S1 파일 없음 또는 pid 소멸」) — S1 파일은 있는데 pid 가 죽었으면 "S1 없음"(R-06 · R-07)으로 본다 — R-01 훅도 SessionEnd 밖에는 쓰지 않는다.
   R-08  반환의 오류 여부는 L-07 `linker.return_of` 의 is_error(가장 늦은 반환이 failed/killed 알림 · Agent tool_result
         is_error) — QA2 DEF-QA2-001.
 """

@@ -25,9 +25,9 @@
     <dt>모델 · 버전</dt><dd>{{ a.model or "—" }} · {{ a.cc_version or "—" }}{% if a.git_branch %} · {{ a.git_branch }}{% endif %}</dd>
     <dt>시작 · 끝 · 마지막 기록</dt><dd>{{ d.started_kst }} · {{ d.ended_kst }} · {{ d.last_kst }}</dd>
     <dt>벽시계 · 실행 시간</dt><dd>{{ u.wall }} · {{ u.active }} <span class="muted">(간격 ≤ 5 분 구간 합, D-06)</span></dd>
-    <dt>판정 (저장)</dt><dd><code>{{ d.state.rule }}</code>{% if d.state.hypothesis %} <span class="warn" data-hypothesis title="decisions.md D-18 — 사람 확인 전 가설. spec 글자로는 STALE R-02b">{{ d.state.hypothesis }}</span>{% endif %} · 상태가 된 시각 {{ d.state.since or "—" }}<br><span class="ev">{{ d.state.evidence or "근거 기록 없음" }}</span></dd>
+    <dt>판정 (저장)</dt><dd><code>{{ d.state.rule }}</code> · 상태가 된 시각 {{ d.state.since or "—" }}<br><span class="ev">{{ d.state.evidence or "근거 기록 없음" }}</span></dd>
     <dt>판정 (지금)</dt><dd><span class="pill" style="--c:var(--st-{{ d.state.now.state }})">{{ state_ko.get(d.state.now.state, d.state.now.state) }}</span>
-      <code>{{ d.state.now.rule }}</code>{% if d.state.now.hypothesis %} <span class="warn" data-hypothesis>{{ d.state.now.hypothesis }}</span>{% endif %}{% if not d.state.now.matches_db %} <span class="warn">저장값과 다름 — 다음 판정(10 초)에서 반영</span>{% endif %}<br>
+      <code>{{ d.state.now.rule }}</code>{% if not d.state.now.matches_db %} <span class="warn">저장값과 다름 — 다음 판정(10 초)에서 반영</span>{% endif %}<br>
       <span class="ev">{{ d.state.now.evidence }}</span></dd>
     <dt>부모</dt><dd>{% if d.parent %}{% if d.parent.missing %}<span class="warn">{{ d.parent.agent_key }} (DB 에 없음)</span>{% else %}<a href="/agents/{{ d.parent.agent_key }}">{{ d.parent.name or d.parent.agent_key }}</a> <span class="muted">{{ d.parent.kind }}</span>{% endif %}{% elif d.link_note %}<span class="warn">{{ d.link_note }}</span>{% else %}<span class="muted">없음 (세션)</span>{% endif %}</dd>
   </dl>
