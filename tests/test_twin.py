@@ -577,3 +577,69 @@ def test_project_filter_whole_line(db):
     from agentdash.core import graph as G
     g = {n["data"]["id"] for n in G.build(db, project="Proj", now=NOW)["nodes"] if n["data"]["kind"] != "PROJECT"}
     assert g == set(machines(build(db, project="Proj")))                   # D-02 와 같은 집합
+
+
+# ── DEF-QA1-403 빠진 테스트 (T-05 경계 · FAILED · D-25 범위 밖 부모 · T-06 + T-05) ───
+def test_T05_exactly_30m_stays(db):
+    """「30 분 넘게」 — 정확히 30:00 은 남고 30:01 은 접힌다."""
+    s = Synth(db)
+    s.agent("S:s0", "SESSION")
+    s.agent("A:at30", parent="S:s0", state="DONE", rule="R-08", last=30)
+    s.agent("A:at30s1", parent="S:s0", state="DONE", rule="R-08", last=30 + 1 / 60)
+    db.commit()
+    m = machines(build(db))
+    assert "A:at30" in m and "A:at30s1" not in m
+    assert m["S:s0"]["folded"] == 1
+
+
+def test_T05_failed_after_30m_folds(db):
+    s = Synth(db)
+    s.agent("S:s0", "SESSION")
+    s.agent("A:f", parent="S:s0", state="FAILED", rule="R-10", last=45)
+    s.agent("A:fk", parent="A:f", state="DONE", rule="R-08", last=50)
+    db.commit()
+    r = build(db)
+    assert set(machines(r)) == {"S:s0"}
+    assert machines(r)["S:s0"]["folded"] == 2
+    assert T.scope_count(r) == r["agents_in_scope"] == 3
+
+
+def test_D25_parent_outside_24h(db):
+    """D-25: 부모가 범위(24h) 밖 → 조상을 끌어오지 않고 자기 라인 반입구 아래 1 열. parent 키는 실제 부모."""
+    s = Synth(db)
+    s.agent("S:old", "SESSION", state="DONE", rule="R-08", started=60 * 40, last=60 * 30)      # 24h 밖
+    s.agent("A:mid", parent="S:old", state="DONE", rule="R-08", started=60 * 39, last=60 * 29)
+    s.agent("A:stale", parent="A:mid", state="STALE", rule="R-11", started=60 * 28, last=60 * 26)  # 살아 있음 → 범위 안
+    s.agent("S:now", "SESSION")
+    db.commit()
+    r = build(db)
+    m = machines(r)
+    assert set(m) == {"S:now", "A:stale"} and r["agents_in_scope"] == 2
+    ln = line_of(r, "A:stale")
+    assert col(m["A:stale"]) == 1 and m["A:stale"]["parent"] == "A:mid"
+    assert ln["inlet"]["box"]["y"] == m["A:stale"]["box"]["y"]
+    assert {"src": ln["inlet"]["key"], "dst": "A:stale", "kind": "spawn"}.items() <= next(
+        p for p in ln["pipes"] if p["dst"] == "A:stale").items()
+    assert r["links"] == []
+    assert T.scope_count(r) == 2
+
+
+def test_T06_after_T05(db):
+    """T-05 로 접은 뒤에도 > limit 이면 뒤 라인부터 접는다. 칸 + 접힘 = 범위."""
+    s = Synth(db)
+    for li, last in enumerate((1, 2, 3)):
+        proj = f"-p-k{li}"
+        sk = s.agent(f"S:{li}", "SESSION", proj=proj, sid=str(li), last=last)
+        for i in range(4):
+            s.agent(f"A:{li}-{i}", proj=proj, sid=str(li), parent=sk, last=last)
+        for i in range(3):                                      # T-05 로 접히는 끝난 자식
+            s.agent(f"A:{li}-d{i}", proj=proj, sid=str(li), parent=sk, state="DONE", rule="R-08", last=40)
+    db.commit()
+    r = build(db, limit=10)
+    shown = sum(len(ln["machines"]) for ln in r["lines"])
+    assert shown == 10 and r["folded_lines"] == 1
+    assert [ln["key"] for ln in r["lines"] if ln["folded_line"]] == ["-p-k2"]
+    assert next(ln for ln in r["lines"] if ln["folded_line"])["hidden"] == 8
+    assert all(machines(r)[f"S:{li}"]["folded"] == 3 for li in (0, 1))
+    assert T.scope_count(r) == r["agents_in_scope"] == 24
+    assert T.overlaps(r) == 0
