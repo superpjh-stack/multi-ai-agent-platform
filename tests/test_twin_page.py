@@ -201,3 +201,15 @@ def test_tool_line_ellipsis_and_final_empty():
     assert re.search(r'data-role", "tool"', s) or "data-role\", \"tool\"" in s or '"data-role": "tool"' in s
     assert re.search(r"fitText\([^)]*w - 20\)", s)
     assert re.search(r"function toolText\(m\) \{[\s\S]{0,200}?FINAL\[m\.state\][\s\S]{0,40}?\"\"", s)
+
+
+def test_done_transition_reverse_flow_once():
+    """DEF-QA2-403: 다시 깨운 서브에이전트의 두 번째 반환은 edge.new 가 안 온다(엣지 count 만 늚) → agent.state DONE 전이
+    때 부모 쪽 역흐름 1 회. 같은 반환이 edge.new(handback) 와 DONE 전이 둘로 와도 한 번만 흐른다(revAt 3 초)."""
+    s = src("_twin.html")
+    m = re.search(r"function revFlow\(child, parent\) \{[\s\S]*?\n  \}", s)
+    assert m and "revAt[child]" in m.group(0) and "3000" in m.group(0)
+    h = re.search(r'"agent\.state"\s*:\s*function[\s\S]*?\n    \},', s).group(0)
+    assert re.search(r'd\.state === "DONE"[\s\S]{0,300}revFlow\(d\.agent_key', h)
+    fl = re.search(r"function flowNow\(e\) \{[\s\S]*?\n  \}", s).group(0)
+    assert re.search(r'e\.kind === "handback"[\s\S]{0,80}revFlow\(e\.src, e\.dst\)', fl)

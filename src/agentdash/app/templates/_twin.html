@@ -708,13 +708,24 @@
       T.flows += 1;
       return true;
     }
-    if (e.kind === "handback") {                   // 자식 → 부모 거꾸로 1 회 (그 뒤 상태 DONE 으로 흐려진다)
-      var hb = q('path.pipe[data-kind="handback"]' + attr("data-src", e.src) + attr("data-dst", e.dst));
-      if (hb) return burst(hb, false);
-      var sp = q("path.pipe" + attr("data-src", e.dst) + attr("data-dst", e.src));
-      return sp ? burst(sp, true) : false;
-    }
+    if (e.kind === "handback") return revFlow(e.src, e.dst);   // 자식 → 부모 거꾸로 1 회 (그 뒤 상태 DONE 으로 흐려진다)
     return burst(q("path.pipe" + attr("data-src", e.src) + attr("data-dst", e.dst)), false);   // spawn · workflow
+  }
+  // 반환 역흐름 (DEF-QA2-403) — edge.new(handback) 와 agent.state DONE 전이 두 길로 온다. 첫 반환은 둘 다 오고, 다시 깨운
+  // 서브에이전트의 두 번째 반환은 엣지가 이미 있어 DONE 전이만 온다. 같은 자식에 3 초 안에 두 번 흐르지 않게 revAt 로 막는다.
+  var revAt = {};
+  function revFlow(child, parent) {
+    if (Date.now() - (revAt[child] || 0) < 3000) return true;
+    var path = null;
+    if (parent) {
+      path = q('path.pipe[data-kind="handback"]' + attr("data-src", child) + attr("data-dst", parent));
+      if (path) { revAt[child] = Date.now(); return burst(path, false); }
+      path = q("path.pipe" + attr("data-src", parent) + attr("data-dst", child));
+    }
+    if (!path) path = q('path.pipe:not([data-kind="handback"])' + attr("data-dst", child));   // 반입구 · 라인 간 관
+    if (!path) return false;
+    revAt[child] = Date.now();
+    return burst(path, true);
   }
   function applyState(g, key, state, reason) {
     var info = byKey[key], m = info && info.m;
@@ -751,7 +762,12 @@
     "agent.state": function (d) {
       var t0 = performance.now(), g = machineEl(d.agent_key);
       if (!g) { soon(); return; }                 // 평면도에 없는 설비(필터 밖 · 접힘 · 새것) — 다시 받기만
+      var was = g.getAttribute("data-state");
       applyState(g, d.agent_key, d.state, d.reason);
+      if (d.state === "DONE" && was !== "DONE") {          // 반환 → 부모 쪽 역흐름 1 회 (edge.new 와 겹치면 revFlow 가 한 번만)
+        var pm = byKey[d.agent_key] && byKey[d.agent_key].m;
+        revFlow(d.agent_key, pm ? pm.parent : null);
+      }
       requestAnimationFrame(function () { T.lastPaintMs = Math.round((performance.now() - t0) * 10) / 10; });
       if (selKey === d.agent_key) select(selKey);
       soonUsage();                                 // 경과 · 접힘 · 스파크는 5 초 묶음으로 맞춘다
