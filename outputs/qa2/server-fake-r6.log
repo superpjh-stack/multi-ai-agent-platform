@@ -1,0 +1,93 @@
+INFO:     Started server process [33174]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8097 (Press CTRL+C to quit)
+INFO:     127.0.0.1:62623 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62624 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62625 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62626 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62626 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62625 - "GET /api/v1/twin?since=24h&width=384 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62629 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62630 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62630 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62629 - "GET /api/v1/twin?since=24h&width=384 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62629 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62631 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62629 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62630 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62632 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62634 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62634 - "GET /api/v1/agents/S%3A99999999-aaaa-bbbb-cccc-000000000006 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62634 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62635 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62637 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62638 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62637 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62637 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62638 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62638 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62641 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62642 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62641 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62643 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62644 - "GET /api/v1/agents/S%3A99999999-aaaa-bbbb-cccc-000000000006 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62644 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62644 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62644 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62646 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62647 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62648 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62648 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62648 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62648 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62648 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62648 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62648 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62648 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62648 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62654 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62655 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62657 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62657 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62657 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62657 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62659 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62661 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62661 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62661 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62663 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62661 - "GET /api/v1/agents/S%3A99999999-aaaa-bbbb-cccc-000000000006 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62661 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62661 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62661 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62666 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62661 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62668 - "GET /api/v1/budget HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62669 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62671 - "GET /api/v1/budget HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62672 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62673 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62674 - "GET /api/v1/budget HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62675 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62676 - "GET /api/v1/budget HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62677 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62678 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62679 - "GET /api/v1/agents/S%3A99999999-aaaa-bbbb-cccc-000000000006 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62679 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62679 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62679 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62679 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62679 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62681 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62680 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62679 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62685 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62687 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62686 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62685 - "GET /api/v1/twin?since=24h&width=1168 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62693 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [33174]
