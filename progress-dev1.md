@@ -134,6 +134,45 @@ ingest_all(con, *, since=None, run_hooks=True, link=True)   # link 이고 state.
 - 개발1 화면 전용: `templates/{usage,timeline,pipeline}.html` · `templates/_dev1_style.html`(상태 색 `--st-*` 는 `_dev2_style.html` 과 같은 값) · `app/routers/_svg.py`(서버 SVG 막대 · 면적).
 - API: `GET /api/v1/usage?from=&to=&group=&format=csv` (format=csv 는 화면 「CSV 내보내기」) · `GET /api/v1/timeline?from=&to=` (lanes[segments] · concurrency) · `GET /api/v1/pipeline` (stages · companies · cells · next_stage · unregistered · counts).
 
+### 2차-A 공표 (2026-10-21 · Task 5~7 · 커밋 `f207e98` · `9e0922b` · `e2358c4`) — **개발2 Task 11 은 이것을 쓴다**
+
+```python
+# agentdash.core.budget (spec v0.3 §6.3) — 금액은 config/budget.yaml 에서만. KST = UTC+9
+load() -> dict                     # {warn_ratio: float, total: {daily_usd, monthly_usd}, projects: {name: {daily_usd, monthly_usd}}}
+                                   #   키 빠짐 · 금액이 null/양수 아님 · warn_ratio 0~1 밖 → settings.SettingsError
+status(con, now: datetime | None = None, cfg: dict | None = None) -> list[dict]
+                                   # cfg 없으면 budget.load() (모듈 속성으로 부른다 → monkeypatch.setattr(budget, "load", …) 가 먹는다)
+    # 칸 순서: total day · total month · 그다음 cfg.projects 이름순 (day · month)
+    # 칸 = {"scope": "total"|"project", "project": str|None, "period": "day"|"month",
+    #       "limit": float|None, "est_usd": float (cost_est_usd 합, NULL 제외), "rec_usd": float (cost_usd 합),
+    #       "ratio": float|None (est/limit), "level": "ok"|"warn"|"over"|"unset"|"no_records", "unpriced": int}
+    # 일 = KST 오늘 00:00 ~ now, 월 = KST 1 일 00:00 ~ now. 한도 null → unset. 한도가 있는데 그 프로젝트 기록 0 → no_records
+    # 프로젝트 = agent.project_path 마지막 이름 (없으면 project_key) — budget.project_name(path, key)
+level(est, limit, warn_ratio) -> str   # ok < warn_ratio ≤ warn < 1.0 ≤ over, limit None → unset
+worst(rows) -> dict | None         # over > warn 중 ratio 최대 칸 (D-01 띠). ok · unset · no_records 만이면 None
+trend(con, grain: "day"|"week"|"month", frm: "YYYY-MM-DD", to: "YYYY-MM-DD", group: "total"|"project") -> list[dict]
+    # 행 = {"bucket": "YYYY-MM-DD" (일 · 그 주 월요일 · 그 달 1 일, KST), "project": str|None (group=total 이면 None),
+    #       "cost_usd": float|None, "cost_est_usd": float|None, "output_tokens": int, "output_est_total": int,
+    #       "input_tokens", "cache_read", "cache_write": int, "hit": float|None}   — bucket · project 순. 원천 usage_daily
+    # grain · group 이 틀리면 ValueError (API 는 422)
+efficiency(con, group: "project"|"session"|"agent", frm, to) -> list[dict]
+    # 행 = {"key", "label", "input_tokens", "cache_read", "cache_write", "hit": float|None, "cost_est_usd": float|None,
+    #       "waste": float, "unpriced": int, "requests": int}  — waste = (1-hit)*cost_est_usd (hit None → 0) 내림차순
+    # key: project = 이름 · session = "S:<sid>" (그 세션 폴더의 모든 에이전트 = 자기 + 자손) · agent = agent_key (자기만)
+kst_bucket(ts_or_day, grain) -> "YYYY-MM-DD" ;  GRAINS · TREND_GROUPS · EFF_GROUPS
+# agentdash.core.usage — D-17 (spec §6.2)
+SUSPECT_MAX_OUTPUT = 30 ; SUSPECT_MIN_JSON = 400 ; UNDERCOUNT_NOTE = "추정 보정 (D-17)"
+estimate(max_output, json_len, est_chars) -> int | None ;  cost_est(ev, pricing) -> float | None
+totals(con, key, descendants=False)   # + "output_est_total" (의심 행 output_est · 나머지 output_tokens 합) · "cost_est_usd" · "est_note"
+                                      #   1차 키 undercount · undercount_note(= "기록상 과소 (D-17)") · undercount_output 은 §3 R-2A-1 까지 남김
+table(...)                            # 행 · total · trend(일) 에 output_est_total · cost_est_usd, 결과에 "est_note" (undercount* 키 없음)
+# agentdash.core.model.UsageEvent  + output_est: int|None · cost_est_usd: float|None
+```
+
+- 화면 문구 (spec 그대로): 금액 옆 `[추정] API 정가 환산` (`usage.ESTIMATE_LABEL`) · unset 칸 `한도 미설정` · 단가 없음 `단가 없음 N 건`. D-01 띠 예: 「오늘 전체 82 % · Standard MES 이번 달 104 %」 → `/insights` 링크. 띠 색: warn = `st-WAITING_INPUT`(주황) 계열 · over = `st-FAILED`(빨강) — 계획 Task 11 기준.
+- 수집기 누적기 키는 계획의 `(agent_key, request_id)` 에 **DB 파일을 더한** `(DB, agent_key) → {requestId: [max_output, json_len, est_chars]}` (테스트 · 도구가 한 프로세스에서 DB 를 여럿 연다). 다른 프로세스가 이어 읽으면 그 기록 앞부분 길이를 다시 잰다.
+- 증분 수집(`ingest_all` · 감시기 묶음)이 바뀐 키의 `usage_daily` 를 다시 만든다 (`ingest_all(daily=True)` 기본, backfill 만 False 후 전체 재생성).
+
 ## 2. 진행 — 웨이브 A 실측 (2026-10-17 16:38, DB `data/agentdash-dev1.db`)
 
 | 항목 | 실측 | 검증 방법 |
