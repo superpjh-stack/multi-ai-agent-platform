@@ -267,3 +267,68 @@ def test_no_hypothesis_label(db):
     assert "R-03" in page[page.index("판정 (저장)"):page.index("판정 (지금)")]      # 규칙 코드는 그대로
     from agentdash.app.routers import agents as Q
     assert not hasattr(Q, "D18_NOTE") and not hasattr(Q, "hypothesis_note")
+
+
+# ── 2차-A Task 11 — D-01 예산 경고 띠 (spec v0.3 §7 D-01 맨 위 · §6.3) ─────────────────────────────
+def _budget_cfg(daily=None, monthly=None, projects=None):
+    return {"warn_ratio": 0.8, "total": {"daily_usd": daily, "monthly_usd": monthly}, "projects": projects or {}}
+
+
+def _spend(con, est, rec=None, key="S:bud"):
+    from test_graph import Synth
+    if con.execute("SELECT 1 FROM agent WHERE agent_key=?", (key,)).fetchone() is None:
+        Synth(con).agent(key, "SESSION", "-p1", "bud", state="DONE", rule="R-07", name="budget-sess", path="/work/alpha")
+    at = (datetime.now(timezone.utc) - timedelta(seconds=10)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    n = con.execute("SELECT COUNT(*) FROM usage_event").fetchone()[0]
+    con.execute("INSERT INTO usage_event (agent_key, request_id, at, model, output_tokens, input_tokens, cost_usd, "
+                "cost_est_usd) VALUES (?,?,?,?,?,?,?,?)", (key, f"rb{n}", at, "claude-opus-5", 1, 1,
+                                                          est if rec is None else rec, est))
+    con.commit()
+
+
+def _band(page: str) -> str | None:
+    i = page.find('id="budget-band"')
+    return None if i < 0 else page[page.rfind("<", 0, i):page.index("</div>", i)]
+
+
+def test_budget_band(db, monkeypatch):
+    from agentdash.core import budget
+    c = client()
+    # 전부 unset → 띠 없음
+    monkeypatch.setattr(budget, "load", lambda: _budget_cfg())
+    _spend(db, 85.0)
+    assert _band(c.get("/").text) is None and _band(c.get("/?part=body").text) is None
+    # 전체 일 한도 100 · 오늘 추정 85 → warn 띠 · /insights 링크 · 85 % · 주황(WAITING_PERMISSION 색), 빨강 아님
+    monkeypatch.setattr(budget, "load", lambda: _budget_cfg(daily=100))
+    for page in (c.get("/").text, c.get("/?part=body").text):
+        b = _band(page)
+        assert b is not None, "띠 없음"
+        assert 'href="/insights"' in b and "85 %" in b and "오늘 전체" in b
+        assert "st-WAITING_PERMISSION" in b and "st-FAILED" not in b
+        assert "[추정] API 정가 환산" in b
+    # 102 → over 빨강
+    _spend(db, 17.0)
+    b = _band(c.get("/").text)
+    assert b is not None and "st-FAILED" in b and "102 %" in b
+    # 여러 칸 — worst 가 색, 문구는 warn · over 칸 전부 (spec 「오늘 전체 82 % · Standard MES 이번 달 104 %」 꼴)
+    monkeypatch.setattr(budget, "load", lambda: _budget_cfg(daily=1000, monthly=110, projects={"alpha": {"daily_usd": None,
+                                                                                                    "monthly_usd": 100}}))
+    b = _band(c.get("/").text)
+    assert "이번 달 전체 92 %" in b and "alpha 이번 달 102 %" in b and "st-FAILED" in b and "오늘 전체" not in b
+    # ok 만 → 띠 없음
+    monkeypatch.setattr(budget, "load", lambda: _budget_cfg(daily=1000))
+    assert _band(c.get("/").text) is None
+
+
+def test_budget_band_config_error_is_shown(db, monkeypatch):
+    """budget.yaml 이 깨지면 조용히 띠를 숨기지 않고 오류를 적는다 (관제판은 그대로 열린다)."""
+    from agentdash import settings
+    from agentdash.core import budget
+
+    def bad():
+        raise settings.SettingsError("budget.yaml warn_ratio 없음")
+    monkeypatch.setattr(budget, "load", bad)
+    r = client().get("/")
+    assert r.status_code == 200
+    b = _band(r.text)
+    assert b is not None and "예산 설정 오류" in b and "warn_ratio" in b

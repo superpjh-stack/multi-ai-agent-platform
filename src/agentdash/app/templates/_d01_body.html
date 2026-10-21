@@ -1,4 +1,16 @@
 {# D-01 관제판 본문 — /?part=body 로 다시 받아 바꿔 끼운다 #}
+{% if budget %}
+<div id="budget-band" class="card band {{ budget.cls }}" role="status"
+     style="border-left:6px solid var(--c);padding:var(--sp-2) var(--sp-3);margin-bottom:var(--sp-3)">
+  {% if budget.error %}
+  <strong style="color:var(--c-fg)">예산 설정 오류</strong> — {{ budget.error }} · <code>config/budget.yaml</code> 확인 · <a href="/insights">D-07 비용 · 효율</a>
+  {% else %}
+  <strong style="color:var(--c-fg)">{{ "예산 초과" if budget.level == "over" else "예산 경고" }}</strong>
+  {% for it in budget.cells %}{% if not loop.first %} · {% endif %}<span title="{{ it.title }}">{{ it.text }}</span>{% endfor %}
+  <span class="muted">{{ budget.label }}</span> · <a href="/insights">D-07 비용 · 효율 →</a>
+  {% endif %}
+</div>
+{% endif %}
 <section aria-label="상태별">
   <div class="cards">
     {% for s in card_states %}

@@ -8,21 +8,56 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query, Request
 
 from agentdash.app.routers import agents as Q
+from agentdash import settings
 from agentdash.app.templating import render
+from agentdash.core import budget
 from agentdash.core import state as S
+from agentdash.core.usage import ESTIMATE_LABEL
 from agentdash.db import conn
 
 router = APIRouter()
 OWNER = "개발2"
 
 
+_PERIOD_KO = {"day": "오늘", "month": "이번 달"}
+_BAND_CLASS = {"over": "st-FAILED", "warn": "st-WAITING_PERMISSION"}    # spec §6.3: 0.8 부터 주황, 1.0 부터 빨강
+
+
+def _pct(ratio: float) -> int:
+    return math.floor(ratio * 100 + 1e-9)          # 99.9 % 를 100 % 로 올려 over 처럼 보이지 않게 내린다
+
+
+def budget_band(con, now: datetime) -> dict | None:
+    """D-01 맨 위 경고 띠 (spec v0.3 D-01) — warn · over 칸이 하나라도 있으면 그 칸 전부를 「오늘 전체 82 %」 꼴로,
+    색은 budget.worst. 설정이 깨졌으면 숨기지 않고 오류 문구 (조용한 실패 금지)."""
+    try:
+        rows = budget.status(con, now)
+    except settings.SettingsError as e:
+        return {"cls": "st-FAILED", "error": str(e)[:200], "cells": []}
+    w = budget.worst(rows)
+    if w is None:
+        return None
+    items = []
+    for r in rows:
+        if r["level"] not in _BAND_CLASS:
+            continue
+        who = "전체" if r["scope"] == "total" else r["project"]
+        text = (f"{_PERIOD_KO[r['period']]} {who}" if r["scope"] == "total" else f"{who} {_PERIOD_KO[r['period']]}")
+        items.append({"text": f"{text} {_pct(r['ratio'])} %", "level": r["level"],
+                      "title": f"${r['est_usd']:.2f} / 한도 ${r['limit']:.2f}" +
+                               (f" · 단가 없음 {r['unpriced']} 건" if r["unpriced"] else "")})
+    return {"cls": _BAND_CLASS[w["level"]], "level": w["level"], "cells": items, "label": ESTIMATE_LABEL}
+
+
 def _dash_ctx(con, now: datetime) -> dict:
     return {
+        "budget": budget_band(con, now),
         "sm": Q.summary_data(con, now), "my_turn": Q.my_turn(con, now), "live": Q.live_agents(con, now),
         "card_states": Q.CARD_STATES, "state_ko": Q.STATE_KO, "now_kst": Q.kst(now.isoformat()),
         "hooks_seen": con.execute("SELECT 1 FROM hook_event LIMIT 1").fetchone() is not None,
