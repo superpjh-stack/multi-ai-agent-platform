@@ -194,6 +194,13 @@
     }
     t.textContent = full.slice(0, lo) + "…";
   }
+  function setStateText(g, m) {                   // 상태줄 — 오른쪽 종류 글자와 겹치지 않게 말줄임
+    var st = g.querySelector('[data-role="state"]'), kd = g.querySelector('[data-role="kind"]'), kw = 0;
+    if (!st) return;
+    st.textContent = stateText(m);
+    try { kw = kd ? kd.getComputedTextLength() : 0; } catch (e) { kw = 0; }
+    fitText(st, m.box.w - 20 - kw - 6);
+  }
   function stateText(m) {
     var ko = STATE_KO[m.state] || m.state;
     if (m.state === "SLEEPING" && m.wake_at) return ko + " · 깰 " + hhmm(m.wake_at);
@@ -397,8 +404,10 @@
     txt({"class": "zz", x: w - 13, y: 16}, "z", mc);
     // 상태줄 · 도구줄
     var body = el("g", {"clip-path": cb}, mc);
-    txt({"class": "m-st", x: 10, y: 39}, stateText(m), body).setAttribute("data-role", "state");
-    txt({"class": "m-kind", x: w - 10, y: 39, "text-anchor": "end"}, KIND_KO[m.kind] || m.kind, body);
+    var stl = txt({"class": "m-st", x: 10, y: 39}, stateText(m), body);
+    stl.setAttribute("data-role", "state");
+    txt({"class": "m-kind", x: w - 10, y: 39, "text-anchor": "end"}, KIND_KO[m.kind] || m.kind, body).setAttribute("data-role", "kind");
+    setStateText(g, m);
     var tl = txt({"class": m.tool ? "m-tool" : "m-kind", x: 10, y: 53}, toolText(m), body);
     tl.setAttribute("data-role", "tool");
     fitText(tl, w - 20);
@@ -583,7 +592,7 @@
   svg.addEventListener("pointercancel", endDrag);
   // T-08 격자 너비 — 서버가 라인 격자를 이 너비에 맞춰 짠다(브라우저는 열을 계산하지 않는다). 평면도 카드 실제 너비 ÷ GRID_SCALE
   // (맞춤이 폭 맞춤으로 떨어질 때의 배율 — 글자가 읽히는 크기에서 카드 폭을 채우게). 카드 크기가 바뀌면 1 초 묶음으로 다시 받는다.
-  var GRID_SCALE = 0.85, sentW = null, tResize = null;
+  var GRID_SCALE = 0.8, sentW = null, tResize = null;
   function gridWidth() { return Math.max(1, Math.round((wrap.clientWidth || 1) / GRID_SCALE)); }
   if (window.ResizeObserver) new ResizeObserver(function () {
     if (T.last) applyVB();
@@ -740,8 +749,7 @@
     g.setAttribute("class", g.getAttribute("class").replace(/\bst-[A-Z_]+\b/, "st-" + state));
     g.setAttribute("data-state", state);
     if (m) {
-      var st = g.querySelector('[data-role="state"]');
-      if (st) st.textContent = stateText(m);
+      setStateText(g, m);
       var tl = g.querySelector('[data-role="tool"]');
       if (tl) { tl.textContent = toolText(m); fitText(tl, m.box.w - 20); }
       g.setAttribute("aria-label", ariaOf(m));
@@ -821,9 +829,8 @@
     if (document.hidden) return;
     Object.keys(byKey).forEach(function (k) {
       var m = byKey[k].m; if (!m) return;
-      var g = machineEl(k), st = g && g.querySelector('[data-role="state"]');
-      if (st) st.textContent = stateText(m);
-      if (g) g.setAttribute("aria-label", ariaOf(m));
+      var g = machineEl(k);
+      if (g) { setStateText(g, m); g.setAttribute("aria-label", ariaOf(m)); }
     });
   }, 5000);
   setInterval(function () { if (!document.hidden) load(); }, 60000);
