@@ -1,0 +1,7 @@
+58 passed in 0.19s
+26 passed in 0.19s
+4 passed in 7.19s
+19 passed in 0.75s
+18 passed in 0.30s
+G-17  화면 · API  PASS  화면 7 + API 13 = 20 중 HTTP 200 20 (빈 DB) · placeholder 0
+G-30  디자인 대비  PASS  글자 최소 5.6:1 (light --st-waiting-permission-fg/--bg) · 도형 최소 3.3:1 (light --st-waiting-permission) · 쌍 48

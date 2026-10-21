@@ -1,0 +1,58 @@
+INFO:     Started server process [6526]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8097 (Press CTRL+C to quit)
+INFO:     127.0.0.1:60478 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60479 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60480 - "GET /api/v1/agents?limit=10 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60482 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60483 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60482 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60482 - "GET /graph HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60485 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60482 - "GET /api/v1/graph?view=tree&since=24h HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60484 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60487 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60488 - "GET /api/v1/agents/S%3Abbbbbbbb-0000-0000-0000-000000000002 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60488 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60489 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60490 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60491 - "GET /api/v1/agents/S%3Abbbbbbbb-0000-0000-0000-000000000002 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60491 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60491 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60494 - "GET / HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60495 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60494 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60498 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60499 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60500 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60501 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60501 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60502 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60503 - "GET /api/v1/agents/S%3Abbbbbbbb-0000-0000-0000-000000000001 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60503 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60508 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60522 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60523 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60524 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60525 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60523 - "GET /api/v1/agents/S%3Abbbbbbbb-0000-0000-0000-000000000002 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60523 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60527 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60528 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60529 - "POST /hooks/event HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60527 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60531 - "GET /?part=body HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60531 - "GET /agents/S%3Abbbbbbbb-0000-0000-0000-000000000001 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60532 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60531 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60531 - "GET /insights HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60533 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60531 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for connections to close. (CTRL+C to force quit)
+ERROR:    ASGI callable returned without completing response.
+ERROR:    ASGI callable returned without completing response.
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [6526]

@@ -1,0 +1,18 @@
+INFO:     Started server process [7224]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8097 (Press CTRL+C to quit)
+INFO:     127.0.0.1:60538 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60539 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60540 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60541 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60543 - "GET /graph?view=tree&since=24h&project=-Users-gerardo92-Desktop-AI-Coding-Multi-agent-Dashboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60545 - "GET /api/v1/stream?follow=1 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60544 - "GET /api/v1/agents?state=WAITING_INPUT,WAITING_PERMISSION&limit=5000 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60543 - "GET /api/v1/graph?view=tree&since=24h&project=-Users-gerardo92-Desktop-AI-Coding-Multi-agent-Dashboard HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60557 - "GET /api/v1/agents/A%3Aa666066d0ca4badc9 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60558 - "GET /api/v1/graph?since=24h&project=-Users-gerardo92-Desktop-AI-Coding-Multi-agent-Dashboard HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7224]

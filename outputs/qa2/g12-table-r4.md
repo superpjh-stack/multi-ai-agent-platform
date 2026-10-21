@@ -1,0 +1,32 @@
+| # | 키 | 종류 | 원천 근거 (spec v0.3 §4.2 입력값) | 기대 v0.3 글자 | (참고) v0.2 글자 | 대시보드 | 일치 |
+|---|---|---|---|---|---|---|---|
+| 1 | `S:dbd09a2a-f7cb-4121-9a92-cf8d0352ad28` | SESSION | S1 없음 · 마지막 기록 2026-10-14T17:55:19Z (546711초 전) · 마지막 줄 assistant:tool_use · 마지막 tool_use AskUserQuestion · 결과 없는 tool_use ['AskUserQuestion'] · ScheduleWakeup 2026-10-14T17:34:00Z(지남) · 자식 64 (미종료 0) | STALE R-06 | STALE R-06 | STALE R-06 | O |
+| 2 | `A:a2a0029196a84aba3` | SUBAGENT | 세션 6a44e325 S1 없음 (프로세스 없음) · 마지막 기록 09-28T01:23:26 (1988624초 전) · 마지막 활동 09-28T01:13:14 · 반환 없음 | STALE R-11 | STALE R-11 | STALE R-11 | O |
+| 3 | `A:abca160dd070f2db8` | SUBAGENT | 세션 67760b59 S1 없음 (프로세스 없음) · 마지막 기록 10-09T03:56:32 (1029037초 전) · 마지막 활동 10-09T03:08:06 · 반환 없음 | STALE R-11 | STALE R-11 | STALE R-11 | O |
+| 4 | `A:a39a8de156b8640a4` | SUBAGENT | 세션 dbd09a2a S1 없음 (프로세스 없음) · 마지막 기록 10-12T16:21:27 (725143초 전) · 마지막 활동 10-12T16:21:12 · 반환 handback@10-12T16:21:02 | STALE R-11 | STALE R-11 | STALE R-11 | O |
+| 5 | `A:abe5c570d21c89b2a` | SUBAGENT | 세션 dbd09a2a S1 없음 (프로세스 없음) · 마지막 기록 10-12T17:27:21 (721188초 전) · 마지막 활동 10-12T17:26:36 · 반환 없음 | STALE R-11 | STALE R-11 | STALE R-11 | O |
+| 6 | `A:acfbcbeabcb648847` | SUBAGENT | 세션 dbd09a2a S1 없음 (프로세스 없음) · 마지막 기록 10-12T17:27:26 (721183초 전) · 마지막 활동 10-12T17:26:57 · 반환 없음 | STALE R-11 | STALE R-11 | STALE R-11 | O |
+| 7 | `A:adcce697adc4648df` | SUBAGENT | 세션 6a44e325 S1 없음 (프로세스 없음) · 마지막 기록 09-28T23:08:36 (1910314초 전) · 마지막 활동 09-28T23:08:36 · 반환 notification:failed@09-28T23:08:36 | FAILED R-08 | FAILED R-08 | FAILED R-08 | O |
+| 8 | `A:a167636f750fc2591` | SUBAGENT | 세션 67760b59 S1 없음 (프로세스 없음) · 마지막 기록 10-08T22:31:29 (1048541초 전) · 마지막 활동 10-08T22:31:28 · 반환 notification:failed@10-08T22:31:29 | FAILED R-08 | FAILED R-08 | FAILED R-08 | O |
+| 9 | `A:a3a79ff5ebee2a7fa` | SUBAGENT | 세션 67760b59 S1 없음 (프로세스 없음) · 마지막 기록 10-08T22:32:19 (1048490초 전) · 마지막 활동 10-08T22:32:19 · 반환 notification:failed@10-08T22:32:20 | FAILED R-08 | FAILED R-08 | FAILED R-08 | O |
+| 10 | `A:a5a75228a8eaf44fc` | SUBAGENT | 세션 67760b59 S1 없음 (프로세스 없음) · 마지막 기록 10-08T22:31:46 (1048523초 전) · 마지막 활동 10-08T22:31:45 · 반환 notification:failed@10-08T22:31:46 | FAILED R-08 | FAILED R-08 | FAILED R-08 | O |
+| 11 | `S:fa752590-2b31-4e52-8518-a10dfe99f988` | SESSION | S1 status=busy · pid 살아 있음 · 마지막 기록 2026-10-21T01:42:01Z (308초 전) · 마지막 줄 assistant:text · 마지막 tool_use ScheduleWakeup · ScheduleWakeup 2026-10-21T02:11:22Z(미래) · 자식 7 (미종료 2) | SLEEPING R-03 | STALE R-02b | SLEEPING R-03 | O |
+| 12 | `A:a19dae7c44b9897c4` | SUBAGENT | 세션 fa752590 S1 busy · 마지막 기록 10-21T01:47:09 (0초 전) · 마지막 활동 10-21T01:47:09 · 반환 없음 | RUNNING R-09 | RUNNING R-09 | RUNNING R-09 | O |
+| 13 | `A:a666066d0ca4badc9` | SUBAGENT | 세션 fa752590 S1 busy · 마지막 기록 10-21T01:47:09 (0초 전) · 마지막 활동 10-21T01:47:09 · 반환 없음 | RUNNING R-09 | RUNNING R-09 | RUNNING R-09 | O |
+| 14 | `S:fc3908a3-be19-4ec8-bbec-53711cb56817` | SESSION | S1 status=busy · pid 살아 있음 · 마지막 기록 2026-10-21T01:47:08Z (2초 전) · 마지막 줄 user:tool_result · 마지막 tool_use Bash · 자식 3 (미종료 0) | RUNNING R-02a | RUNNING R-02a | RUNNING R-02a | O |
+| 15 | `A:a6fb649567d2669d6` | SUBAGENT | 세션 fc3908a3 S1 busy · 마지막 기록 10-21T00:34:22 (4367초 전) · 마지막 활동 10-21T00:34:22 · 반환 handback@10-21T00:34:22 | DONE R-08 | DONE R-08 | DONE R-08 | O |
+| 16 | `A:a9979459006514546` | SUBAGENT | 세션 fc3908a3 S1 busy · 마지막 기록 10-21T00:35:34 (4295초 전) · 마지막 활동 10-21T00:35:34 · 반환 handback@10-21T00:35:34 | DONE R-08 | DONE R-08 | DONE R-08 | O |
+| 17 | `S:ad2fe3ca-d706-4a00-bba7-de949d9d065d` | SESSION | S1 없음 · 마지막 기록 2026-10-20T00:56:46Z (89423초 전) · 마지막 줄 assistant:text · 마지막 tool_use Bash · 자식 0 (미종료 0) | DONE R-07 | DONE R-07 | DONE R-07 | O |
+| 18 | `S:5e628a6a-4945-4a67-8d30-9f7556e10372` | SESSION | S1 없음 · 마지막 기록 2026-10-19T04:53:11Z (161638초 전) · 마지막 줄 assistant:text · 마지막 tool_use Bash · 자식 0 (미종료 0) | DONE R-07 | DONE R-07 | DONE R-07 | O |
+| 19 | `S:11ca1f26-f741-41b1-8811-2225b85e23a6` | SESSION | S1 없음 · 마지막 기록 2026-10-17T01:26:14Z (346855초 전) · 마지막 줄 assistant:text · 마지막 tool_use Bash · 자식 0 (미종료 0) | DONE R-07 | DONE R-07 | DONE R-07 | O |
+| 20 | `S:8f3a6abd-0740-4164-9188-e5ac6af4cd37` | SESSION | S1 없음 · 마지막 기록 2026-10-11T15:31:32Z (814537초 전) · 마지막 줄 assistant:text · 마지막 tool_use Bash · ScheduleWakeup 2026-10-09T18:57:13Z(지남) · 자식 8 (미종료 0) | DONE R-07 | DONE R-07 | DONE R-07 | O |
+| 21 | `S:64067a52-368e-47ae-bada-05cb87fc4a3c` | SESSION | S1 없음 · 마지막 기록 2026-10-04T05:53:10Z (1454039초 전) · 마지막 줄 assistant:text · 마지막 tool_use mcp__claude-in-chrome__tabs_context_mcp · ScheduleWakeup 2026-10-02T22:14:42Z(지남) · 자식 17 (미종료 0) | DONE R-07 | DONE R-07 | DONE R-07 | O |
+| 22 | `A:ad57b6de4b4252afd` | SUBAGENT | 세션 fa752590 S1 busy · 마지막 기록 10-21T01:37:53 (557초 전) · 마지막 활동 10-21T01:37:52 · 반환 handback@10-21T01:37:52 | DONE R-08 | DONE R-08 | DONE R-08 | O |
+| 23 | `A:aac8375972e3d6b26` | SUBAGENT | 세션 fa752590 S1 busy · 마지막 기록 10-21T01:31:03 (967초 전) · 마지막 활동 10-21T01:31:02 · 반환 handback@10-21T01:31:02 | DONE R-08 | DONE R-08 | DONE R-08 | O |
+| 24 | `A:ad882f0fdff379a02` | SUBAGENT | 세션 fa752590 S1 busy · 마지막 기록 10-21T01:18:47 (1703초 전) · 마지막 활동 10-21T01:18:46 · 반환 handback@10-21T01:18:46 | DONE R-08 | DONE R-08 | DONE R-08 | O |
+| 25 | `A:a4f084316ccac6ecc` | SUBAGENT | 세션 fa752590 S1 busy · 마지막 기록 10-21T01:16:02 (1868초 전) · 마지막 활동 10-21T01:16:01 · 반환 notification:completed@10-21T01:04:15, handback@10-21T01:16:01 | DONE R-08 | DONE R-08 | DONE R-08 | O |
+| 26 | `A:a93da8f82902759fb` | SUBAGENT | 세션 fa752590 S1 busy · 마지막 기록 10-21T00:50:36 (3394초 전) · 마지막 활동 10-21T00:50:35 · 반환 handback@10-21T00:50:35 | DONE R-08 | DONE R-08 | DONE R-08 | O |
+| 27 | `A:a7186b4827d0cb63f` | WORKFLOW_AGENT | 세션 8f3a6abd S1 없음 (프로세스 없음) · 마지막 기록 10-10T02:48:52 (946698초 전) · 마지막 활동 10-10T02:48:52 · 반환 없음 · S6 status=completed | DONE R-08 | DONE R-08 | DONE R-08 | O |
+| 28 | `A:a87cfd3e838743964` | WORKFLOW_AGENT | 세션 8f3a6abd S1 없음 (프로세스 없음) · 마지막 기록 10-10T02:49:18 (946671초 전) · 마지막 활동 10-10T02:49:18 · 반환 없음 · S6 status=completed | DONE R-08 | DONE R-08 | DONE R-08 | O |
+| 29 | `A:a850fbc10924baf9b` | SUBAGENT | 세션 2bee9170 S1 없음 (프로세스 없음) · 마지막 기록 10-17T09:40:30 (317200초 전) · 마지막 활동 10-17T09:40:29 · 반환 handback@10-17T09:40:29 | DONE R-08 | DONE R-08 | DONE R-08 | O |
+| 30 | `A:a2384d3236592c914` | SUBAGENT | 세션 2bee9170 S1 없음 (프로세스 없음) · 마지막 기록 10-17T09:38:47 (317302초 전) · 마지막 활동 10-17T09:38:47 · 반환 handback@10-17T09:38:47 | DONE R-08 | DONE R-08 | DONE R-08 | O |

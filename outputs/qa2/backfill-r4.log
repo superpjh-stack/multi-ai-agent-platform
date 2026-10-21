@@ -1,0 +1,14 @@
+uv python pin 3.12
+Pinned `.python-version` to `3.12`
+uv sync
+Resolved 29 packages in 3ms
+Checked 28 packages in 3ms
+uv run python -m agentdash.db.conn
+DB /Users/gerardo92/Desktop/AI Coding/Multi-agent Dashboard/data/agentdash-qa2.db: 테이블 11 — agent edge file_touch hook_event parse_error pipeline_cell src_file state_log tool_call usage_daily usage_event
+uv run python -m agentdash.collect.backfill 
+backfill /Users/gerardo92/Desktop/AI Coding/Multi-agent Dashboard/data/agentdash-qa2.db — 4.2 s (수집 3.7 s, since 2026-08-01)
+  원천 파일 567: S1 2 · S2 73 · S3 239 · S4 239 · S5 6 · S5journal 1 · S5meta 6 · S6 1
+  agent SESSION 73 · SUBAGENT 239 · WORKFLOW 1 · WORKFLOW_AGENT 6
+  usage_event 25924 · tool_call 29352 · file_touch 2301 · usage_daily 356 · parse_error 0
+  linker 있음 · state 있음
+AGENTDASH_DB=data/agentdash-qa2.db make setup backfill  3.97s user 0.21s system 97% cpu 4.292 total
