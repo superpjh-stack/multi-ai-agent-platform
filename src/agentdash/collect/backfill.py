@@ -32,7 +32,7 @@ def run(db_path: str | Path | None = None, since: str | None = None, *, verbose:
     db = conn.init_db(db_path)
     con = conn.connect(db)
     try:
-        rep = ingest.ingest_all(con, since=since, link=False)
+        rep = ingest.ingest_all(con, since=since, link=False, daily=False)
         con.commit()
         post = {}
         resolve_all = _optional("agentdash.core.linker", "resolve_all")

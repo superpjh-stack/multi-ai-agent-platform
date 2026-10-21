@@ -308,10 +308,28 @@ def _apply_fork_pending(con: sqlite3.Connection) -> set[str]:
     return changed
 
 
-def _acc(con: sqlite3.Connection, key: str, fresh: bool) -> dict[str, list[int]]:
+def _acc(con: sqlite3.Connection, key: str, path: Path, start_offset: int, fresh: bool,
+         exclude: set) -> dict[str, list[int]]:
+    """요청 누적기. 처음부터 읽으면 비우고, 이 프로세스에서 처음 보는 기록을 중간부터 이어 읽으면(재시작 · 다른 도구가
+    그 사이 읽음) 앞부분(0 ~ start_offset)을 다시 재서 채운다 — 한 요청이 두 프로세스에 걸쳐도 길이를 잃지 않는다.
+    앞부분은 읽기만 하고 길이 숫자만 남긴다(본문 버림). 깨진 줄은 이전 회차가 parse_error 로 이미 셌다."""
     k = (_db_id(con), key)
-    if fresh or k not in _req_acc:
+    if fresh:
         _req_acc[k] = {}
+    elif k not in _req_acc:
+        acc: dict[str, list[int]] = {}
+        with open(path, "rb") as fh:
+            prefix = fh.read(start_offset)
+        for raw in prefix.split(b"\n"):
+            if not raw.strip():
+                continue
+            try:
+                rec = tr_p.parse_line(raw)
+            except tr_p.LineError:
+                continue
+            if rec is not None and rec.type == "assistant" and rec.usage is not None and rec.model not in exclude:
+                _accumulate(acc, rec.request_id or f"uuid:{rec.uuid}", rec)
+        _req_acc[k] = acc
     return _req_acc[k]
 
 
@@ -373,7 +391,7 @@ def _ingest_transcript(con: sqlite3.Connection, path: Path, kind: str) -> set[st
     copied = 0
 
     pricing = _pricing()
-    acc = _acc(con, key, fresh=ch.start_offset == 0 or ch.reset)
+    acc = _acc(con, key, path, ch.start_offset, fresh=ch.start_offset == 0 or ch.reset, exclude=pricing.exclude)
     on_line = _on_line()
     from agentdash.core.linker import is_activity
     # 마지막 기록(last_event_at) = 모든 줄 종류의 마지막 시각 — 단 SubagentHandback 뒤 활동 아닌 꼬리 줄(그 결과 · 첨부 ·
@@ -533,7 +551,7 @@ def source_files(home: Path | None = None) -> list[tuple[str, Path]]:
 
 
 def ingest_all(con: sqlite3.Connection, *, since: str | None = None, run_hooks: bool = True,
-               link: bool = True) -> Report:
+               link: bool = True, daily: bool = True) -> Report:
     """전체 스캔. run_hooks 면 등록된 post hook 을 부르고, link 이고 state.post_hook 이 등록돼 있지 않으면
     그것을 직접 부른다(R3 — check_counts · 감시기 재스캔 경로에서도 연결 · 판정이 돈다). backfill 은 link=False 로
     부르고 끝에 resolve_all · evaluate_all 을 따로 돈다."""
@@ -549,6 +567,8 @@ def ingest_all(con: sqlite3.Connection, *, since: str | None = None, run_hooks: 
         rep.files[k] = rep.files.get(k, 0) + 1
         rep.changed |= ingest_path(con, p)
     rep.changed |= _apply_fork_pending(con)
+    if daily and rep.changed:       # 바뀐 키의 usage_daily 를 다시 (추세 · 예산 = usage_daily, V-14). backfill 은 끝에 전체를 다시 만든다
+        U.rebuild_daily(con, rep.changed)
     if run_hooks:
         for fn in list(_post_hooks):
             fn(con, rep.changed)

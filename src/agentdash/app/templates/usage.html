@@ -15,17 +15,18 @@
 </form>
 
 <div class="cards">
-  <div class="card"><div class="k">출력 토큰{% if t.total.undercount %} <span class="warn" data-undercount="1">{{ t.undercount_note }}</span>{% endif %}</div><div class="n">{{ fmt(t.total.output_tokens) }}</div>
-    {% if t.total.undercount %}<div class="k">그중 서브에이전트 · 워크플로 {{ fmt(t.total.undercount_output) }}</div>{% endif %}</div>
+  <div class="card"><div class="k">출력 토큰 — 기록</div><div class="n">{{ fmt(t.total.output_tokens) }}</div>
+    <div class="k" data-est-output="{{ t.total.output_est_total }}">{{ t.est_note }} <span class="est">[추정]</span> {{ fmt(t.total.output_est_total) }}</div></div>
   <div class="card"><div class="k">입력 · 캐시 쓰기</div><div class="n">{{ fmt(t.total.input_tokens + t.total.cache_write) }}</div></div>
   <div class="card"><div class="k">캐시 적중률</div><div class="n">{% if t.total.cache_hit is not none %}{{ '%.1f' % (t.total.cache_hit * 100) }}%{% else %}—{% endif %}</div></div>
   <div class="card"><div class="k">도구 호출 · 요청</div><div class="n">{{ fmt(t.total.tool_calls) }} · {{ fmt(t.total.requests) }}</div></div>
-  <div class="card"><div class="k">추정 비용 <span class="est" data-estimate="1">{{ t.estimate_label }}</span>{% if t.total.undercount %} <span class="warn">{{ t.undercount_note }}</span>{% endif %}</div>
+  <div class="card"><div class="k">추정 비용 — 기록 <span class="est" data-estimate="1">{{ t.estimate_label }}</span></div>
     <div class="n" data-total-cost="{{ '%.6f' % (t.total.cost_usd or 0) }}">{% if t.total.cost_usd is not none %}${{ '{:,.2f}'.format(t.total.cost_usd) }}{% else %}—{% endif %}</div>
+    <div class="k" data-total-cost-est="{{ '%.6f' % (t.total.cost_est_usd or 0) }}">{{ t.est_note }} <span class="est">[추정]</span> {% if t.total.cost_est_usd is not none %}${{ '{:,.2f}'.format(t.total.cost_est_usd) }}{% else %}—{% endif %}</div>
     <div class="k" data-unpriced="{{ t.unpriced }}">단가 없음 {{ t.unpriced }} 건{% if t.unpriced_models %} ({% for m, n in t.unpriced_models %}{{ m or '모델 없음' }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}){% endif %}</div>
   </div>
 </div>
-{% if t.total.undercount %}<p class="muted" data-undercount-note="1"><b>{{ t.undercount_note }}</b> — 서브에이전트 · 워크플로 에이전트 기록의 출력 토큰은 스트리밍 시작값만 남은 경우가 많아(QA1 실측 요청 68.4%) 실제보다 적다. 원천에 최종값이 없어 숫자는 기록 그대로 두고 표기만 한다 — 바로잡는 방법은 사람이 정한다 (decisions.md D-17). 비용도 같은 만큼 적다.</p>{% endif %}
+<p class="muted" data-est-note="1"><b>{{ t.est_note }}</b> <span class="est">[추정]</span> — 서브에이전트 · 워크플로 기록의 출력 토큰은 스트리밍 시작값만 남은 경우가 많다. 기록값은 그대로 두고, 의심 요청(기록 출력 &lt; 30 · 내용 길이 &gt; 400 자)은 글자 수 ÷ 4 를 하한 추정으로 따로 센다 (spec.md §6.2 · decisions.md D-17). 추정 비용은 그 추정 출력을 넣은 값이다.</p>
 <p class="muted">비용은 <b>{{ t.estimate_label }}</b> 값이다 (단가표 {{ t.pricing_ver or '—' }}, spec.md §6.1). Claude Code 구독 요금제의 실제 청구와 다르다. 단가표에 없는 모델은 비용을 비우고(NULL) 「단가 없음」으로 센다 — <code>make pricing-check</code>.</p>
 
 <h2>일별 추이 — 출력 토큰</h2>
@@ -38,8 +39,8 @@
 <table>
   <thead><tr>
     <th>#</th><th>{{ glabel[t.group] }}</th><th class="num">요청</th><th class="num">입력</th><th class="num">캐시 읽기</th>
-    <th class="num">캐시 쓰기</th><th class="num">출력</th><th class="num">캐시 적중률</th><th class="num">도구 호출</th>
-    <th class="num">작성 파일</th><th class="num">실행 시간</th><th class="num">추정 비용 <span class="est">{{ t.estimate_label }}</span></th>
+    <th class="num">캐시 쓰기</th><th class="num">출력 기록</th><th class="num">출력 {{ t.est_note }} <span class="est">[추정]</span></th><th class="num">캐시 적중률</th><th class="num">도구 호출</th>
+    <th class="num">작성 파일</th><th class="num">실행 시간</th><th class="num">추정 비용 <span class="est">{{ t.estimate_label }}</span></th><th class="num">비용 {{ t.est_note }} <span class="est">[추정]</span></th>
   </tr></thead>
   <tbody>
   {% for r in rows %}
@@ -47,13 +48,14 @@
       <td class="num">{{ loop.index }}</td>
       <td class="name">{% if t.group == 'agent' %}<a href="/agents/{{ r.key }}">{{ r.label }}</a> <span class="muted">{{ r.kind or '' }}</span>{% else %}{{ r.label }}{% endif %}</td>
       <td class="num">{{ fmt(r.requests) }}</td><td class="num">{{ fmt(r.input_tokens) }}</td><td class="num">{{ fmt(r.cache_read) }}</td>
-      <td class="num">{{ fmt(r.cache_write) }}</td><td class="num">{{ fmt(r.output_tokens) }}{% if r.undercount %} <span class="warn" title="{{ t.undercount_note }} — 서브 · 워크플로 몫 {{ fmt(r.undercount_output) }}">과소 (D-17)</span>{% endif %}</td>
+      <td class="num">{{ fmt(r.cache_write) }}</td><td class="num">{{ fmt(r.output_tokens) }}</td><td class="num">{{ fmt(r.output_est_total) }}</td>
       <td class="num">{% if r.cache_hit is not none %}{{ '%.1f' % (r.cache_hit * 100) }}%{% else %}—{% endif %}</td>
       <td class="num">{{ fmt(r.tool_calls) }}</td><td class="num">{{ r.files_written }}</td><td class="num">{{ hours(r.active_seconds) }}</td>
-      <td class="num">{% if r.cost_usd is not none %}${{ '{:,.2f}'.format(r.cost_usd) }}{% else %}—{% endif %}{% if r.undercount %} <span class="warn">과소 (D-17)</span>{% endif %}{% if r.unpriced %} <span class="warn">단가 없음 {{ r.unpriced }} 건</span>{% endif %}</td>
+      <td class="num">{% if r.cost_usd is not none %}${{ '{:,.2f}'.format(r.cost_usd) }}{% else %}—{% endif %}{% if r.unpriced %} <span class="warn">단가 없음 {{ r.unpriced }} 건</span>{% endif %}</td>
+      <td class="num">{% if r.cost_est_usd is not none %}${{ '{:,.2f}'.format(r.cost_est_usd) }}{% else %}—{% endif %}</td>
     </tr>
   {% else %}
-    <tr><td colspan="12" class="muted">이 기간에 기록이 없다.</td></tr>
+    <tr><td colspan="14" class="muted">이 기간에 기록이 없다.</td></tr>
   {% endfor %}
   </tbody>
 </table>

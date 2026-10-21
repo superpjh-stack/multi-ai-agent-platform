@@ -22,10 +22,12 @@ from agentdash.core import model as M
 
 KST = timezone(timedelta(hours=9))
 ACTIVE_GAP_SEC = 300
-#: D-17 (차단 — 사람 결정 대기): 서브에이전트 · 워크플로 기록의 output_tokens 는 스트리밍 시작값인 경우가 많다.
-#: 결정 전 임시 ① — 숫자는 원천 그대로 두고 이 표기만 붙인다 (지어내지 않는다).
+#: D-17 확정 (spec v0.3 §6.2 — 대안 ②): 기록값은 그대로, 의심 요청에 output_est · cost_est_usd. 표기 「추정 보정 (D-17)」.
+UNDERCOUNT_NOTE = "추정 보정 (D-17)"
+#: 1차 임시 ① 표기 — D-03(개발2 agent.html · totals 의 undercount* 키)만 아직 쓴다. 개발2 가 output_est_total ·
+#: cost_est_usd 로 바꾸면 지운다 (progress-dev1.md §3 R-2A-1). D-04 · CSV 는 쓰지 않는다.
 UNDERCOUNT_KINDS = ("SUBAGENT", "WORKFLOW_AGENT")
-UNDERCOUNT_NOTE = "기록상 과소 (D-17)"
+LEGACY_UNDERCOUNT_NOTE = "기록상 과소 (D-17)"
 
 
 @dataclass
@@ -128,13 +130,14 @@ def refresh_est(con: sqlite3.Connection, agent_key: str, request_id: str, pricin
 # ── 합계 ─────────────────────────────────────────────────────────────
 _SUM = ("SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(cache_read),0), "
         "COALESCE(SUM(cache_write_5m),0)+COALESCE(SUM(cache_write_1h),0), COALESCE(SUM(output_tokens),0), "
-        "COALESCE(SUM(thinking_tokens),0), SUM(cost_usd), COALESCE(SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END),0), COUNT(*) "
+        "COALESCE(SUM(thinking_tokens),0), SUM(cost_usd), COALESCE(SUM(CASE WHEN cost_usd IS NULL THEN 1 ELSE 0 END),0), COUNT(*), "
+        "COALESCE(SUM(COALESCE(output_est, output_tokens)),0), SUM(cost_est_usd) "
         "FROM usage_event WHERE agent_key IN ({})")
 
 
 def _sum(con: sqlite3.Connection, keys: list[str]) -> dict:
     out = dict(input_tokens=0, cache_read=0, cache_write=0, output_tokens=0, thinking_tokens=0, cost_usd=None,
-               unpriced=0, requests=0)
+               unpriced=0, requests=0, output_est_total=0, cost_est_usd=None)
     for i in range(0, len(keys), 500):
         part = keys[i:i + 500]
         r = con.execute(_SUM.format(",".join("?" * len(part))), part).fetchone()
@@ -144,6 +147,9 @@ def _sum(con: sqlite3.Connection, keys: list[str]) -> dict:
             out["cost_usd"] = (out["cost_usd"] or 0.0) + r[5]
         out["unpriced"] += r[6]
         out["requests"] += r[7]
+        out["output_est_total"] += r[8]
+        if r[9] is not None:
+            out["cost_est_usd"] = (out["cost_est_usd"] or 0.0) + r[9]
     return out
 
 
@@ -210,8 +216,8 @@ def _undercount_keys(con: sqlite3.Connection, keys: list[str]) -> list[str]:
 
 
 def totals(con: sqlite3.Connection, agent_key: str, *, descendants: bool = False) -> dict:
-    """합계 + D-17 표기: 서브에이전트 · 워크플로 에이전트 몫이 들어 있으면 undercount=True ·
-    undercount_note=「기록상 과소 (D-17)」 · undercount_output = 그 몫의 출력 토큰 (숫자는 원천 그대로)."""
+    """합계. D-17 (spec §6.2): output_est_total = 의심 행은 output_est · 나머지는 output_tokens 의 합, cost_est_usd = 추정 보정 비용
+    (단가 없는 행은 더하지 않는다 — unpriced). 1차 키 undercount · undercount_note(LEGACY) · undercount_output 은 D-03 용으로 남긴다."""
     keys = [agent_key]
     if descendants:
         keys += _descendants(con, agent_key)
@@ -219,7 +225,8 @@ def totals(con: sqlite3.Connection, agent_key: str, *, descendants: bool = False
     flagged = _undercount_keys(con, keys)
     sub = _sum(con, flagged) if flagged else None
     out["undercount"] = bool(sub and sub["requests"])
-    out["undercount_note"] = UNDERCOUNT_NOTE if out["undercount"] else None
+    out["undercount_note"] = LEGACY_UNDERCOUNT_NOTE if out["undercount"] else None
+    out["est_note"] = UNDERCOUNT_NOTE
     out["undercount_output"] = sub["output_tokens"] if sub else 0
     return out
 
@@ -255,19 +262,22 @@ def rebuild_daily(con: sqlite3.Connection, agent_keys: list[str] | set[str] | No
     n = 0
     for k in keys:
         rows: dict[tuple[str, str], list] = {}
-        for at, mdl, i, cr, w5, w1, o, c in con.execute(
-                "SELECT at, model, input_tokens, cache_read, cache_write_5m, cache_write_1h, output_tokens, cost_usd "
-                "FROM usage_event WHERE agent_key=?", (k,)):
+        for at, mdl, i, cr, w5, w1, o, c, oe, ce in con.execute(
+                "SELECT at, model, input_tokens, cache_read, cache_write_5m, cache_write_1h, output_tokens, cost_usd, "
+                "output_est, cost_est_usd FROM usage_event WHERE agent_key=?", (k,)):
             if not at:
                 continue
             key = (kst_day(at), mdl or "")
-            r = rows.setdefault(key, [0, 0, 0, 0, 0, 0, 0, None])
+            r = rows.setdefault(key, [0, 0, 0, 0, 0, 0, 0, None, 0, None])
             r[0] += i or 0
             r[1] += cr or 0
             r[2] += (w5 or 0) + (w1 or 0)
             r[3] += o or 0
             if c is not None:
                 r[7] = (r[7] or 0.0) + c
+            r[8] += oe or 0                         # 그날 의심 요청의 output_est 합 (없으면 0, spec §3)
+            if ce is not None:
+                r[9] = (r[9] or 0.0) + ce
         tools_by_day: dict[str, int] = defaultdict(int)
         stamps: list[str] = [r[0] for r in con.execute("SELECT at FROM usage_event WHERE agent_key=?", (k,)) if r[0]]
         for at, res in con.execute("SELECT at, result_at FROM tool_call WHERE agent_key=?", (k,)):
@@ -285,7 +295,7 @@ def rebuild_daily(con: sqlite3.Connection, agent_keys: list[str] | set[str] | No
         for day in days:
             models = [(m, r) for (d, m), r in rows.items() if d == day]
             if not models:   # 토큰 없는 날: 도구 · 파일 · 시간만 (모델 칸 '')
-                models = [("", rows.setdefault((day, ""), [0, 0, 0, 0, 0, 0, 0, None]))]
+                models = [("", rows.setdefault((day, ""), [0, 0, 0, 0, 0, 0, 0, None, 0, None]))]
             # 도구 · 파일 · 시간은 모델 칸이 없으므로 그날 출력이 가장 많은 모델 행에 붙인다
             top = max(models, key=lambda x: x[1][3])[0]
             for m, r in models:
@@ -293,8 +303,9 @@ def rebuild_daily(con: sqlite3.Connection, agent_keys: list[str] | set[str] | No
                     r[4], r[5], r[6] = tools_by_day.get(day, 0), len(files_by_day.get(day, ())), act.get(day, 0)
                 con.execute(
                     "INSERT INTO usage_daily (day, agent_key, model, input_tokens, cache_read, cache_write, output_tokens, "
-                    "tool_calls, files_written, active_seconds, cost_usd) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                    (day, k, m, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]))
+                    "tool_calls, files_written, active_seconds, cost_usd, output_est, cost_est_usd) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (day, k, m, r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9]))
                 n += 1
     return n
 
@@ -302,20 +313,25 @@ def rebuild_daily(con: sqlite3.Connection, agent_keys: list[str] | set[str] | No
 def reprice(con: sqlite3.Connection, pricing: Pricing | None = None) -> dict:
     pricing = pricing or load_pricing()
     cur = con.execute("SELECT agent_key, request_id, at, model, speed, input_tokens, cache_read, cache_write_5m, "
-                      "cache_write_1h, output_tokens FROM usage_event")
+                      "cache_write_1h, output_tokens, output_est FROM usage_event")
     upd, changed, nulls = [], 0, 0
     for r in cur.fetchall():
         ev = M.UsageEvent(agent_key=r[0], request_id=r[1], at=r[2], model=r[3], speed=r[4], input_tokens=r[5],
-                          cache_read=r[6], cache_write_5m=r[7], cache_write_1h=r[8], output_tokens=r[9])
+                          cache_read=r[6], cache_write_5m=r[7], cache_write_1h=r[8], output_tokens=r[9], output_est=r[10])
         c, ver = cost(ev, pricing)
+        ev.cost_usd = c
         nulls += c is None
-        upd.append((c, ver, r[0], r[1]))
-    for c, ver, k, rid in upd:
+        upd.append((c, ver, cost_est(ev, pricing), r[0], r[1]))     # 추정 보정 비용도 같은 단가로 (spec §6.2)
+    est_changed = 0
+    for c, ver, ce, k, rid in upd:
         cc = con.execute("UPDATE usage_event SET cost_usd=?, pricing_ver=? WHERE agent_key=? AND request_id=? "
                          "AND (cost_usd IS NOT ? OR pricing_ver IS NOT ?)", (c, ver, k, rid, c, ver))
         changed += cc.rowcount
+        est_changed += con.execute("UPDATE usage_event SET cost_est_usd=? WHERE agent_key=? AND request_id=? "
+                                   "AND cost_est_usd IS NOT ?", (ce, k, rid, ce)).rowcount
     daily = rebuild_daily(con)
-    return {"rows": len(upd), "changed": changed, "null_cost": nulls, "pricing_ver": pricing.version, "daily_rows": daily}
+    return {"rows": len(upd), "changed": changed, "est_changed": est_changed, "null_cost": nulls,
+            "pricing_ver": pricing.version, "daily_rows": daily}
 
 
 def unpriced_models(con: sqlite3.Connection, pricing: Pricing | None = None) -> list[tuple[str, int]]:
@@ -408,11 +424,11 @@ def table(con: sqlite3.Connection, frm: str | None = None, to: str | None = None
     rows: dict[str, dict] = {}
     days: dict[str, dict] = {}
     tot = dict(input_tokens=0, cache_read=0, cache_write=0, output_tokens=0, tool_calls=0, files_written=0,
-               active_seconds=0, cost_usd=None, unpriced=0, requests=0, undercount=False, undercount_output=0)
+               active_seconds=0, cost_usd=None, unpriced=0, requests=0, output_est_total=0, cost_est_usd=None)
     top_model: dict[tuple[str, str], str] = {}      # (일자, agent) → 그날 파일 · 도구가 붙은 모델 행 (rebuild_daily)
-    for day, k, mdl, i, cr, cw, o, tc, fw, act, c in con.execute(
+    for day, k, mdl, i, cr, cw, o, tc, fw, act, c, ce in con.execute(
             "SELECT day, agent_key, model, input_tokens, cache_read, cache_write, output_tokens, tool_calls, "
-            "files_written, active_seconds, cost_usd FROM usage_daily WHERE day BETWEEN ? AND ?", (frm, to)):
+            "files_written, active_seconds, cost_usd, cost_est_usd FROM usage_daily WHERE day BETWEEN ? AND ?", (frm, to)):
         a = agents.get(k) or {"agent_key": k}
         if fw:
             top_model[(day, k)] = mdl or ""
@@ -420,13 +436,9 @@ def table(con: sqlite3.Connection, frm: str | None = None, to: str | None = None
         r = rows.setdefault(gk, dict(key=gk, label=label, input_tokens=0, cache_read=0, cache_write=0, output_tokens=0,
                                      tool_calls=0, files_written=0, active_seconds=0, cost_usd=None, unpriced=0,
                                      requests=0, kind=a.get("kind") if group == "agent" else None,
-                                     undercount=False, undercount_output=0))
-        if a.get("kind") in UNDERCOUNT_KINDS and (o or i or cr or cw):     # D-17 — 서브 · 워크플로 몫이 섞인 행
-            r["undercount"] = tot["undercount"] = True
-            r["undercount_output"] += o or 0
-            tot["undercount_output"] += o or 0
+                                     output_est_total=0, cost_est_usd=None))
         dd = days.setdefault(day, dict(day=day, output_tokens=0, cost_usd=None, input_tokens=0, cache_read=0,
-                                       cache_write=0))
+                                       cache_write=0, output_est_total=0, cost_est_usd=None))
         for tgt in (r, tot):
             tgt["input_tokens"] += i or 0
             tgt["cache_read"] += cr or 0
@@ -437,6 +449,9 @@ def table(con: sqlite3.Connection, frm: str | None = None, to: str | None = None
             tgt["active_seconds"] += act or 0
             if c is not None:
                 tgt["cost_usd"] = (tgt["cost_usd"] or 0.0) + c
+        for tgt in (r, tot, dd):
+            if ce is not None:
+                tgt["cost_est_usd"] = (tgt["cost_est_usd"] or 0.0) + ce
         dd["output_tokens"] += o or 0
         dd["input_tokens"] += i or 0
         dd["cache_read"] += cr or 0
@@ -447,16 +462,22 @@ def table(con: sqlite3.Connection, frm: str | None = None, to: str | None = None
     ua, ub = _utc_bounds(frm, to)
     _unique_files(con, group, agents, rows, tot, ua, ub, top_model)
     unpriced_models: dict[str, int] = {}
-    for k, at, mdl, c in con.execute("SELECT agent_key, at, model, cost_usd FROM usage_event WHERE at >= ? AND at < ?",
-                                     (ua, ub)):
+    for k, at, mdl, c, o, oe in con.execute("SELECT agent_key, at, model, cost_usd, output_tokens, output_est "
+                                            "FROM usage_event WHERE at >= ? AND at < ?", (ua, ub)):
         if not at:
             continue
         a = agents.get(k) or {"agent_key": k}
-        gk, label = _group_key(group, kst_day(at), mdl, a)
+        day = kst_day(at)
+        gk, label = _group_key(group, day, mdl, a)
         r = rows.get(gk)
+        est = oe if oe is not None else (o or 0)       # 추정 출력 = 의심 행은 output_est, 나머지는 기록 (spec §6)
         tot["requests"] += 1
+        tot["output_est_total"] += est
+        if day in days:
+            days[day]["output_est_total"] += est
         if r is not None:
             r["requests"] += 1
+            r["output_est_total"] += est
         if c is None:
             tot["unpriced"] += 1
             unpriced_models[mdl or ""] = unpriced_models.get(mdl or "", 0) + 1
@@ -472,11 +493,11 @@ def table(con: sqlite3.Connection, frm: str | None = None, to: str | None = None
     return {"from": frm, "to": to, "group": group, "groups": list(GROUPS), "rows": ranked, "total": tot,
             "trend": trend, "unpriced": tot["unpriced"], "unpriced_models": sorted(unpriced_models.items()),
             "pricing_ver": ver[0][0] if ver else None, "pricing_versions": [v[0] for v in ver],
-            "estimate_label": ESTIMATE_LABEL, "undercount_note": UNDERCOUNT_NOTE}
+            "estimate_label": ESTIMATE_LABEL, "est_note": UNDERCOUNT_NOTE}
 
 
-CSV_COLS = ("key", "label", "requests", "input_tokens", "cache_read", "cache_write", "output_tokens", "cache_hit",
-            "tool_calls", "files_written", "active_seconds", "cost_usd", "unpriced", "undercount")
+CSV_COLS = ("key", "label", "requests", "input_tokens", "cache_read", "cache_write", "output_tokens", "output_est_total",
+            "cache_hit", "tool_calls", "files_written", "active_seconds", "cost_usd", "cost_est_usd", "unpriced")
 
 
 def to_csv(t: dict) -> str:
@@ -488,12 +509,12 @@ def to_csv(t: dict) -> str:
     w = csv.writer(buf)
     head = list(CSV_COLS)
     head[head.index("cost_usd")] = f"cost_usd {ESTIMATE_LABEL} (단가표 {t.get('pricing_ver')})"
-    head[head.index("undercount")] = f"output {UNDERCOUNT_NOTE}"
+    head[head.index("output_est_total")] = f"output_est_total {UNDERCOUNT_NOTE} [추정]"
+    head[head.index("cost_est_usd")] = f"cost_est_usd {UNDERCOUNT_NOTE} {ESTIMATE_LABEL}"
     w.writerow(head)
+
     def cell(r: dict, c: str):
         v = r.get(c)
-        if c == "undercount":
-            return f"과소 의심 출력 {r.get('undercount_output', 0)}" if v else ""
         return "" if v is None else (round(v, 6) if isinstance(v, float) else v)
 
     for r in t["rows"]:

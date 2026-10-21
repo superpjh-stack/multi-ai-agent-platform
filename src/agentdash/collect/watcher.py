@@ -25,6 +25,10 @@ def process(con, paths: list[Path]) -> set[str]:
     order = sorted(paths, key=lambda p: ingest._ORDER.get(ingest.classify(p) or "", 9))
     for p in order:
         changed |= ingest.ingest_path(con, p)
+    if changed:                     # 추세 · 예산은 usage_daily 를 읽는다 — 바뀐 키만 다시 (V-14)
+        from agentdash.core import usage as U
+
+        U.rebuild_daily(con, changed)
     for fn in list(ingest._post_hooks):
         fn(con, changed)
     con.commit()

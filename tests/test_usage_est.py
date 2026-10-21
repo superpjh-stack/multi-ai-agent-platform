@@ -196,3 +196,17 @@ def test_no_length_stored(home, tmp_path):
         assert "본" not in v and len(v) <= 300
     daily = [r[1] for r in con.execute("PRAGMA table_info(usage_daily)")]
     assert "output_est" in daily and "cost_est_usd" in daily and not any("len" in c or "chars" in c for c in daily)
+
+
+def test_split_across_processes_same_as_single_pass(home, tmp_path):
+    """두 번째 읽기가 다른 프로세스(누적기 비어 있음 — 재시작 · check 도구의 동기화)여도 앞부분 길이를 다시 재서 같다."""
+    f = _sub(home)
+    lines = _lines(STREAM3)
+    _write(f, lines[:2])
+    split = _db(tmp_path, "split")
+    ingest.ingest_all(split, run_hooks=False)
+    split.commit()
+    ingest._req_acc.clear()                     # 프로세스 재시작 흉내
+    _write(f, lines[2:], mode="a")
+    ingest.ingest_all(split, run_hooks=False)
+    assert split.execute("SELECT output_est FROM usage_event").fetchone()[0] == 500

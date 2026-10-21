@@ -141,3 +141,31 @@ def test_timeline_segments(db):
     assert max(c["n"] for c in j["concurrency"]) == 2
     h = _client().get("/timeline?from=2026-10-16T00:00:00Z&to=2026-10-16T04:00:00Z").text
     assert "var(--st-RUNNING)" in h and "판정 기록 없음" in h
+
+
+# ── 2차-A Task 6 — 「추정 보정 (D-17)」 표기 · CSV 두 열 (spec v0.3 §6.2) ──────────────────────────────
+EST = "추정 보정 (D-17)"
+
+
+def test_est_label_and_csv(db):
+    db.execute("UPDATE usage_event SET cost_est_usd = cost_usd")          # 수집기가 채우는 값 (의심 아님 = 기록 비용)
+    db.execute("UPDATE usage_event SET output_est = 5000, cost_est_usd = cost_usd + 0.1 WHERE request_id='r3'")
+    U.rebuild_daily(db)
+    db.commit()
+    h = _client().get("/usage?from=2026-10-16&to=2026-10-17").text
+    assert EST in h and "기록상 과소" not in h
+    assert 'data-total-cost-est="' in h
+    j = _client().get("/api/v1/usage?from=2026-10-16&to=2026-10-17&group=agent").json()
+    assert j["est_note"] == EST
+    by = {r["key"]: r for r in j["rows"]}
+    assert by["A:a1"]["output_est_total"] == 5000 + 300 and by["S:s1"]["output_est_total"] == 600
+    assert j["total"]["cost_est_usd"] == pytest.approx(j["total"]["cost_usd"] + 0.1, abs=1e-9)
+    r = _client().get("/api/v1/usage?from=2026-10-16&to=2026-10-17&group=agent&format=csv")
+    rows = list(csv.reader(io.StringIO(r.content.decode("utf-8-sig"))))
+    head = rows[0]
+    i_o, i_c = U.CSV_COLS.index("output_est_total"), U.CSV_COLS.index("cost_est_usd")
+    assert EST in head[i_o] and EST in head[i_c] and LABEL in head[i_c]
+    assert not any("기록상 과소" in c for c in head)
+    body = {row[0]: row for row in rows[1:-1]}
+    assert body["A:a1"][i_o] == "5300"
+

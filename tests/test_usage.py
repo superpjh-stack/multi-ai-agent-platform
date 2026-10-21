@@ -240,14 +240,84 @@ def test_undercount_flag_on_subagent_totals(home, con):
     assert allx["output_tokens"] == 140 + 7 + 3 + 11                          # 숫자는 원천 그대로
 
 
-def test_undercount_flag_in_usage_table(home, con):
+def test_usage_table_est_columns_replace_undercount(home, con):
+    """2차-A (D-17 확정 ②): D-04 표는 「기록상 과소」 대신 기록 · 추정 보정 두 열 (spec §6.2 표기)."""
     _build(home)
     ingest.ingest_all(con, run_hooks=False)
     U.rebuild_daily(con)
     t = U.table(con, "2026-10-16", "2026-10-17", "agent")
-    flags = {r["key"]: r["undercount"] for r in t["rows"]}
-    assert flags[f"S:{SID}"] is False and flags["A:c1"] is True and flags["A:f1"] is True
-    assert t["total"]["undercount"] is True and t["undercount_note"] == "기록상 과소 (D-17)"
-    assert t["total"]["undercount_output"] == 21
+    assert t["est_note"] == U.UNDERCOUNT_NOTE == "추정 보정 (D-17)"
+    assert all("output_est_total" in r and "cost_est_usd" in r for r in t["rows"])
+    # 의심 요청 없음(content 가 짧다) → 추정 = 기록
+    assert t["total"]["output_est_total"] == t["total"]["output_tokens"]
+    assert t["total"]["cost_est_usd"] == pytest.approx(t["total"]["cost_usd"], abs=1e-12)
     by_day = U.table(con, "2026-10-16", "2026-10-17", "day")
-    assert all("undercount" in r for r in by_day["rows"])
+    assert all("output_est_total" in r for r in by_day["rows"])
+
+
+# ── 2차-A Task 6 — usage_daily 추정 열 · 합계 키 · reprice (spec v0.3 §3 · §6.2) ──────────────────────
+def _est_ev(key, rid, at, out, est, model="claude-opus-5-5"):
+    p = U.load_pricing()
+    ev = M.UsageEvent(agent_key=key, request_id=rid, at=at, model=model, input_tokens=100, cache_read=1000,
+                      cache_write_5m=10, output_tokens=out, output_est=est)
+    ev.cost_usd, ev.pricing_ver = U.cost(ev, p)
+    ev.cost_est_usd = U.cost_est(ev, p)
+    return ev
+
+
+def _seed_est(con):
+    M.upsert_agent(con, M.Agent(agent_key="S:e", kind="SESSION", project_key="-p", session_id="e", depth=0))
+    M.upsert_agent(con, M.Agent(agent_key="A:e1", kind="SUBAGENT", project_key="-p", session_id="e", depth=1,
+                                parent_key="S:e"))
+    evs = [_est_ev("A:e1", "r1", "2026-10-20T01:00:00Z", 3, 500),      # 의심
+           _est_ev("A:e1", "r2", "2026-10-20T02:00:00Z", 200, None),   # 비의심
+           _est_ev("S:e", "r3", "2026-10-20T03:00:00Z", 50, None)]
+    for e in evs:
+        M.add_usage(con, e)
+    return evs
+
+
+def test_daily_est_columns(con):
+    evs = _seed_est(con)
+    U.rebuild_daily(con)
+    d = con.execute("SELECT SUM(output_est), SUM(cost_est_usd), SUM(cost_usd) FROM usage_daily WHERE agent_key='A:e1'").fetchone()
+    assert d[0] == 500                                                  # 의심 행의 output_est 합 (비의심은 0)
+    assert d[1] == pytest.approx(evs[0].cost_est_usd + evs[1].cost_est_usd, abs=1e-12)
+    assert d[1] > d[2]
+    s = con.execute("SELECT output_est, cost_est_usd, cost_usd FROM usage_daily WHERE agent_key='S:e'").fetchone()
+    assert s[0] == 0 and s[1] == pytest.approx(s[2], abs=1e-12)
+
+
+def test_totals_est_keys(con):
+    evs = _seed_est(con)
+    own = U.totals(con, "A:e1")
+    assert own["output_est_total"] == 500 + 200 and own["output_tokens"] == 203
+    assert own["cost_est_usd"] == pytest.approx(evs[0].cost_est_usd + evs[1].cost_est_usd, abs=1e-12)
+    allx = U.totals(con, "S:e", descendants=True)
+    assert allx["output_est_total"] == 500 + 200 + 50
+    assert U.totals(con, "S:e")["output_est_total"] == 50
+
+
+def test_reprice_recomputes_cost_est(con):
+    _seed_est(con)
+    con.execute("UPDATE usage_event SET cost_est_usd = 0")
+    p = U.load_pricing()
+    p.models = {**p.models, "claude-opus-5-5": {**p.models["claude-opus-5-5"], "out": 99.0}}
+    U.reprice(con, p)
+    r1 = con.execute("SELECT cost_usd, cost_est_usd FROM usage_event WHERE request_id='r1'").fetchone()
+    want = (100 * 4.0 + 1000 * 0.2 + 10 * 4.0 * 1.25 + 500 * 99.0) / 1e6
+    assert r1[1] == pytest.approx(want, abs=1e-12)
+    r2 = con.execute("SELECT cost_usd, cost_est_usd FROM usage_event WHERE request_id='r2'").fetchone()
+    assert r2[1] == r2[0]
+    ev = con.execute("SELECT SUM(cost_est_usd) FROM usage_event").fetchone()[0]
+    daily = con.execute("SELECT SUM(cost_est_usd) FROM usage_daily").fetchone()[0]
+    assert daily == pytest.approx(ev, abs=1e-12)
+
+
+def test_unpriced_est_null(con):
+    M.upsert_agent(con, M.Agent(agent_key="A:u", kind="SUBAGENT", project_key="-p", session_id="u", depth=1))
+    M.add_usage(con, _est_ev("A:u", "r", "2026-10-20T01:00:00Z", 1, 400, model="claude-mystery-9"))
+    U.rebuild_daily(con)
+    assert tuple(con.execute("SELECT cost_usd, cost_est_usd FROM usage_event").fetchone()) == (None, None)
+    assert con.execute("SELECT cost_est_usd FROM usage_daily").fetchone()[0] is None
+    assert U.totals(con, "A:u")["cost_est_usd"] is None
