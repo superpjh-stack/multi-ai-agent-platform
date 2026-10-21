@@ -189,6 +189,19 @@ spark(con, keys: list[str], now: datetime, minutes: int = SPARK_MINUTES) -> dict
 
 - 테스트: `tests/test_usage.py::test_spark_*` 5 개 (칸 경계 10:01:00 첫 칸 · 10:00:59 제외 · 10:31:00 제외 · output_est 우선 · synthetic 제외 · 빈 키 0 · KST/UTC 같음 · 임의 50 행 합 = 직접 SQL 합).
 
+## 2T. 2차-T 웨이브 A — Task 2 · Task 5 (2026-10-21)
+
+| 항목 | 실측 | 검증 명령 |
+|---|---|---|
+| Task 2 `usage.spark` | `tests/test_usage.py` spark 5 passed · 커밋 `5f916b1` | `uv run pytest -q tests/test_usage.py -k spark` |
+| Task 5 G-32 (V-17) 가짜 DB | `tests/test_check_twin.py` 3 passed (PASS · 스파크 몽키패치 FAIL · 독립 스파크 = usage.spark) | `uv run pytest -q tests/test_check_twin.py` |
+| G-32 `agentdash-v2a-verify.db` | PASS — 설비 11 · 라인 5 · 접힘 10+0 · 범위 21/21/21 · 누적 불일치 0 · 스파크 불일치 0 · 겹침 0 · TEXT>300 0 · 1.4 ms · 스파크 합 58202 | `AGENTDASH_DB=data/agentdash-v2a-verify.db uv run python src/agentdash/tools/check_twin.py` |
+| G-32 같은 DB `--since all` | PASS — 설비 83 · 라인 32 · 접힘 239+0 · 범위 322 · 불일치 0 · 겹침 0 · 4.5 ms | `… check_twin.py --since all` |
+| G-32 `agentdash-dev1.db` | PASS — 설비 10 · 라인 5 · 접힘 6+0 · 범위 16 · 10.0 ms | `AGENTDASH_DB=data/agentdash-dev1.db make check-twin` |
+| pytest 전체 | 407 passed | `uv run pytest -q` |
+
+- 300 설비 응답 시간은 실제 DB 에 설비가 300 개 없어 여기서 못 잰다 — 합성 300 은 개발2 `test_twin.py::test_build_300_under_300ms`.
+
 ## 2B2. 2차-A 웨이브 B — Task 12 (D-04~D-07 공통 틀) · R-2A-1 후속 (2026-10-21 10:30, DB `data/agentdash-dev1.db`)
 
 | 항목 | 실측 | 검증 명령 |
