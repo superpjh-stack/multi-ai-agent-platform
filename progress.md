@@ -2,6 +2,25 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 2차-T — 웨이브 B · C · D (2026-10-21) — EXIT 판정 회전 1
+
+### 지금 해야 할 것
+- **EXIT 판정 회전 2** — 같은 명령으로 다시 재서 판정 35 개 · pytest 수가 같으면 최종 보고 후 정지.
+- 사람 확인 대기 (게이트 영향 없음): D-23 · D-24 · D-25 · D-26 · D-27 · D-31 · D-32 · D-33 · D-34.
+
+| 항목 | 실측 | 검증 명령 |
+|---|---|---|
+| 웨이브 B | `62e73c6` D-01 공장 평면도 · `33d2d0a` nav 「D-01 공장 평면도」 | `git log` |
+| 웨이브 C (QA r5) | QA1 9 게이트 PASS · 경미 3 (401 필터 · 402 라인 이름 · 403 테스트) · QA2 G-33~G-35 · G-12 · G-21 PASS · 경미 4 (401 경과 · 402 세로 쌓임 · 403 두 번째 역흐름 · 404 도구 넘침) | `outputs/qa1-데이터안전-r5.md` · `outputs/e2e/twin.md` |
+| 사람 결정 (2026-10-21) | spec v0.4.1: 라인 이름 = 가장 짧은 project_path (D-28) · T-08 라인 격자 (D-30) · settings.json 변경은 사람 (D-29, 기준 sha1 `8a539108c7d4…`) | `decisions.md` |
+| 웨이브 D | `feea67e` · `cae284e` · `fa337d3` · `c3043d9` · `1caf4e1` · `bc82a4e` · `960f76b` · `734cf60` (결함 7) · `710683f` check_twin 라인 단위 · D2 `b92a624` · `50e60ec` · `80c910d` (QA2 501~503) | `git log` |
+| 재검증 | QA1 r6 5 게이트 PASS · 지난 3 해결 · 경미 1 → D-32 · QA2 r6 G-33~G-35 PASS · 지난 4 해결 · 경미 3 → D2 수정 → QA2 r7 G-33~G-35 PASS · 3 해결 · **새 결함 0** | `outputs/qa1-데이터안전-r6.md` · `outputs/e2e/twin-r2.md` · `outputs/e2e/twin-r3.md` |
+| G-22 자기 관찰 | QA2 서브에이전트 RUNNING → 반환 → DONE R-08 · 평면도 이 저장소 라인 보조 설비 (r7 · r9) | `outputs/e2e/self-observe-r9.md` |
+| 전체 테스트 | **456 passed** | `uv run pytest -q` |
+| make gate (새 DB) | **PASS 34 · FAIL 0 · 미검증 1** — G-15 = 사람 8095 서버 켜짐(설계대로). 서버를 끈 14:4x 재측정 G-15 PASS (송신 0.01 s · exit 0 · 0 B), 이후 훅 코드 변경 0 | `AGENTDASH_DB=data/agentdash-v2a-verify.db make gate` · `check_hooks.py` |
+| G-32 실제 DB | 설비 14 · 라인 6 · 범위 30=30=30 · 격자 2 열 × 3 행 · 겹침 0 · 1.6 ms | `check_twin.py` |
+| 원천 무접촉 | settings.json sha1 `8a539108c7d4…` (D-29 기준) 그대로 · budget.yaml 변경 0 · 사람 서버 8095 새 코드로 재시작(사람 승인) | `shasum` |
+
 ## 2차-T — 웨이브 A (개발1 Task 2 · 5, 개발2 Task 3 · 4, 2026-10-21) — 오케스트레이터 재검증
 
 ### 지금 해야 할 것
