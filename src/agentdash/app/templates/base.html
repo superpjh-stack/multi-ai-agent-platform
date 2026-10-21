@@ -4,28 +4,136 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ title }} · 에이전트 대시보드</title>
+<script>
+  /* 테마 — 머리글 토글로 고른 값(localStorage)이 있으면 먼저 적용해 깜빡임을 막는다. 없으면 시스템 설정 (spec §7.3). */
+  (function () { try { var t = localStorage.getItem("agentdash-theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {} })();
+</script>
 <style>
-  :root { --bg:#fafafa; --fg:#1d1d1f; --muted:#6e6e73; --line:#d2d2d7; --warn:#b25000; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#161617; --fg:#f5f5f7; --muted:#a1a1a6; --line:#3a3a3c; --warn:#ff9f0a; } }
+  /* ── 색 토큰 (spec.md v0.3 §7.3 · §4.1) — 화면은 이 변수만 쓴다. 대비 검사 = tools/check_contrast.py (G-30 · V-16).
+     세 블록(밝은 · 선택 다크 · 시스템 다크)은 같은 토큰 집합이어야 하고, 두 다크 블록은 값까지 같아야 한다.
+     상태 8: --st-<state> = 도형(점 · 막대 · 테두리, 배경 대비 ≥ 3:1) · --st-<state>-fg = 글자(배경 · 면 대비 ≥ 4.5:1). */
+:root {
+    --bg:#f5f6f8; --surface:#ffffff; --fg:#1d1d1f; --muted:#5f6368; --line:#d9dce1; --accent:#2563c9;
+    --st-running:#1e8e4e; --st-running-fg:#146c3a;
+    --st-waiting-input:#a67c00; --st-waiting-input-fg:#7a5c00;
+    --st-waiting-permission:#d9650a; --st-waiting-permission-fg:#a3470a;
+    --st-sleeping:#2f6fdb; --st-sleeping-fg:#1f55b3;
+    --st-waiting-child:#1a8fb8; --st-waiting-child-fg:#0d6a8a;
+    --st-done:#80868f; --st-done-fg:#565b63;
+    --st-failed:#d93025; --st-failed-fg:#b3261e;
+    --st-stale:#8e44ad; --st-stale-fg:#763a91;
+  }
+:root[data-theme="dark"] {
+    --bg:#121316; --surface:#1c1e22; --fg:#f2f2f5; --muted:#a0a4ab; --line:#34363b; --accent:#6ea0ff;
+    --st-running:#34c06f; --st-running-fg:#5fd892;
+    --st-waiting-input:#e6b422; --st-waiting-input-fg:#f2cc55;
+    --st-waiting-permission:#f08a2c; --st-waiting-permission-fg:#ffaa5c;
+    --st-sleeping:#4d8ef7; --st-sleeping-fg:#86b2ff;
+    --st-waiting-child:#3bb6e0; --st-waiting-child-fg:#74d0f0;
+    --st-done:#8e939b; --st-done-fg:#b4b8bf;
+    --st-failed:#f2564b; --st-failed-fg:#ff8a80;
+    --st-stale:#b06ad6; --st-stale-fg:#cf9cec;
+  }
+  @media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#121316; --surface:#1c1e22; --fg:#f2f2f5; --muted:#a0a4ab; --line:#34363b; --accent:#6ea0ff;
+    --st-running:#34c06f; --st-running-fg:#5fd892;
+    --st-waiting-input:#e6b422; --st-waiting-input-fg:#f2cc55;
+    --st-waiting-permission:#f08a2c; --st-waiting-permission-fg:#ffaa5c;
+    --st-sleeping:#4d8ef7; --st-sleeping-fg:#86b2ff;
+    --st-waiting-child:#3bb6e0; --st-waiting-child-fg:#74d0f0;
+    --st-done:#8e939b; --st-done-fg:#b4b8bf;
+    --st-failed:#f2564b; --st-failed-fg:#ff8a80;
+    --st-stale:#b06ad6; --st-stale-fg:#cf9cec;
+  } }
+  /* 간격 · 글꼴 · 모서리 토큰과 1차 이름 별칭 (테마와 무관 — 색 별칭은 위 토큰을 따라 테마가 바뀐다).
+     별칭(--warn · --card · --soft · --st-RUNNING …)은 웨이브 B 가 화면별 스타일 조각을 걷어 낼 때까지 기존 화면용으로 남긴다. */
+  html {
+    --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px; --sp-6:32px;
+    --radius:12px; --radius-sm:6px;
+    --font:-apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Segoe UI", sans-serif;
+    --font-mono:ui-monospace, "SF Mono", Menlo, monospace;
+    --shadow:0 1px 2px rgb(0 0 0 / 6%);
+    --warn:var(--st-waiting-permission-fg); --card:var(--surface); --soft:color-mix(in srgb, var(--muted) 10%, var(--surface));
+    --st-RUNNING:var(--st-running); --st-WAITING_INPUT:var(--st-waiting-input); --st-WAITING_PERMISSION:var(--st-waiting-permission);
+    --st-SLEEPING:var(--st-sleeping); --st-WAITING_CHILD:var(--st-waiting-child); --st-DONE:var(--st-done);
+    --st-FAILED:var(--st-failed); --st-STALE:var(--st-stale); --st-UNKNOWN:var(--muted); --st-NONE:var(--line);
+  }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, "Apple SD Gothic Neo", sans-serif; }
-  nav { display:flex; flex-wrap:wrap; gap:4px 16px; padding:12px 16px; border-bottom:1px solid var(--line); }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 var(--font); }
+  a { color:var(--accent); }
+  header.top { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-2) var(--sp-4);
+               padding:var(--sp-3) var(--sp-4); background:var(--surface); border-bottom:1px solid var(--line); }
+  nav { display:flex; flex-wrap:wrap; gap:var(--sp-1) var(--sp-4); flex:1 1 auto; min-width:0; }
   nav a { color:var(--fg); text-decoration:none; }
-  nav a.on { font-weight:600; text-decoration:underline; }
-  main { padding:16px; max-width:1200px; }
-  .placeholder { border:1px dashed var(--warn); color:var(--warn); padding:12px 16px; border-radius:8px; }
+  nav a.on { font-weight:600; text-decoration:underline; text-underline-offset:4px; }
+  .actions { display:flex; gap:var(--sp-2); margin-left:auto; }
+  .actions button { font:inherit; font-size:13px; padding:var(--sp-1) var(--sp-3); border:1px solid var(--line);
+                    border-radius:var(--radius-sm); background:var(--surface); color:var(--fg); cursor:pointer; }
+  .actions button:disabled { color:var(--muted); cursor:default; }
+  main { padding:var(--sp-4); max-width:1200px; min-width:0; }
+  .placeholder { border:1px dashed var(--warn); color:var(--warn); padding:var(--sp-3) var(--sp-4); border-radius:var(--radius-sm); }
   .muted { color:var(--muted); }
+
+  /* ── 공통 부품 (웨이브 B 에서 화면 7 이 함께 쓴다) ── */
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:var(--sp-3) var(--sp-4);
+          box-shadow:var(--shadow); min-width:0; }
+  .grid:not(g) { display:grid; gap:var(--sp-3); grid-template-columns:repeat(auto-fill, minmax(min(100%, 240px), 1fr)); }
+  .kpi { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .kpi .k { color:var(--muted); font-size:13px; }
+  .kpi .n { font-size:24px; font-weight:600; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+  .tbl { overflow-x:auto; max-width:100%; }
+  .tbl table { border-collapse:collapse; width:100%; font-size:13px; }
+  .tbl th, .tbl td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  .tbl th { color:var(--muted); font-weight:500; }
+  .tbl td.num, .tbl th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .chart { position:relative; max-width:100%; min-width:0; }
+  .badge { display:inline-block; padding:0 8px; border-radius:999px; font-size:12px; line-height:1.6; white-space:nowrap;
+           color:var(--c-fg, var(--fg)); background:color-mix(in srgb, var(--c, var(--muted)) 14%, var(--surface));
+           box-shadow:inset 0 0 0 1px var(--c, var(--line)); }
+  /* 상태 클래스 — --c (도형) · --c-fg (글자) 를 그 상태 색으로. 예: <span class="badge st-RUNNING">RUNNING</span> */
+  .st-RUNNING { --c:var(--st-running); --c-fg:var(--st-running-fg); }
+  .st-WAITING_INPUT { --c:var(--st-waiting-input); --c-fg:var(--st-waiting-input-fg); }
+  .st-WAITING_PERMISSION { --c:var(--st-waiting-permission); --c-fg:var(--st-waiting-permission-fg); }
+  .st-SLEEPING { --c:var(--st-sleeping); --c-fg:var(--st-sleeping-fg); }
+  .st-WAITING_CHILD { --c:var(--st-waiting-child); --c-fg:var(--st-waiting-child-fg); }
+  .st-DONE { --c:var(--st-done); --c-fg:var(--st-done-fg); }
+  .st-FAILED { --c:var(--st-failed); --c-fg:var(--st-failed-fg); }
+  .st-STALE { --c:var(--st-stale); --c-fg:var(--st-stale-fg); }
 </style>
-{% block head %}{% endblock %}{# 화면별 스타일 · 스크립트 — 개발1 · 개발2 공용 (progress-dev1.md §1) #}
+{% block head %}{% endblock %}{# 화면별 스크립트 — 스타일은 위 토큰 · 공통 부품만 (spec §7.3, 웨이브 B 에서 _dev*_style 제거) #}
 </head>
 <body>
+<header class="top">
 <nav>
-  {% for href, name in [("/", "D-01 관제판"), ("/graph", "D-02 구성도"), ("/usage", "D-04 작업량"), ("/timeline", "D-05 타임라인"), ("/pipeline", "D-06 파이프라인")] %}
+  {% for href, name in [("/", "D-01 관제판"), ("/graph", "D-02 구성도"), ("/usage", "D-04 작업량"), ("/timeline", "D-05 타임라인"), ("/pipeline", "D-06 파이프라인"), ("/insights", "D-07 비용 · 효율")] %}
   <a href="{{ href }}"{% if href == active %} class="on"{% endif %}>{{ name }}</a>
   {% endfor %}
 </nav>
+<div class="actions">
+  <button id="alerts-btn" type="button" disabled title="WAITING 알림 (spec §7.2) — _alerts.html 이 켠다">알림 켜기</button>
+  <button id="theme-btn" type="button" aria-label="테마 바꾸기">테마</button>
+</div>
+</header>
 <main>
 {% block body %}{% endblock %}
 </main>
+<script>
+  (function () {
+    var btn = document.getElementById("theme-btn"), d = document.documentElement;
+    function cur() { return d.getAttribute("data-theme") ||
+      (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); }
+    function label() { btn.textContent = cur() === "dark" ? "밝게" : "어둡게"; }
+    btn.addEventListener("click", function () {
+      var nx = cur() === "dark" ? "light" : "dark";
+      d.setAttribute("data-theme", nx);
+      try { localStorage.setItem("agentdash-theme", nx); } catch (e) {}
+      label();
+    });
+    label();
+  })();
+</script>
+{% include "_alerts.html" ignore missing %}
 </body>
 </html>
