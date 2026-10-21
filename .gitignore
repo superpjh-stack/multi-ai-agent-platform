@@ -6,6 +6,8 @@ __pycache__/
 *.pyc
 .pytest_cache/
 # 스크린샷은 경로 · 화면 내용이 드러나므로 커밋하지 않는다 (D-07)
-outputs/e2e/*.png
+outputs/e2e/**/*.png
+outputs/e2e/**/*.jpg
+outputs/e2e/**/*.jpeg
 # 루프 하네스 잠금 파일
 .claude/*.lock

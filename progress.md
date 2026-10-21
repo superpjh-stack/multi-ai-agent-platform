@@ -2,6 +2,23 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 2차-A — 웨이브 B (개발1 Task 12 · 개발2 Task 13 · 요청 처리, 2026-10-21) — 오케스트레이터 재검증
+
+### 지금 해야 할 것
+- **웨이브 C 기동** — QA1 Task 14 (`outputs/qa1-데이터안전-r4.md`) · QA2 Task 15 (`outputs/qa2-상태대조-r4.md` · `outputs/e2e/{alerts,design,self-observe-r4}.md`). G-29 · G-30 은 QA 표지가 있어야 PASS.
+- 사람 결정 대기 (게이트 영향 없음): D-23 · D-24.
+
+| 항목 | 실측 | 검증 명령 |
+|---|---|---|
+| 커밋 | 개발1 `7639db1` (D-04~D-07 공통 틀 · `_dev1_style.html` 삭제 · undercount 키 삭제) · 개발2 `4728e6e` (D-03 「추정 보정 (D-17)」) · `3c95c71` (D-01~D-03 공통 틀 · `_dev2_style.html` 삭제 · SSE 탭당 1) | `git log` |
+| 아키텍트 요청 처리 (오케스트레이터) | R-2A-4 · R-2B-dev2-1 `test_no_dev_style_includes` xfail 해제 · R-2B-dev2-2 base.html 세 테마 블록에 `color-scheme` · `.gitignore` 에 `outputs/e2e/**/*.{png,jpg,jpeg}` (D-07 — 하위 폴더 스크린샷) | `uv run pytest tests/test_design.py -q` (5 passed) |
+| 전체 테스트 | **372 passed** (xfail 0) | `uv run pytest -q` |
+| make gate (새 DB) | **PASS 28 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 2** (G-29 · G-30 QA 표지 대기) · G-14 읽기 전용 pytest 다시 전체 통과 | `AGENTDASH_DB=data/agentdash-v2a-verify.db make gate` |
+| 대비 | 48 쌍 · 글자 최소 5.6:1 · 도형 최소 3.3:1 | `check_contrast` |
+| 개발자 실측 (QA 가 다시 잴 것) | 390 px · 1400 px × 두 테마 화면 7 가로 스크롤 0 (iframe scrollWidth) · 콘솔 오류 0 · SSE 탭당 1 연결 · D-02 테마 전환 다시 그림 1 · 알림 첫 로드 0 / 전이 1 / 재전송 0 / 두 탭 1 | `progress-dev1.md` §2B2 · `progress-dev2.md` §8 |
+| 남은 제안 (선택, 게이트 무관) | R-2A-5 `.filters` · `.stack` 을 base.html 공통 부품으로 (화면 4 곳 반복) | — |
+| 원천 무접촉 | `~/.claude/settings.json` sha1 `8641eb22e8f5…` · `config/budget.yaml` 변경 0 · agentdash 서버 0 | `shasum` · `pgrep -fl agentdash.app` |
+
 ## 2차-A — 웨이브 A (개발1 Task 5~8 · D-22, 개발2 Task 9~11, 2026-10-21) — 오케스트레이터 재검증
 
 ### 지금 해야 할 것

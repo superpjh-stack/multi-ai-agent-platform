@@ -14,6 +14,7 @@
      세 블록(밝은 · 선택 다크 · 시스템 다크)은 같은 토큰 집합이어야 하고, 두 다크 블록은 값까지 같아야 한다.
      상태 8: --st-<state> = 도형(점 · 막대 · 테두리, 배경 대비 ≥ 3:1) · --st-<state>-fg = 글자(배경 · 면 대비 ≥ 4.5:1). */
 :root {
+    color-scheme: light;
     --bg:#f5f6f8; --surface:#ffffff; --fg:#1d1d1f; --muted:#5f6368; --line:#d9dce1; --accent:#2563c9;
     --st-running:#1e8e4e; --st-running-fg:#146c3a;
     --st-waiting-input:#a67c00; --st-waiting-input-fg:#7a5c00;
@@ -25,6 +26,7 @@
     --st-stale:#8e44ad; --st-stale-fg:#763a91;
   }
 :root[data-theme="dark"] {
+    color-scheme: dark;
     --bg:#121316; --surface:#1c1e22; --fg:#f2f2f5; --muted:#a0a4ab; --line:#34363b; --accent:#6ea0ff;
     --st-running:#34c06f; --st-running-fg:#5fd892;
     --st-waiting-input:#e6b422; --st-waiting-input-fg:#f2cc55;
@@ -37,6 +39,7 @@
   }
   @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg:#121316; --surface:#1c1e22; --fg:#f2f2f5; --muted:#a0a4ab; --line:#34363b; --accent:#6ea0ff;
     --st-running:#34c06f; --st-running-fg:#5fd892;
     --st-waiting-input:#e6b422; --st-waiting-input-fg:#f2cc55;

@@ -62,7 +62,6 @@ def test_ratio_formula():
     assert cc.ratio("#777777", "#777777") == 1.0
 
 
-@pytest.mark.xfail(strict=True, reason="웨이브 B (Task 12 · 13) 에서 화면별 스타일 조각을 base 토큰으로 옮긴 뒤 아키텍트가 xfail 을 뗀다")
 def test_no_dev_style_includes():
     """spec §7.3 — 화면별 스타일 조각을 따로 두지 않는다: 템플릿에 `_dev1_style` · `_dev2_style` include 0."""
     hits = [p.name for p in TEMPLATES.glob("*.html")
