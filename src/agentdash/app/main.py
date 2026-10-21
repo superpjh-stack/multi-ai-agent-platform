@@ -1,7 +1,7 @@
 """FastAPI 앱 — 화면 7 · API 13 (spec.md v0.3 §7 · §8). 실행은 `make run` (127.0.0.1:8095 만).
 
 라우터 소유 (goal.md §3.2 — 한 파일은 한 사람만)
-  개발1: routers/{usage,timeline,pipeline,insights}.py  (insights = 2차-A Task 8 — 없으면 placeholders.INSIGHTS_STUB)
+  개발1: routers/{usage,timeline,pipeline,insights}.py  (insights = 2차-A D-07 · API 3)
   개발2: routers/{pages,agents,graph,stream,hooks}.py
 이 파일과 settings.py 는 아키텍트 소유. 새 라우터가 필요하면 progress-devN.md §3 에 요청한다.
 
@@ -15,8 +15,6 @@ lifespan (R5 — 오케스트레이터 지시로 개발2 가 넣음, 회전 4)
 
 from __future__ import annotations
 
-import importlib
-import importlib.util
 import logging
 import os
 import threading
@@ -24,22 +22,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from agentdash.app import placeholders
-from agentdash.app.routers import agents, graph, hooks, pages, pipeline, stream, timeline, usage
+from agentdash.app.routers import agents, graph, hooks, insights, pages, pipeline, stream, timeline, usage
 
-INSIGHTS_MODULE = "agentdash.app.routers.insights"
-
-
-def _insights_router():
-    """D-07 · API 3 (2차-A). 개발1 의 routers/insights.py 가 있으면 그 router, 없으면 placeholder (placeholders.INSIGHTS_STUB).
-    파일이 있는데 import 가 실패하면 예외가 그대로 난다 — stub 로 숨기지 않는다."""
-    if importlib.util.find_spec(INSIGHTS_MODULE) is not None:
-        return importlib.import_module(INSIGHTS_MODULE).router
-    return placeholders.INSIGHTS_STUB
-
-
-ROUTERS = [pages, usage, timeline, pipeline, agents, graph, stream, hooks]
-EXTRA_ROUTERS = [_insights_router()]          # APIRouter 객체 그대로 (Task 8 뒤 insights 를 ROUTERS 로 옮기고 지운다)
+ROUTERS = [pages, usage, timeline, pipeline, insights, agents, graph, stream, hooks]
 NO_WATCH_ENV = "AGENTDASH_NO_WATCH"
 log = logging.getLogger("agentdash.lifespan")
 
@@ -109,8 +94,6 @@ def create_app() -> FastAPI:
     app = FastAPI(title="agentdash", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     for mod in ROUTERS:
         app.include_router(mod.router)
-    for r in EXTRA_ROUTERS:
-        app.include_router(r)
     return app
 
 

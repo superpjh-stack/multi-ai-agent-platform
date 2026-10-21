@@ -56,10 +56,10 @@
 | 담당 | 새로 갖는 파일 |
 |---|---|
 | **아키텍트** | `config/budget.yaml` · `tools/check_decisions.py` · `tools/check_contrast.py` · `tests/test_design.py` · `goal-v1.md`(읽기만) |
-| **개발1** | `core/budget.py` · `app/routers/insights.py` · `templates/insights.html` · `tools/check_{usage_est,budget,trend,efficiency}.py` · `tests/test_{usage_est,budget,insights}.py` |
+| **개발1** | `core/budget.py` · `app/routers/insights.py` · `templates/insights.html` · `tools/check_{usage_est,budget,trend,efficiency}.py` · `tests/test_{usage_est,budget,insights,check_counts}.py` |
 | **개발2** | `templates/_alerts.html` · `tests/test_alerts.py` |
 
-- `main.py` 는 `routers/insights.py` 가 **있으면 그 router, 없으면 `placeholders.INSIGHTS_STUB`** 를 단다 (Task 8 전까지 `/insights` · `/api/v1/{budget,trend,efficiency}` 는 placeholder). 공용 시그니처 `budget.status · worst · trend · efficiency` 는 개발1 이 Task 7 끝에 `progress-dev1.md` §1 에 공표.
+- `main.py` `ROUTERS` 에 `insights` 등록 완료 (Task 8 뒤 placeholder 분기 제거, R-2A-2). 공용 시그니처 `budget.status · worst · trend · efficiency` 는 개발1 이 Task 7 끝에 `progress-dev1.md` §1 에 공표.
 - 색 · 간격 · 글꼴은 `base.html` 의 CSS 토큰 · 공통 클래스만 쓴다 (spec §7.3). 이름은 `progress.md` 「2차-A — Phase 0」 공표 칸.
 
 - `core/model.py`(데이터 클래스 · DB 쓰기)는 개발1 소유. 개발2 가 필드가 더 필요하면 `progress-dev2.md` §3 에 요청.

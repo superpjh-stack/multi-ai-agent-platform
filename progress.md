@@ -2,6 +2,27 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 2차-A — 웨이브 A (개발1 Task 5~8 · D-22, 개발2 Task 9~11, 2026-10-21) — 오케스트레이터 재검증
+
+### 지금 해야 할 것
+- **웨이브 B 기동.** 개발1 Task 12 (D-04~D-07 공통 틀) · 개발2 Task 13 (D-01~D-03 공통 틀 + R-2A-1 D-03 「추정 보정 (D-17)」 + SSE 연결 하나로 합치기 R-2A-dev2-3). 둘 다 끝나면 아키텍트가 `test_no_dev_style_includes` xfail 해제, 개발1 이 옛 `undercount*` 키 정리.
+- 사람 결정 대기 (게이트 영향 없음): **D-23** V-12 모집단 문구 · **D-24** 기본 DB `output_est` 채우기 방법.
+
+| 항목 | 실측 | 검증 명령 |
+|---|---|---|
+| 새 DB 백필 | `data/agentdash-v2a-verify.db` 처음부터 — usage_event 25,729 · tool_call 29,147 · file_touch 2,296 · usage_daily 352 · parse_error 0 | `AGENTDASH_DB=data/agentdash-v2a-verify.db make setup backfill` |
+| 전체 테스트 | **370 passed · 1 xfailed** (Phase 0 308 → +62) | `uv run pytest -q` |
+| make gate (새 DB) | **PASS 28 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 2** (G-29 · G-30 = QA 표지 대기) | `AGENTDASH_DB=data/agentdash-v2a-verify.db make gate` |
+| 회귀 G-04 · G-07 (D-22 확정) | 새 DB 세션 · 서브 · 워크플로 빠짐 0 · 남음 0 · 표본 10/10 · 기본 DB 는 원천 삭제 보관 세션 8 · 서브 19 를 따로 셈 | `check_counts` · `check_usage_sum` |
+| G-23 결정 | 확정 7/7 · D-08 출처 · `가설 D-18`·`D18_NOTE` 0 | `uv run python src/agentdash/tools/check_decisions.py` |
+| G-24 추정 열 | 의심 DB 48.9 % (12,583/25,730) = 원천 48.9 % · 차 0.00 %p · 위반 0 (모집단 = 세션 안 requestId, D-23) | `check_usage_est` |
+| G-26 예산 | 칸 78 · 최대 차 $0.000000 · 단가 없음 0 · 한도 unset 2 (실제 budget.yaml 금액 0 — git diff 없음) | `check_budget` |
+| G-27 추세 | 3 grain × 2 group · 묶음 237 · 불일치 0 · 기록 $3,667.78 · 추정 보정 $3,796.48 · 출력 기록 17,430,313 · 추정 21,622,553 | `check_trend` |
+| G-28 캐시 적중률 | 표본 10 · 최대 차 0.000000 · 정렬 위반 0 | `check_efficiency` |
+| G-17 라우트 | 화면 7 + API 13 = 20/20 · placeholder 0 (오케스트레이터가 R-2A-2 처리: insights 를 ROUTERS 로, stub 제거) | `check_routes` |
+| 알림 (개발2 수동, 가짜 루트) | 첫 로드 0 · 전이 1 · 재전송 0 · 새로고침 0 · 두 탭 1 · 권한 거부 → 배지만 · 콘솔 오류 0 (Notification 은 가짜 객체로 셈 — 실제 권한 창 · OS 알림은 QA2 G-29) | `progress-dev2.md` §7 |
+| 원천 무접촉 | `~/.claude/settings.json` sha1 `8641eb22e8f5…` 그대로 · `config/budget.yaml` 변경 0 | `shasum` · `git diff config/budget.yaml` |
+
 ## 2차-A — Phase 0 (아키텍트, 2026-10-21 · Task 1~4)
 
 ### 지금 해야 할 것
