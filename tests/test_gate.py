@@ -172,3 +172,14 @@ def test_gates_cover_g01_to_g30():
     assert items["G-29"][1] == [("test", "test_alerts.py"), ("qa", "")]
     assert items["G-30"][1] == [("tool", "check_contrast"), ("test", "test_design.py"), ("qa", "")]
     assert "outputs/e2e/alerts*.md" in gate.QA_GLOBS and "outputs/e2e/design*.md" in gate.QA_GLOBS
+
+
+def test_dev_pass_with_required_qa_missing_is_unverified(qa_root, monkeypatch, tmp_path):
+    """("qa", "") 가 있는 게이트(G-18 · G-29 · G-30)는 개발 도구가 PASS 여도 QA 표지가 없으면 미검증 — 개발 판정만으로 PASS 가 되지 않는다."""
+    monkeypatch.setattr(gate, "run", lambda cmd, timeout=900: (0, "G-30  도구  PASS  개발 실측\n"))
+    monkeypatch.setattr(gate, "TOOLS", tmp_path)
+    (tmp_path / "check_contrast.py").write_text("", encoding="utf-8")
+    st, detail = gate.judge("G-30", "아키텍트", [("tool", "check_contrast"), ("qa", "")], {})
+    assert st == "미검증" and "개발 실측" in detail
+    qa_root("e2e/design.md", _row("G-30", "PASS", "e2e"))
+    assert gate.judge("G-30", "아키텍트", [("tool", "check_contrast"), ("qa", "")], {})[0] == "PASS"

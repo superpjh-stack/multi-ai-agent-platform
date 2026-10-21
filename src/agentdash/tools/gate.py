@@ -214,7 +214,8 @@ def judge(gid: str, owner: str, means: list[tuple[str, str]], cache: dict) -> tu
     # QA 리포트 판정 (DEF-QA1-103) — 모든 게이트, 묶음마다 최근 회차. 개발 판정과 더 나쁜 쪽.
     qa = qa_latest(gid, explicit)
     if qa_required and not qa:
-        if not results:
+        # QA 판정 필수 게이트는 개발 판정이 PASS 여도 표지가 없으면 미검증 (2차-A — G-29 · G-30 의 E2E 를 건너뛰지 않게)
+        if not any(s == UNVERIFIED for s, _ in results):
             where = ", ".join(_rel(p) for p in explicit) or " · ".join(QA_GLOBS)
             results.append((UNVERIFIED, f"{QA_FORMAT_NOTE}: {where} 에 <!-- gate:{gid} --> 표지 판정 행 없음"))
     if not qa:
