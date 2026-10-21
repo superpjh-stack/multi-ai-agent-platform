@@ -2,6 +2,16 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 회사별 에이전트 화면 — 2026-10-22 (사용자 설계 승인, D-39)
+
+- D-01 회사별 요약·선택 회사 에이전트·프로젝트 링크·필요 역할·판단 필요 안내 추가. 기존 평면도·패널·피드 유지. 회사 분류는 기존 사전·메타데이터 기반, DB 소속/관계/상태/스키마 변경 없음. D-06 회사 행 앵커 추가.
+- 회귀: 최종 `uv run pytest -q` **484 passed in 18.18s**. 회사 분류/선택/갱신/예외/파이프라인/필터 URL 및 운영 구버전 템플릿 호환 테스트 **10개**. 직전 관련 묶음 `uv run pytest tests/test_companies.py tests/test_dashboard.py tests/test_twin_page.py tests/test_pipeline.py -q` **62 passed** (호환 테스트 추가 전). `git diff --check` PASS.
+- 새 백필: `AGENTDASH_DB=data/agentdash-company-review-20261022.db uv run --no-sync --no-cache python -m agentdash.collect.backfill` — 원천 679 파일 · 에이전트 377(워크플로 묶음 1 포함) · 사용량 28,451 · 파싱 오류 0 · 10.0초.
+- 수용 게이트: 위 검증 DB로 `uv run --no-sync --no-cache python src/agentdash/tools/gate.py --strict` — **PASS 34 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 1**, strict exit 1. G-15 송신은 운영 8095 사용 중으로 미검증. 운영 서비스를 중단하지 않았다. G-14 읽기 전용 가짜 루트 pytest **483 passed**, 원천 트리 변경 0, DB 경로 거부 49/49. 최종 정적 `check_readonly.py --static` 원천 대상 0.
+- 브라우저: 임시 8096·검증 DB·감시 끔. Chrome 1400×900/390×844 밝은·어두운 테마, scrollWidth/clientWidth **1385/1385 · 375/375**. 모바일 목록 가로 넘침 **294/294**, 이름·상태·프로젝트·근거 세로 표시. 앱 콘솔 error **0**, SSE 연결됨. 회사 선택 후 목록 접힘, 기간 7d 변경 후 회사 URL·상세 유지 확인.
+- 실제 분류: 전체 에이전트 376 = 등록 회사 연결 71 + 미확인 305. 기존 사전에 없는 영문 프로젝트명 등은 임의 연결하지 않았다. 회사 사전·예산·정본 변경 없음.
+- 화면 캡처: `outputs/e2e/companies-20261022/{desktop,mobile}-{light,dark}.jpg` · `overview-light.jpg` (Git 제외). 운영 8095 재시작·서비스 변경 없음. 8095 브라우저에서 기존 화면·SSE 연결됨·재시작 전 회사 현황 안내 표시를 확인했다. 운영의 새 Python 라우터 반영에는 추후 서비스 재시작이 필요하다. 검증용 PID 62433 종료 완료·검증 탭 닫음·viewport 초기화.
+
 ## Hostinger 현재 Mac 기록 배포 — 2026-10-21 (사용자 「1번」, D-38)
 
 - 주소: `https://srv1934103.hstgr.cloud:8443/`. VPS 프로젝트 `/docker/multi-ai-agent-platform`, `gateway` 컨테이너 **healthy**. Hostinger Docker Manager 3페이지에서도 프로젝트 실행 중 확인.

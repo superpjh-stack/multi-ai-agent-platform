@@ -6,14 +6,45 @@
      v0.4: 평면도(≈ 70 %) + 패널(≈ 30 %), 1000 px 미만이면 평면도 아래로 패널. 평면도 그림 스타일은 _twin.html. */
   main { max-width:1680px; }
   .d01 { display:grid; gap:var(--sp-4); grid-template-columns:minmax(0, 1fr);
-         grid-template-areas:"band" "floor" "panel" "feed"; }
+         grid-template-areas:"band" "companies" "floor" "panel" "feed"; }
   @media (min-width: 1000px) {
-    .d01 { grid-template-columns:minmax(0, 7fr) minmax(0, 3fr); grid-template-areas:"band band" "floor panel" "floor feed";
-           grid-template-rows:auto auto 1fr; }
+    .d01 { grid-template-columns:minmax(0, 7fr) minmax(0, 3fr); grid-template-areas:"band band" "companies companies" "floor panel" "floor feed";
+           grid-template-rows:auto auto auto 1fr; }
     #floor { position:sticky; top:var(--sp-3); }
   }
-  .d01:not(:has(#budget-band)) { grid-template-areas:"floor" "panel" "feed"; }
-  @media (min-width: 1000px) { .d01:not(:has(#budget-band)) { grid-template-areas:"floor panel" "floor feed"; grid-template-rows:auto 1fr; } }
+  .d01:not(:has(#budget-band)) { grid-template-areas:"companies" "floor" "panel" "feed"; }
+  @media (min-width: 1000px) { .d01:not(:has(#budget-band)) { grid-template-areas:"companies companies" "floor panel" "floor feed"; grid-template-rows:auto auto 1fr; } }
+  .company-hub { grid-area:companies; min-width:0; scroll-margin-top:var(--sp-4); }
+  .company-heading { display:flex; flex-wrap:wrap; gap:var(--sp-3); align-items:baseline; justify-content:space-between; }
+  .company-heading h2 { margin:0; font-size:20px; }
+  .company-heading p, .company-next p, .company-note { margin:0; font-size:13px; }
+  #company-menu > summary { cursor:pointer; font-size:13px; padding-bottom:var(--sp-3); }
+  .company-next { display:grid; gap:var(--sp-2); padding:var(--sp-3); background:var(--bg); border-radius:var(--radius-sm); }
+  .company-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--sp-3); }
+  .company-card { display:flex; flex-direction:column; gap:var(--sp-2); border:1px solid var(--line); border-radius:var(--radius-sm);
+                  padding:var(--sp-3); background:var(--surface); color:var(--fg); text-decoration:none; min-width:0; overflow-wrap:anywhere; }
+  .company-card:hover, .company-card.selected { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 8%,var(--surface)); }
+  .company-card:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .company-card .muted { font-size:12px; }
+  .company-counts { display:flex; flex-wrap:wrap; gap:var(--sp-2) var(--sp-3); font-size:13px; }
+  .company-counts b { font-variant-numeric:tabular-nums; }
+  .company-projects { display:flex; flex-wrap:wrap; gap:var(--sp-2) var(--sp-4); font-size:13px; }
+  .company-agents { max-height:420px; overflow:auto; }
+  .company-agents table { width:100%; min-width:560px; }
+  .company-agents caption { text-align:left; padding-bottom:var(--sp-2); font-size:13px; }
+  .feature-guide { display:flex; flex-wrap:wrap; gap:var(--sp-3) var(--sp-5); margin-bottom:var(--sp-5); font-size:13px; }
+  .feature-guide a { display:flex; flex-direction:column; gap:var(--sp-1); text-decoration:none; }
+  .feature-guide span { color:var(--muted); }
+  @media (max-width:999px) { .company-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width:540px) {
+    .company-grid { grid-template-columns:minmax(0,1fr); }
+    .company-agents table { min-width:0; display:block; }
+    .company-agents caption, .company-agents tbody { display:block; }
+    .company-agents thead { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+    .company-agents tbody tr { display:grid; grid-template-columns:minmax(0,1fr); padding:var(--sp-3) 0; border-top:1px solid var(--line); }
+    .company-agents tbody td { display:block; border:0; padding:var(--sp-1); overflow-wrap:anywhere; }
+    .company-agents tbody td::before { content:attr(data-label) " · "; color:var(--muted); font-size:12px; }
+  }
   #d01 { display:contents; }                          /* 패널 조각(#d01)의 띠 · 패널이 바깥 격자의 칸이 된다 */
   #budget-band { grid-area:band; }
   #floor { grid-area:floor; align-self:start; }
@@ -80,6 +111,13 @@
 {% endblock %}
 {% block body %}
 <div class="page-h"><h1>D-01 에이전트 모니터링</h1><span class="live-st" id="sse">실시간: 연결 전</span></div>
+<nav class="feature-guide" aria-label="기능 안내">
+  <a href="/graph"><strong>구성도</strong><span>누가 누구와 연결되어 있나</span></a>
+  <a href="/usage"><strong>작업량</strong><span>누가 얼마나 일했나</span></a>
+  <a href="/timeline"><strong>타임라인</strong><span>언제 실행하고 기다렸나</span></a>
+  <a href="/pipeline"><strong>파이프라인</strong><span>회사별로 어디까지 진행됐나</span></a>
+  <a href="/insights"><strong>비용 · 효율</strong><span>비용과 작업 효율은 어떤가</span></a>
+</nav>
 <div class="d01">
 <div id="d01">{% include "_d01_body.html" %}</div>
 <section class="card" id="floor" aria-label="에이전트 모니터링">
@@ -133,9 +171,24 @@
     var b = e.target.closest("button.copy"); if (b && !b.disabled) copyText(b, b.getAttribute("data-copy"));
   });
   function refresh() {
-    fetch("/?part=body", {headers: {accept: "text/html"}}).then(function (r) {
+    var params = new URLSearchParams(window.location.search); params.set("part", "body");
+    fetch("/?" + params.toString(), {headers: {accept: "text/html"}}).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status); return r.text();
-    }).then(function (h) { root.innerHTML = h; if (window.agentdashTwin) window.agentdashTwin.panelRefreshed(); }).catch(function (err) {
+    }).then(function (h) {
+      var table = root.querySelector(".company-agents"), scroll = table ? [table.scrollLeft, table.scrollTop] : null;
+      var menu = root.querySelector("#company-menu"), menuOpen = menu ? menu.open : null;
+      var focused = root.contains(document.activeElement) ? document.activeElement.closest("a, summary") : null;
+      var href = focused ? focused.getAttribute("href") : null;
+      var menuFocused = focused && focused.parentElement === menu;
+      root.innerHTML = h;
+      menu = root.querySelector("#company-menu"); if (menu && menuOpen !== null) menu.open = menuOpen;
+      if (menuFocused && menu) menu.querySelector("summary").focus({preventScroll:true});
+      if (scroll) { table = root.querySelector(".company-agents"); if (table) { table.scrollLeft = scroll[0]; table.scrollTop = scroll[1]; } }
+      if (href) { Array.from(root.querySelectorAll("a")).some(function (a) {
+        if (a.getAttribute("href") !== href) return false; a.focus({preventScroll:true}); return true;
+      }); }
+      if (window.agentdashTwin) window.agentdashTwin.panelRefreshed();
+    }).catch(function (err) {
       document.getElementById("sse").textContent = "새로고침 실패: " + err.message;
     });
   }

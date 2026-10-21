@@ -823,7 +823,11 @@
   }
   document.getElementById("twin-filter").addEventListener("change", function () {
     vbInit = false;
-    try { history.replaceState(null, "", "/?" + params()); } catch (e) { /* 주소만 못 바꿈 */ }
+    try {
+      var urlParams = new URLSearchParams(params()), company = new URLSearchParams(location.search).get("company");
+      if (company) urlParams.set("company", company);
+      history.replaceState(null, "", "/?" + urlParams.toString() + location.hash);
+    } catch (e) { /* 주소만 못 바꿈 */ }
     load();
   });
 

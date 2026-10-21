@@ -51,7 +51,7 @@
   <thead><tr><th>회사</th>{% for s in r.stages %}<th>{{ s.code }} {{ s.label }}</th>{% endfor %}<th>다음 단계</th></tr></thead>
   <tbody>
   {% for co in r.companies %}
-  <tr>
+  <tr id="company-{{ co }}">
     <th>{{ co }}</th>
     {% for s in r.stages %}{% set c = grid[(co, s.code)] %}
     <td class="cell" data-company="{{ co }}" data-stage="{{ s.code }}" data-status="{{ c.status }}" data-rule="{{ c.rule }}">

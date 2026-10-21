@@ -18,6 +18,7 @@ from agentdash.app.routers import agents as Q
 from agentdash import settings
 from agentdash.app.templating import render
 from agentdash.core import budget
+from agentdash.core import companies
 from agentdash.core import state as S
 from agentdash.core.usage import ESTIMATE_LABEL
 from agentdash.db import conn
@@ -70,21 +71,27 @@ def _projects(con, project: str | None = None) -> list[dict]:
 TWIN_SINCE = (("1h", "1 시간"), ("6h", "6 시간"), ("24h", "24 시간"), ("7d", "7 일"), ("all", "전체"))
 
 
-def _dash_ctx(con, now: datetime) -> dict:
-    return {
+def _dash_ctx(con, now: datetime, company: str = "") -> dict:
+    ctx = {
         "budget": budget_band(con, now),
         "sm": Q.summary_data(con, now), "my_turn": Q.my_turn(con, now), "live": Q.live_agents(con, now),
         "card_states": Q.CARD_STATES, "state_ko": Q.STATE_KO, "now_kst": Q.kst(now.isoformat()),
         "hooks_seen": con.execute("SELECT 1 FROM hook_event LIMIT 1").fetchone() is not None,
     }
+    try:
+        ctx["companies"] = companies.overview(con, now, company)
+    except settings.SettingsError as e:
+        ctx["company_error"] = str(e)[:200]
+    return ctx
 
 
 @router.get("/")
-def dashboard(request: Request, part: str | None = None, since: str | None = None, project: str | None = None):
+def dashboard(request: Request, part: str | None = None, since: str | None = None, project: str | None = None,
+              company: str = ""):
     now = datetime.now(timezone.utc)
     con = conn.connect()
     try:
-        ctx = _dash_ctx(con, now)
+        ctx = _dash_ctx(con, now, company)
         if part == "body":
             return render(request, "_d01_body.html", ctx)
         since_opts = TWIN_SINCE if since in (None, "") or since in dict(TWIN_SINCE) else ((since, since[:40]),) + TWIN_SINCE
