@@ -2,6 +2,36 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 2차-A 최종 보고 — 2026-10-21 · 루프 종료 (`goal.md` §4.4 EXIT 3 조건 충족)
+
+| EXIT 조건 | 실측 | 검증 |
+|---|---|---|
+| 1. G-01~G-30 전건 PASS | **회전 1: PASS 30 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0** · 회전 2: PASS 29 · 미검증 1 (G-15 — 사람 요청으로 띄운 개발 서버가 8095 를 써서 「서버 꺼짐」 조건을 못 만듦, 검사기 설계대로) → 서버를 10 초 끄고 `check_hooks` 재측정 **G-15 PASS** (송신 0.01 s · exit 0 · 0 B) | `AGENTDASH_DB=data/agentdash-v2a-verify.db make gate` · `check_hooks.py` |
+| 2. QA 리포트 · 치명 0 · 중대 0 | QA1 r4 (16 게이트) · QA2 r4 + e2e alerts · design · self-observe r5 — 치명 0 · 중대 0 · 경미 2 (DEF-QA1-301 수정 완료 · DEF-QA2-301 남음) | `outputs/qa1-데이터안전-r4.md` · `outputs/qa2-상태대조-r4.md` · `outputs/e2e/{alerts,design,self-observe-r5}.md` |
+| 3. 연속 2 회전 새 실측 변화 없음 | 회전 1 · 2 pytest 375 passed 동일 · 게이트 판정 30 개 동일(G-15 는 환경 요인 · 재측정 PASS) · 그 사이 코드 변경 0 (`d180c47` 그대로) | 회전 기록 |
+
+### 2차-A 로 바뀐 것 (커밋 `0a98dc8` 설계 → `d180c47`)
+- 정본: `problem.md` 2차-A · `spec.md` v0.3 (사람 승인 2026-10-20) · 새 `goal.md` (1차 `goal-v1.md` 보존) · 계획 `docs/superpowers/plans/2026-10-20-agentdash-v2a.md`
+- 결정 확정 D-07 · D-08 (공식 단가 대조 — 값 같음) · D-13 · D-14 · D-17 · D-18 · D-19 · D-22 · 화면 「가설」 표시 0
+- D-17 추정 출력 · 추정 보정 비용 (의심 48.9 % · 이번 기간 기록 $3,667.78 → 추정 보정 $3,796.48 · 출력 기록 17.43M → 추정 21.62M)
+- 예산 (`config/budget.yaml` — 금액 null) · 일/주/월 추세 · 캐시 적중률 · 새 화면 D-07 `/insights` · API 13 · D-01 예산 띠
+- WAITING 브라우저 알림 + 탭 배지 (서버 변경 없음 · 탭당 SSE 1)
+- 공통 화면 틀 (밝은 기본 · 다크 · 대비 글자 ≥ 5.6:1) · 개발자별 스타일 조각 0
+- 안전: 하드 링크 DB 와 옆 파일(-wal · -shm · -journal) 거부 · `~/.claude/settings.json` sha1 `8641eb22e8f5…` 처음부터 끝까지 같음 · push 없음
+
+### 사람이 할 일
+1. **`config/budget.yaml` 에 한도 금액 입력** (전체 일 · 월, 프로젝트별) — 넣기 전에는 「한도 미설정」.
+2. **D-01 「알림 켜기」 → 브라우저 권한 허용 → 실제 OS 알림 확인** (QA 는 가짜 Notification 으로만 셌다).
+3. (선택) `make hooks-install` — 권한 대기(`WAITING_PERMISSION`)를 입력 대기와 구분해 알리려면.
+4. 결정: **D-23** spec §10 V-12 모집단 문구(세션 안 requestId 단위로 고칠지 — QA1 지지) · **D-24** 기본 DB `data/agentdash.db` 의 옛 행 `output_est` 채우기 (① 새 DB 재백필 — 원천 삭제 보관 27 키 손실 ② `make reestimate` 신설 ③ 그대로). 지금 개발 서버는 새 DB `data/agentdash-v2a-verify.db` 로 떠 있다.
+
+### 남은 경미 · 관찰 (EXIT 를 막지 않음)
+- DEF-QA2-301 D-02 계층 보기 형제 라벨 겹침 (개발2).
+- QA1 관찰: 주 추세의 첫 버킷이 `from` 이 월요일이 아니면 부분 주임을 표시하지 않음 · 음수 예산 한도 → API 500 (조용하진 않음) · `no_records` 는 spec 4 단계 밖 추가 단계.
+- QA2 관찰: D-07 프로젝트 막대 색이 상태 색과 비슷함 · D-01 「기다린 시간」 머리 두 줄.
+- 제안 R-2A-5: `.filters` · `.stack` 을 base.html 공통 부품으로.
+- 2차-B (에이전트 제어) 는 안전 모델부터 별도 설계.
+
 ## 2차-A — 웨이브 C · D (QA1 · QA2 r4 · DEF-QA1-301 수정, 2026-10-21) — EXIT 판정 회전 1
 
 ### 지금 해야 할 것
