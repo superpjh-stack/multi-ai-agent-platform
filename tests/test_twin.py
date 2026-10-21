@@ -294,12 +294,31 @@ def test_machine_values(db):
     assert (m["S:s0"]["tool"], m["S:s0"]["target"]) == (None, None)
     c = m["A:c"]
     assert set(c) == {"key", "kind", "name", "parent", "state", "rule", "since", "elapsed_s", "tool", "target",
-                      "out_total", "out_est_total", "cost_est_usd", "spark", "folded", "box"}
+                      "out_total", "out_est_total", "cost_est_usd", "spark", "folded", "box", "wake_at"}
     assert c["parent"] == "S:s0" and c["kind"] == "SUBAGENT" and c["rule"] == "R-02a"
     assert c["box"] == {"x": c["box"]["x"], "y": c["box"]["y"], "w": T.BOX_W, "h": T.BOX_H}
     assert set(r) >= {"generated_at", "lines", "links", "folded_lines", "elapsed_ms"}
     assert set(r["lines"][0]) >= {"key", "name", "live", "counts", "box", "machines", "pipes"}
     assert r["lines"][0]["pipes"] == [{"src": "S:s0", "dst": "A:c", "kind": "spawn", "at": iso(ago(20))}]
+
+
+def test_sleeping_wake_at(db):
+    """spec §7.4 SLEEPING 「깰 시각 표시」 — 마지막 state_log 근거의 ScheduleWakeup 시각 (★ wake_at). 다른 상태는 None."""
+    s = Synth(db)
+    s.agent("S:z", "SESSION", state="SLEEPING", rule="R-03")
+    s.agent("S:w", "SESSION", state="SLEEPING", rule="R-03")
+    s.agent("S:r", "SESSION", state="RUNNING")
+    db.execute("INSERT INTO state_log (agent_key, at, state, reason) VALUES ('S:z', ?, 'RUNNING', 'R-02a x')", (iso(ago(9)),))
+    db.execute("INSERT INTO state_log (agent_key, at, state, reason) VALUES ('S:z', ?, 'SLEEPING', ?)",
+               (iso(ago(2)), "R-03 S1 status=idle · ScheduleWakeup 깰 시각 2026-10-21T11:00:00Z · 마지막 기록 …"))
+    db.execute("INSERT INTO state_log (agent_key, at, state, reason) VALUES ('S:w', ?, 'SLEEPING', 'R-03 근거 없음')",
+               (iso(ago(2)),))
+    db.execute("INSERT INTO state_log (agent_key, at, state, reason) VALUES ('S:r', ?, 'SLEEPING', ?)",
+               (iso(ago(3)), "R-01 ScheduleWakeup 2026-10-21T11:00:00Z"))
+    db.commit()
+    m = machines(build(db))
+    assert m["S:z"]["wake_at"] == "2026-10-21T11:00:00Z"
+    assert m["S:w"]["wake_at"] is None and m["S:r"]["wake_at"] is None
 
 
 def test_handback_and_message(db):

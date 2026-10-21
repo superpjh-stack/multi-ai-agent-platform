@@ -18,6 +18,7 @@ T-06: 그 뒤에도 칸 > limit 이면 T-01 순서 뒤 라인부터 `folded_line
 
 from __future__ import annotations
 
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -72,6 +73,9 @@ _COLS = ("agent_key", "kind", "project_key", "project_path", "parent_key", "name
 _USAGE_SQL = ("SELECT agent_key, COALESCE(SUM(output_tokens),0), COALESCE(SUM(COALESCE(output_est, output_tokens)),0), "
               "SUM(cost_est_usd) FROM usage_event WHERE agent_key IN ({}) GROUP BY agent_key")
 _TOOL_SQL = ("SELECT agent_key, at, tool_use_id, tool, target FROM tool_call WHERE ok IS NULL AND agent_key IN ({})")
+# SLEEPING 깰 시각 (spec §7.4) — 마지막 state_log 근거의 「ScheduleWakeup [깰 시각] <ISO>」 (core.state 가 남기는 꼴)
+_WAKE_SQL = ("SELECT agent_key, reason FROM state_log WHERE agent_key IN ({}) ORDER BY agent_key, at DESC, rowid DESC")
+_WAKE_RE = re.compile(r"ScheduleWakeup (?:깰 시각 )?(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z?)")
 
 
 def _chunks(keys: list[str], n: int = 500):
@@ -254,6 +258,13 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
             if cur is None or (at or "", tid) > (cur[0] or "", cur[1]):
                 tools[k] = (at, tid, tool, target)
     sparks = usage.spark(con, vis, now) if vis else {}
+    wake: dict[str, str | None] = {}
+    sleepers = [k for k in vis if agents[k]["state"] == "SLEEPING"]
+    for part in _chunks(sleepers):
+        for k, reason in con.execute(_WAKE_SQL.format(",".join("?" * len(part))), part):
+            if k not in wake:                       # 키마다 가장 최근 한 줄만
+                m = _WAKE_RE.search(reason or "")
+                wake[k] = m.group(1) if m else None
 
     # ── 엣지 ──
     edge_at: dict[tuple, str | None] = {}
@@ -296,6 +307,7 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
                 "tool": tl[2] if tl else None, "target": tl[3] if tl else None,
                 "out_total": o, "out_est_total": oe, "cost_est_usd": cost,
                 "spark": sparks.get(k, [0] * usage.SPARK_MINUTES), "folded": p["folded"].get(k, 0),
+                "wake_at": wake.get(k) if a["state"] == "SLEEPING" else None,
                 "box": _box(LINE_PAD + c * (BOX_W + GAP_X), top + row * (BOX_H + GAP_Y)),
             })
             if tp:

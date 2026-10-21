@@ -1,6 +1,7 @@
-"""화면 D-01 관제판 · D-02 구성도 · D-03 에이전트 상세 — 담당 개발2 (goal.md §3.2). 질의는 routers/agents.py.
+"""화면 D-01 공장 평면도 · D-02 구성도 · D-03 에이전트 상세 — 담당 개발2 (goal.md §3.2). 질의는 routers/agents.py.
 
-· `/` 관제판. `/?part=body` 는 갱신용 본문 조각(SSE 이벤트 뒤 · 15 초마다 다시 받는다).
+· `/` 공장 평면도 (spec v0.4 D-01). 서버는 평면도 틀 + 패널(v0.3 관제판 항목 전부)만 렌더하고, 평면도 그림은
+  `_twin.html` 이 `/api/v1/twin` 좌표 그대로 그린다. `/?part=body` 는 패널 갱신용 조각(SSE 이벤트 뒤 · 15 초마다).
 · `/graph` 구성도 — 데이터는 `/api/v1/graph` (core/graph.py), 그리기는 Cytoscape.js 3.30.2 (CDN 고정 버전).
 · `/agents/{key}` 상세. `/agents/{key}/raw` 원본 보기 조각 — 요청 때 원천 .jsonl 을 읽기 전용으로 읽어 응답으로만 보낸다.
   DB · 캐시 · 로그에 남기지 않는다(Cache-Control: no-store).
@@ -55,6 +56,18 @@ def budget_band(con, now: datetime) -> dict | None:
     return {"cls": _BAND_CLASS[w["level"]], "level": w["level"], "cells": items, "label": ESTIMATE_LABEL}
 
 
+def _projects(con, project: str | None = None) -> list[dict]:
+    rows = con.execute("SELECT project_key, MAX(project_path) FROM agent GROUP BY project_key").fetchall()
+    projects = sorted(({"key": k, "label": Q.project_label(k, p)} for k, p in rows if k),
+                      key=lambda x: (x["label"].lower(), x["key"]))
+    if project and project not in {x["key"] for x in projects}:
+        projects.insert(0, {"key": project, "label": project[:60]})     # 모르는 키도 그대로 보낸다 (API 가 판단)
+    return projects
+
+
+TWIN_SINCE = (("1h", "1 시간"), ("6h", "6 시간"), ("24h", "24 시간"), ("7d", "7 일"), ("all", "전체"))
+
+
 def _dash_ctx(con, now: datetime) -> dict:
     return {
         "budget": budget_band(con, now),
@@ -65,14 +78,16 @@ def _dash_ctx(con, now: datetime) -> dict:
 
 
 @router.get("/")
-def dashboard(request: Request, part: str | None = None):
+def dashboard(request: Request, part: str | None = None, since: str | None = None, project: str | None = None):
     now = datetime.now(timezone.utc)
     con = conn.connect()
     try:
         ctx = _dash_ctx(con, now)
         if part == "body":
             return render(request, "_d01_body.html", ctx)
-        ctx.update(title="관제판", active="/", feed=Q.feed(con, 40))
+        since_opts = TWIN_SINCE if since in (None, "") or since in dict(TWIN_SINCE) else ((since, since[:40]),) + TWIN_SINCE
+        ctx.update(title="공장 평면도", active="/", feed=Q.feed(con, 40), projects=_projects(con, project),
+                   project=project or "", since=since or "24h", since_opts=since_opts, states=S.STATES)
         return render(request, "dashboard.html", ctx)
     finally:
         con.close()
@@ -83,13 +98,9 @@ def graph_page(request: Request, project: str | None = None):
     # 프로젝트 옵션을 서버에서 미리 채운다 — 첫 로드의 `?project=` 가 select 에 남아 첫 fetch 에 실린다 (DEF-QA2-103)
     con = conn.connect()
     try:
-        rows = con.execute("SELECT project_key, MAX(project_path) FROM agent GROUP BY project_key").fetchall()
+        projects = _projects(con, project)
     finally:
         con.close()
-    projects = sorted(({"key": k, "label": Q.project_label(k, p)} for k, p in rows if k),
-                      key=lambda x: (x["label"].lower(), x["key"]))
-    if project and project not in {x["key"] for x in projects}:
-        projects.insert(0, {"key": project, "label": project[:60]})     # 모르는 키도 그대로 보낸다 (API 가 판단)
     return render(request, "graph.html", {"title": "네트워크 구성도", "active": "/graph", "states": S.STATES,
                                           "state_ko": Q.STATE_KO, "projects": projects, "project": project or ""})
 

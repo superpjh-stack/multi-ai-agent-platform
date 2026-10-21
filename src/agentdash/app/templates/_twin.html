@@ -1,0 +1,769 @@
+{# D-01 공장 평면도 그리기 (spec.md v0.4 §7 D-01 · §7.3 · §7.4) — 담당 개발2. dashboard.html 의 body 끝에서 싣는다.
+   · 좌표는 /api/v1/twin 응답의 box 그대로 (T-07 — 배치를 브라우저에서 다시 계산하지 않는다). 확대 · 이동은 viewBox 만 바꾼다.
+   · 색은 base.html 토큰만: 상태 색 = .st-<STATE> 의 --c · --c-fg, 그 밖 --bg · --surface · --fg · --muted · --line · --accent.
+   · 실시간: 공유 SSE(openStream, 탭당 1 연결) — agent.state 즉시 다시 칠함 · agent.new / edge.new 1 초 묶음 다시 받기 + 흐름 1 회 ·
+     agent.usage 5 초 묶음. 평면도에 없는 키(필터 밖 · 접힘)는 오류 없이 다시 받기만.
+   · 움직임: prefers-reduced-motion: reduce 면 0 (CSS 끔 + 1 회 흐름을 만들지 않음) · document.hidden 이면 입자 멈춤.
+   · E2E 용 전역 window.agentdashTwin = {render, machineEl, redraws, flows, …}. #}
+<style>
+  .tw-bar { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-2) var(--sp-4); }
+  .tw-bar h2 { margin:0; flex:1 1 auto; min-width:0; }
+  .tw-filter { display:flex; flex-wrap:wrap; gap:var(--sp-2) var(--sp-3); font-size:13px; color:var(--muted); }
+  .tw-filter select, .tw-zoom button { font:inherit; font-size:13px; padding:2px var(--sp-2); border:1px solid var(--line);
+    border-radius:var(--radius-sm); background:var(--surface); color:var(--fg); max-width:100%; }
+  .tw-filter select { max-width:220px; }
+  .tw-zoom { display:flex; gap:var(--sp-1); }
+  .tw-zoom button { min-width:34px; cursor:pointer; }
+  .tw-legend { display:flex; flex-wrap:wrap; gap:var(--sp-1) var(--sp-3); font-size:12px; color:var(--muted); margin:var(--sp-2) 0; }
+  .tw-lg { display:inline-flex; align-items:center; gap:var(--sp-1); white-space:nowrap; }
+  .tw-lg i { width:9px; height:9px; border-radius:50%; background:var(--c); }
+  .tw-lg b { display:inline-block; width:20px; height:6px; border-radius:3px; background:var(--line); }
+  .conv-lg b { height:0; border-radius:0; border-top:2px dashed var(--muted); background:none; }
+  .tw-wrap { position:relative; height:calc(100vh - 230px); min-height:480px; max-height:1100px; overflow:hidden;
+             border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--bg); }
+  @media (max-width: 999px) { .tw-wrap { height:62vh; min-height:340px; } }
+  #twin-svg { display:block; width:100%; height:100%; touch-action:none; cursor:grab; user-select:none; -webkit-user-select:none;
+              font-family:var(--font); }
+  #twin-svg.dragging { cursor:grabbing; }
+  .tw-help { font-size:12px; margin:var(--sp-2) 0 0; }
+  .tw-err { color:var(--st-failed-fg); margin:var(--sp-1) 0 0; font-size:13px; }
+  .tw-err:empty { display:none; }
+  .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0);
+             white-space:nowrap; border:0; }
+
+  /* ── 평면도 (SVG) ── */
+  #twin-svg .floor-dot { fill:var(--line); }
+  #twin-svg .floor-bg { cursor:grab; }
+  #twin-svg .zone { fill:var(--surface); stroke:var(--line); stroke-width:1; }
+  #twin-svg .zone.folded-line { stroke-dasharray:5 4; }
+  #twin-svg .zone-head { fill:color-mix(in srgb, var(--accent) 7%, var(--surface)); }
+  #twin-svg .zone-rule { stroke:var(--line); stroke-width:1; }
+  #twin-svg .zone-name { font-size:14px; font-weight:700; fill:var(--fg); }
+  #twin-svg .zone-chip { font-size:12px; fill:var(--muted); }
+  #twin-svg .zone-chip .live { fill:var(--st-running-fg); font-weight:700; }
+  #twin-svg .zone-chip .wait { fill:var(--st-waiting-input-fg); font-weight:700; }
+  #twin-svg .wf-frame { fill:none; stroke:var(--muted); stroke-width:1.2; stroke-dasharray:6 4; }
+  #twin-svg .empty-t { font-size:14px; fill:var(--muted); }
+
+  #twin-svg .pipe-case { fill:none; stroke:var(--line); stroke-width:11; stroke-linecap:round; stroke-linejoin:round; }
+  #twin-svg .pipe { fill:none; stroke:color-mix(in srgb, var(--muted) 28%, var(--surface)); stroke-width:5;
+                    stroke-linecap:round; stroke-linejoin:round; }
+  #twin-svg .pipe[data-kind="handback"] { stroke:none; }      /* 반환은 띄움과 같은 관 — 겹쳐 그리지 않고 역흐름 길로만 쓴다 */
+  #twin-svg .flow { fill:none; stroke:var(--c); stroke-width:3; stroke-linecap:round; stroke-dasharray:1 13; opacity:0; }
+  #twin-svg .flow.on { opacity:1; animation:twin-flow 1.6s linear infinite; }
+  #twin-svg .conveyor { fill:none; stroke:var(--muted); stroke-dasharray:7 5; stroke-linecap:round; opacity:.75; }
+  #twin-svg .conveyor.flash { stroke:var(--st-running); opacity:1; animation:twin-conv .9s linear 1; }
+  #twin-svg .burst { fill:none; stroke:var(--c, var(--st-running)); stroke-width:8; stroke-linecap:round; stroke-dasharray:7 200;
+                     animation:twin-burst .9s ease-in-out 1 forwards; }
+  #twin-svg .burst.rev { animation-name:twin-burst-rev; }
+  #twin-svg.paused .flow, #twin-svg.paused .burst, #twin-svg.paused .conveyor { animation-play-state: paused; }
+
+  #twin-svg .machine, #twin-svg .inlet { cursor:pointer; outline:none; }
+  #twin-svg .mbody { transition:opacity .6s ease; transform-box:fill-box; transform-origin:center; }
+  #twin-svg .mbody.appear { animation:twin-appear .4s ease-out 1; }
+  #twin-svg .machine .body { fill:var(--surface); stroke:color-mix(in srgb, var(--c, var(--line)) 50%, var(--line)); stroke-width:1.2; }
+  #twin-svg .machine.kind-SESSION .body { stroke-width:2.2; }
+  #twin-svg .machine .mhead { fill:color-mix(in srgb, var(--c, var(--muted)) 15%, var(--surface)); }
+  #twin-svg .machine .bolt { fill:var(--line); }
+  #twin-svg .machine .vent { stroke:var(--line); stroke-width:1.5; }
+  #twin-svg .lamp { fill:var(--c, var(--muted)); }
+  #twin-svg .lamp.halo { fill:none; stroke:var(--c, var(--muted)); stroke-width:2; opacity:0; transform-box:fill-box; transform-origin:center; }
+  #twin-svg .machine.st-RUNNING .lamp.halo { animation:twin-pulse 2s ease-out infinite; }
+  #twin-svg .machine.st-RUNNING .lamp.core { animation:twin-glow 2s ease-in-out infinite; }
+  #twin-svg .beacon { display:none; fill:none; stroke:var(--c); stroke-width:3; stroke-dasharray:13 44; stroke-linecap:round;
+                      transform-box:fill-box; transform-origin:center; }
+  #twin-svg .machine.st-WAITING_INPUT .beacon, #twin-svg .machine.st-WAITING_PERMISSION .beacon { display:inline;
+                      animation:twin-spin 1.2s linear infinite; }
+  #twin-svg .bang, #twin-svg .alarm, #twin-svg .zz { display:none; }
+  #twin-svg .machine.st-WAITING_INPUT .bang, #twin-svg .machine.st-WAITING_PERMISSION .bang { display:inline; }
+  #twin-svg .bang circle { fill:var(--c); }
+  #twin-svg .bang text, #twin-svg .alarm text { font-size:11px; font-weight:800; fill:var(--surface); text-anchor:middle; }
+  #twin-svg .alarm path { fill:var(--st-stale); }
+  #twin-svg .machine.st-STALE .alarm { display:inline; animation:twin-blink 1s step-end infinite; }
+  #twin-svg .machine.st-SLEEPING .zz { display:inline; font-size:11px; font-weight:700; fill:var(--st-sleeping-fg); text-anchor:middle; }
+  #twin-svg .machine.st-DONE .mbody { opacity:.5; }
+  #twin-svg .machine.st-FAILED .mc { opacity:.5; }
+  #twin-svg .machine.st-FAILED .body { stroke:var(--st-failed); stroke-width:2.2; }
+  #twin-svg .machine.sel .body, #twin-svg .inlet.sel .body { stroke:var(--accent); stroke-width:2.6; }
+  #twin-svg .machine:focus-visible .body, #twin-svg .inlet:focus-visible .body { stroke:var(--accent); stroke-width:3.4; }
+  #twin-svg .m-name { font-size:12px; font-weight:700; fill:var(--fg); }
+  #twin-svg .m-st { font-size:11px; font-weight:600; fill:var(--c-fg, var(--fg)); }
+  #twin-svg .m-kind { font-size:10px; fill:var(--muted); }
+  #twin-svg .m-tool { font-size:11px; fill:var(--muted); font-family:var(--font-mono); }
+  #twin-svg .m-sum { font-size:11px; fill:var(--fg); font-variant-numeric:tabular-nums; }
+  #twin-svg .m-rate { font-size:11px; font-weight:600; fill:var(--fg); font-variant-numeric:tabular-nums; }
+  #twin-svg .spark-area { fill:color-mix(in srgb, var(--c, var(--accent)) 18%, transparent); stroke:none; }
+  #twin-svg .spark-line { fill:none; stroke:var(--c, var(--accent)); stroke-width:1.5; stroke-linejoin:round; }
+  #twin-svg .spark-base { stroke:var(--line); stroke-width:1; }
+  #twin-svg .fold-chip rect { fill:var(--surface); stroke:var(--line); }
+  #twin-svg .fold-chip text { font-size:10px; fill:var(--muted); font-weight:600; }
+  #twin-svg .inlet .body { fill:var(--bg); stroke:var(--muted); stroke-width:1.2; stroke-dasharray:6 4; }
+  #twin-svg .inlet .dock { fill:none; stroke:var(--muted); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+  @keyframes twin-flow { to { stroke-dashoffset:-14; } }
+  @keyframes twin-pulse { 0% { opacity:.75; transform:scale(1); } 100% { opacity:0; transform:scale(2.6); } }
+  @keyframes twin-glow { 50% { opacity:.55; } }
+  @keyframes twin-spin { to { transform:rotate(360deg); } }
+  @keyframes twin-blink { 50% { opacity:0; } }
+  @keyframes twin-burst { from { stroke-dashoffset:7; } to { stroke-dashoffset:-100; } }
+  @keyframes twin-burst-rev { from { stroke-dashoffset:-100; } to { stroke-dashoffset:7; } }
+  @keyframes twin-conv { from { stroke-dashoffset:24; } to { stroke-dashoffset:0; } }
+  @keyframes twin-appear { from { opacity:0; transform:scale(.6); } to { opacity:1; transform:scale(1); } }
+
+  /* 움직임 줄이기 — 깜빡임 · 맥박 · 경광등 회전 · 입자 · 나타남을 모두 끄고 색 · 배지만 남긴다 (spec §7.4) */
+  @media (prefers-reduced-motion: reduce) {
+    #twin-svg .lamp, #twin-svg .beacon, #twin-svg .alarm, #twin-svg .flow, #twin-svg .burst, #twin-svg .appear,
+    #twin-svg .conveyor, #twin-svg .machine .lamp.halo, #twin-svg .machine .lamp.core { animation:none !important; }
+    #twin-svg .mbody { transition:none !important; }
+    #twin-svg .burst { display:none; }
+  }
+</style>
+<script>
+(function () {
+  var svg = document.getElementById("twin-svg");
+  if (!svg) return;
+  var NS = svg.namespaceURI;                       // SVG 이름공간 — 문자열 URL 을 쓰지 않는다
+  var wrap = document.getElementById("twin-wrap"), statEl = document.getElementById("twin-stat");
+  var errEl = document.getElementById("twin-err"), tbody = document.querySelector("#twin-table tbody");
+  var sinceSel = document.getElementById("twin-since"), projSel = document.getElementById("twin-project");
+  var KIND_KO = {SESSION: "주 설비 · 세션", SUBAGENT: "보조 설비", WORKFLOW_AGENT: "워크플로 보조", WORKFLOW: "워크플로"};
+  var FINAL = {DONE: 1, FAILED: 1}, WAIT = {WAITING_INPUT: 1, WAITING_PERMISSION: 1};
+
+  var T = window.agentdashTwin = {
+    render: render, machineEl: machineEl, redraws: 0, flows: 0, flowsReduced: 0, flowMiss: 0, renders: 0, loads: 0,
+    appeared: 0, last: null, lastPaintMs: null, stateLog: [], vb: null, scale: null,
+    panelRefreshed: panelRefreshed, fit: fit, select: select, reload: load
+  };
+  var byKey = {}, boxes = {}, kids = {}, fetchedAt = Date.now(), content = {x: 0, y: 0, w: 1, h: 1};
+  var vb = {x: 0, y: 0, w: 1000, h: 600}, vbInit = false, selKey = null, selHTML = null, selTok = 0;
+
+  // ── 작은 도우미 ──
+  function el(tag, attrs, parent) {
+    var e = document.createElementNS(NS, tag);
+    if (attrs) for (var k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  function txt(attrs, s, parent) { var e = el("text", attrs, parent); e.textContent = s; return e; }
+  function esc(s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; }
+  function reduced() { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+  function n0(v) { return (v == null ? 0 : v).toLocaleString("ko-KR"); }
+  function compact(v) {
+    if (v == null) return "—";
+    if (v >= 1e6) return (v / 1e6).toFixed(1) + "M";
+    if (v >= 1e4) return (v / 1e3).toFixed(1) + "k";
+    return v.toLocaleString("ko-KR");
+  }
+  function money(v) { return v == null ? "단가 없음" : "$" + (v >= 100 ? v.toFixed(0) : v.toFixed(2)); }
+  function dur(s) {
+    if (s == null) return "—";
+    s = Math.max(0, Math.floor(s));
+    if (s < 60) return s + "초";
+    var m = Math.floor(s / 60);
+    if (m < 60) return m + "분" + (m < 10 && s % 60 ? " " + (s % 60) + "초" : "");
+    var h = Math.floor(m / 60);
+    if (h < 24) return h + "시간" + (m % 60 ? " " + (m % 60) + "분" : "");
+    return Math.floor(h / 24) + "일" + (h % 24 ? " " + (h % 24) + "시간" : "");
+  }
+  function hhmm(iso) {
+    var t = new Date(iso);
+    return isNaN(t) ? iso : t.toLocaleTimeString("ko-KR", {hour: "2-digit", minute: "2-digit", hour12: false});
+  }
+  function elapsedNow(m) { return m.elapsed_s == null ? null : m.elapsed_s + (Date.now() - fetchedAt) / 1000; }
+  function stateText(m) {
+    var ko = STATE_KO[m.state] || m.state;
+    if (m.state === "SLEEPING" && m.wake_at) return ko + " · 깰 " + hhmm(m.wake_at);
+    return ko + " · " + dur(elapsedNow(m));
+  }
+  function ariaOf(m) {
+    return m.name + ", " + (STATE_KO[m.state] || m.state) + ", 경과 " + dur(elapsedNow(m)) +
+      (m.tool ? ", 도구 " + m.tool : "") + (m.folded ? ", 접힌 완료 " + m.folded : "");
+  }
+  function machineEl(key) {
+    return svg.querySelector('g.machine[data-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+  }
+  function nodeEl(key) {
+    return svg.querySelector('[data-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
+  }
+
+  // ── 배관 모양: 부모 오른쪽 가운데 → 자식 왼쪽 가운데, 가운데 세로 줄기에서 둥글게 꺾는다 ──
+  function orth(x1, y1, x2, y2, mx) {
+    var dy = y2 - y1, dx = x2 - x1;
+    if (Math.abs(dy) < 1) return "M" + x1 + " " + y1 + " H" + x2;
+    if (Math.abs(dx) < 4) return "M" + x1 + " " + y1 + " C" + (x1 + 40) + " " + y1 + " " + (x2 + 40) + " " + y2 + " " + x2 + " " + y2;
+    var sx = dx > 0 ? 1 : -1, sy = dy > 0 ? 1 : -1;
+    var r = Math.min(12, Math.abs(dy) / 2, Math.abs(mx - x1), Math.abs(x2 - mx));
+    return "M" + x1 + " " + y1 + " H" + (mx - r * sx) + " Q" + mx + " " + y1 + " " + mx + " " + (y1 + r * sy) +
+      " V" + (y2 - r * sy) + " Q" + mx + " " + y2 + " " + (mx + r * sx) + " " + y2 + " H" + x2;
+  }
+  function pipeD(parentBox, childBox, reverse) {
+    var x1 = parentBox.x + parentBox.w, y1 = parentBox.y + parentBox.h / 2;
+    var x2 = childBox.x, y2 = childBox.y + childBox.h / 2, mx = (x1 + x2) / 2;
+    return reverse ? orth(x2, y2, x1, y1, mx) : orth(x1, y1, x2, y2, mx);
+  }
+  function sideCurve(a, b) {                    // 컨베이어 · 라인 간 연결 — 오른쪽으로 부푼 곡선
+    var x1 = a.x + a.w, y1 = a.y + a.h / 2, x2 = b.x + b.w, y2 = b.y + b.h / 2;
+    var bulge = 50 + Math.min(120, Math.abs(y2 - y1) / 6), xm = Math.max(x1, x2) + bulge;
+    return "M" + x1 + " " + y1 + " C" + xm + " " + y1 + " " + xm + " " + y2 + " " + x2 + " " + y2;
+  }
+
+  // ── 그리기 ──
+  function defs() {
+    var d = el("defs", null, svg);
+    var p = el("pattern", {id: "tw-dots", width: 24, height: 24, patternUnits: "userSpaceOnUse"}, d);
+    el("circle", {"class": "floor-dot", cx: 1, cy: 1, r: 1}, p);
+    return d;
+  }
+  function clipFor(d, cache, id, x, y, w, h) {
+    if (cache[id]) return "url(#" + id + ")";
+    var c = el("clipPath", {id: id, clipPathUnits: "userSpaceOnUse"}, d);
+    el("rect", {x: x, y: y, width: Math.max(0, w), height: h}, c);
+    cache[id] = 1;
+    return "url(#" + id + ")";
+  }
+
+  function draw() {
+    var resp = T.last;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    byKey = {}; boxes = {}; kids = {};
+    var d = defs(), clips = {};
+    el("rect", {"class": "floor-bg", x: -20000, y: -20000, width: 40000, height: 40000, fill: "url(#tw-dots)"}, svg);
+    var Lz = el("g", {"class": "zones"}, svg), Ll = el("g", {"class": "links"}, svg);
+    var Lp = el("g", {"class": "pipes"}, svg), Lm = el("g", {"class": "machines"}, svg);
+    T.redraws += 1;
+    var lines = (resp && resp.lines) || [];
+    if (!lines.length) {
+      var since = resp && resp.filters ? resp.filters.since_arg : "";
+      txt({"class": "empty-t", x: 24, y: 40}, "범위 안 에이전트 없음 (기간 " + since + ")", Lm);
+      content = {x: 0, y: 0, w: 420, h: 80};
+      return;
+    }
+    var maxX = 0, maxY = 0;
+    lines.forEach(function (ln) {
+      ln.machines.forEach(function (m) { byKey[m.key] = {m: m, ln: ln}; boxes[m.key] = m.box; });
+      if (ln.inlet) { boxes[ln.inlet.key] = ln.inlet.box; byKey[ln.inlet.key] = {inlet: ln.inlet, ln: ln}; }
+      ln.pipes.forEach(function (p) { if (p.kind !== "handback") (kids[p.src] = kids[p.src] || []).push(p.dst); });
+      maxX = Math.max(maxX, ln.box.x + ln.box.w); maxY = Math.max(maxY, ln.box.y + ln.box.h);
+    });
+    lines.forEach(function (ln, i) { drawLine(ln, i, Lz, d, clips); });
+    lines.forEach(function (ln) {
+      ln.machines.forEach(function (m) { if (m.kind === "WORKFLOW") drawWfFrame(m, Lz); });
+    });
+    var off = drawLinks(resp.links || [], Ll);
+    lines.forEach(function (ln) { ln.pipes.forEach(function (p) { drawPipe(p, Lp); }); });
+    lines.forEach(function (ln) {
+      if (ln.inlet) drawInlet(ln.inlet, ln, Lm, d, clips);
+      ln.machines.forEach(function (m) { drawMachine(m, ln, Lm, d, clips); });
+    });
+    content = {x: 0, y: 0, w: maxX + (Ll.childNodes.length ? 120 : 0), h: maxY};   // 라인 간 연결이 오른쪽으로 부푼 자리
+    T.offFloorLinks = off;
+  }
+
+  function drawLine(ln, i, layer, d, clips) {
+    var b = ln.box, top = b.y + b.h;
+    ln.machines.forEach(function (m) { top = Math.min(top, m.box.y); });
+    if (ln.inlet) top = Math.min(top, ln.inlet.box.y);
+    var head = ln.folded_line || !ln.machines.length ? b.h : top - b.y;
+    var g = el("g", {"class": "line", "data-line": ln.key}, layer);
+    el("rect", {"class": "zone" + (ln.folded_line ? " folded-line" : ""), x: b.x, y: b.y, width: b.w, height: b.h, rx: 14}, g);
+    var r = Math.min(14, head / 2);
+    el("path", {"class": "zone-head", d: "M" + b.x + " " + (b.y + head) + " V" + (b.y + r) + " Q" + b.x + " " + b.y + " " + (b.x + r) +
+      " " + b.y + " H" + (b.x + b.w - r) + " Q" + (b.x + b.w) + " " + b.y + " " + (b.x + b.w) + " " + (b.y + r) + " V" + (b.y + head) + " Z"}, g);
+    if (!ln.folded_line) el("line", {"class": "zone-rule", x1: b.x, x2: b.x + b.w, y1: b.y + head, y2: b.y + head}, g);
+    var ty = b.y + head / 2 + 5;
+    var waitN = (ln.counts.WAITING_INPUT || 0) + (ln.counts.WAITING_PERMISSION || 0);
+    var chip = el("text", {"class": "zone-chip", x: b.x + b.w - 14, y: ty, "text-anchor": "end"}, g);
+    if (ln.folded_line) {
+      chip.textContent = "접힘 (T-06) · 설비 " + ln.hidden;
+    } else {
+      el("tspan", {"class": "live"}, chip).textContent = "가동 " + ln.live;
+      el("tspan", null, chip).textContent = " · ";
+      el("tspan", {"class": "wait"}, chip).textContent = "대기 " + waitN;
+    }
+    var cw = 0;
+    try { cw = chip.getComputedTextLength(); } catch (e) { cw = 0; }
+    var nameW = b.w - 14 - cw - 16 - 12;
+    txt({"class": "zone-name", x: b.x + 16, y: ty,
+         "clip-path": clipFor(d, clips, "tw-cl-" + i, b.x + 8, b.y, nameW + 8, head)}, ln.name, g);
+    el("title", null, g).textContent = ln.name + " — 가동 " + ln.live + " · 대기 " + waitN;
+  }
+
+  function descBoxes(k, out, guard) {
+    (kids[k] || []).forEach(function (c) { if (!guard[c] && boxes[c]) { guard[c] = 1; out.push(boxes[c]); descBoxes(c, out, guard); } });
+    return out;
+  }
+  function drawWfFrame(m, layer) {                 // 워크플로 묶음 틀 — 워크플로 칸과 그 자손 칸을 감싼다 (좌표는 응답 box 그대로)
+    var bs = descBoxes(m.key, [m.box], {});
+    if (bs.length < 2) return;
+    var x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    bs.forEach(function (b) { x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); x2 = Math.max(x2, b.x + b.w); y2 = Math.max(y2, b.y + b.h); });
+    el("rect", {"class": "wf-frame", x: x1 - 6, y: y1 - 6, width: x2 - x1 + 12, height: y2 - y1 + 12, rx: 10, "data-wf": m.key}, layer);
+  }
+
+  function drawPipe(p, layer) {
+    var hb = p.kind === "handback";
+    var parent = hb ? p.dst : p.src, child = hb ? p.src : p.dst;
+    var pb = boxes[parent], cb = boxes[child];
+    if (!pb || !cb) return;
+    var cm = byKey[child] && byKey[child].m;
+    var st = cm ? cm.state : "UNKNOWN";
+    var g = el("g", {"class": "pipe-g st-" + st, "data-src": p.src, "data-dst": p.dst, "data-child": child}, layer);
+    var dPath = pipeD(pb, cb, hb);
+    if (!hb) el("path", {"class": "pipe-case", d: dPath}, g);
+    el("path", {"class": "pipe", "data-kind": p.kind, "data-src": p.src, "data-dst": p.dst, d: dPath}, g);
+    if (!hb) el("path", {"class": "flow" + (st === "RUNNING" ? " on" : ""), d: dPath}, g);
+  }
+
+  function drawLinks(links, layer) {
+    var off = 0;
+    links.forEach(function (l) {
+      var a = boxes[l.src], b = boxes[l.dst];
+      if (!a || !b || l.src === l.dst) { off += 1; return; }
+      var dPath = sideCurve(a, b);
+      if (l.kind === "message") {
+        var w = 1.5 + Math.min(8, l.count || 1) * 0.5;
+        el("path", {"class": "conveyor", "data-kind": "message", "data-src": l.src, "data-dst": l.dst, d: dPath,
+                    "stroke-width": w}, layer);
+      } else {
+        var cm = byKey[l.dst] && byKey[l.dst].m;
+        var g = el("g", {"class": "pipe-g st-" + (cm ? cm.state : "UNKNOWN"), "data-src": l.src, "data-dst": l.dst, "data-child": l.dst}, layer);
+        el("path", {"class": "pipe-case", d: dPath}, g);
+        el("path", {"class": "pipe xline", "data-kind": l.kind, "data-src": l.src, "data-dst": l.dst, d: dPath}, g);
+        el("path", {"class": "flow" + (cm && cm.state === "RUNNING" ? " on" : ""), d: dPath}, g);
+      }
+    });
+    return off;
+  }
+
+  function sparkPts(spark, x0, x1, yb, hgt) {
+    var mx = 1, n = spark.length;
+    spark.forEach(function (v) { if (v > mx) mx = v; });
+    return spark.map(function (v, i) {
+      return [(x0 + (n > 1 ? i * (x1 - x0) / (n - 1) : 0)).toFixed(1), (yb - (v / mx) * hgt).toFixed(1)];
+    });
+  }
+
+  function drawMachine(m, ln, layer, d, clips) {
+    var b = m.box, w = b.w, h = b.h;
+    var g = el("g", {"class": "machine st-" + m.state + " kind-" + m.kind, "data-key": m.key, "data-state": m.state,
+                     "data-kind": m.kind, transform: "translate(" + b.x + "," + b.y + ")"}, layer);
+    g.setAttribute("role", "button");
+    g.setAttribute("tabindex", "0");
+    g.setAttribute("aria-label", ariaOf(m));
+    var mb = el("g", {"class": "mbody"}, g);
+    el("rect", {"class": "body", x: 0, y: 0, width: w, height: h, rx: 8}, mb);
+    el("path", {"class": "mhead", d: "M0 24 V8 Q0 0 8 0 H" + (w - 8) + " Q" + w + " 0 " + w + " 8 V24 Z"}, mb);
+    el("circle", {"class": "bolt", cx: 6, cy: h - 6, r: 1.6}, mb);
+    el("circle", {"class": "bolt", cx: w - 6, cy: h - 6, r: 1.6}, mb);
+    var mc = el("g", {"class": "mc"}, mb);
+    // 표시등 (왼쪽 위) — 맥박 · 경광등
+    el("circle", {"class": "lamp halo", cx: 14, cy: 12, r: 5}, mc);
+    el("circle", {"class": "lamp core", cx: 14, cy: 12, r: 5}, mc);
+    el("circle", {"class": "beacon", cx: 14, cy: 12, r: 9}, mc);
+    var cn = clipFor(d, clips, "tw-cn-" + w, 24, 0, w - 24 - 26, 24);
+    var cb = clipFor(d, clips, "tw-cb-" + w + "-" + h, 6, 24, w - 12, h - 24);
+    txt({"class": "m-name", x: 26, y: 16, "clip-path": cn}, m.name, mc);
+    // 오른쪽 위 배지: 대기 「!」 · 멈춤 의심 경보 삼각형 · 잠듦 z
+    var bang = el("g", {"class": "bang"}, mc);
+    el("circle", {cx: w - 13, cy: 12, r: 7.5}, bang);
+    txt({x: w - 13, y: 16}, "!", bang);
+    var al = el("g", {"class": "alarm"}, mc);
+    el("path", {d: "M" + (w - 13) + " 3 L" + (w - 4) + " 20 H" + (w - 22) + " Z"}, al);
+    txt({x: w - 13, y: 18}, "!", al);
+    txt({"class": "zz", x: w - 13, y: 16}, "z", mc);
+    // 상태줄 · 도구줄
+    var body = el("g", {"clip-path": cb}, mc);
+    txt({"class": "m-st", x: 10, y: 39}, stateText(m), body).setAttribute("data-role", "state");
+    txt({"class": "m-kind", x: w - 10, y: 39, "text-anchor": "end"}, KIND_KO[m.kind] || m.kind, body);
+    txt({"class": m.tool ? "m-tool" : "m-kind", x: 10, y: 53}, m.tool ? m.tool + (m.target ? " " + m.target : "") : "지금 도구 없음", body);
+    // 스파크 (30 분 · 분당 추정 보정 출력) + 지금 분당
+    var sp = m.spark || [], x0 = 10, x1 = w - 64, yb = 72, hgt = 13;
+    el("line", {"class": "spark-base", x1: x0, x2: x1, y1: yb + 0.5, y2: yb + 0.5}, body);
+    if (sp.length) {
+      var pts = sparkPts(sp, x0, x1, yb, hgt);
+      el("polygon", {"class": "spark-area", points: x0 + "," + yb + " " + pts.map(function (p) { return p.join(","); }).join(" ") +
+        " " + x1 + "," + yb}, body);
+      el("polyline", {"class": "spark-line", points: pts.map(function (p) { return p.join(","); }).join(" ")}, body);
+    }
+    var nowRate = sp.length ? sp[sp.length - 1] : 0;
+    txt({"class": "m-rate", x: w - 10, y: 66, "text-anchor": "end"}, compact(nowRate) + "/분", body);
+    txt({"class": "m-kind", x: w - 10, y: 76, "text-anchor": "end"}, "[추정]", body);
+    // 누적줄
+    var sum = "출력 " + compact(m.out_total) + (m.out_est_total !== m.out_total ? " · 추정 " + compact(m.out_est_total) : "") +
+      " · " + money(m.cost_est_usd);
+    txt({"class": "m-sum", x: 10, y: h - 7}, sum, body);
+    el("title", null, g).textContent = m.name + " — " + (STATE_KO[m.state] || m.state) + " (" + (m.rule || "규칙 없음") + ") · 스파크 = 최근 30 분 분당 추정 보정 출력 [추정]";
+    // 접힌 완료 — 상자 아래 꼬리표
+    if (m.folded) {
+      var fc = el("g", {"class": "fold-chip"}, g);
+      el("rect", {x: 10, y: h + 1, width: 62, height: 13, rx: 4}, fc);
+      txt({x: 16, y: h + 11}, "+" + m.folded + " 완료", fc);
+    }
+    return g;
+  }
+
+  function drawInlet(inl, ln, layer, d, clips) {
+    var b = inl.box, w = b.w, h = b.h, outScope = 0, unknown = 0;
+    ln.machines.forEach(function (m) {
+      ln.pipes.forEach(function (p) { if (p.src === inl.key && p.dst === m.key) { if (m.parent) outScope += 1; else unknown += 1; } });
+    });
+    var g = el("g", {"class": "inlet", "data-key": inl.key, transform: "translate(" + b.x + "," + b.y + ")"}, layer);
+    g.setAttribute("role", "button");
+    g.setAttribute("tabindex", "0");
+    g.setAttribute("aria-label", inl.name + " 반입구, 부모 범위 밖 " + outScope + ", 부모 미확인 " + unknown + ", 접힘 " + inl.folded);
+    el("rect", {"class": "body", x: 0, y: 0, width: w, height: h, rx: 8}, g);
+    el("path", {"class": "dock", d: "M14 30 H34 M26 22 L34 30 L26 38 M40 18 V42"}, g);
+    var cb = clipFor(d, clips, "tw-cb-" + w + "-" + h, 6, 24, w - 12, h - 24);
+    txt({"class": "m-name", x: 52, y: 28}, inl.name, g);
+    var bd = el("g", {"clip-path": cb}, g);
+    txt({"class": "m-kind", x: 52, y: 44}, "반입구 (L-05 · 범위 밖 부모)", bd);
+    txt({"class": "m-sum", x: 10, y: 64}, "부모 범위 밖 " + outScope + " · 부모 미확인 " + unknown, bd);
+    txt({"class": "m-sum", x: 10, y: h - 9}, "접힌 완료 " + inl.folded, bd);
+  }
+
+  function fillTable(resp) {
+    if (!tbody) return;
+    var rows = [];
+    (resp.lines || []).forEach(function (ln) {
+      if (ln.folded_line) {
+        rows.push("<tr><td>" + esc(ln.name) + "</td><td colspan='8'>라인 접힘 (T-06) — 설비 " + ln.hidden + "</td></tr>");
+        return;
+      }
+      ln.machines.forEach(function (m) {
+        rows.push("<tr><td>" + esc(ln.name) + "</td><td>" + esc(m.name) + "</td><td>" + esc(KIND_KO[m.kind] || m.kind) +
+          "</td><td>" + esc(STATE_KO[m.state] || m.state) + " " + esc(m.rule || "") + "</td><td>" + esc(dur(m.elapsed_s)) +
+          "</td><td>" + esc(m.tool ? m.tool + " " + (m.target || "") : "없음") + "</td><td>" + n0(m.out_total) +
+          " (추정 " + n0(m.out_est_total) + ")</td><td>" + esc(money(m.cost_est_usd)) + "</td><td>" + (m.folded || 0) + "</td></tr>");
+      });
+    });
+    tbody.innerHTML = rows.join("") || "<tr><td colspan='9'>범위 안 에이전트 없음</td></tr>";
+  }
+
+  function stats(resp) {
+    var nm = 0, nf = 0;
+    (resp.lines || []).forEach(function (ln) {
+      nm += ln.machines.length;
+      ln.machines.forEach(function (m) { nf += m.folded || 0; });
+      if (ln.inlet) nf += ln.inlet.folded || 0;
+    });
+    statEl.textContent = "라인 " + (resp.lines || []).length + " · 설비 " + nm + " · 접힌 완료 " + nf +
+      (resp.folded_lines ? " · 접힌 라인 " + resp.folded_lines : "") + " · 범위 " + resp.agents_in_scope +
+      (T.offFloorLinks ? " · 평면도 밖 연결 " + T.offFloorLinks : "") + " · 계산 " + resp.elapsed_ms + " ms";
+  }
+
+  function render(resp) {
+    var prev = T.last ? T.last.lines.reduce(function (a, ln) { ln.machines.forEach(function (m) { a[m.key] = 1; }); return a; }, {}) : null;
+    var hadFocus = document.activeElement && svg.contains(document.activeElement) ? document.activeElement.getAttribute("data-key") : null;
+    T.last = resp; fetchedAt = Date.now(); T.renders += 1;
+    draw();
+    fillTable(resp);
+    stats(resp);
+    if (prev) {
+      Object.keys(byKey).forEach(function (k) {
+        if (prev[k] || !byKey[k].m) return;
+        T.appeared += 1;
+        if (reduced()) return;
+        var mb = machineEl(k).querySelector(".mbody");
+        mb.classList.add("appear");
+        mb.addEventListener("animationend", function () { mb.classList.remove("appear"); }, {once: true});
+      });
+    }
+    var q = pendingEdges; pendingEdges = [];
+    q.forEach(function (e) { if (!flowNow(e)) T.flowMiss += 1; });
+    if (!vbInit) { fit(); vbInit = true; } else applyVB();
+    if (selKey) {
+      var s = nodeEl(selKey);
+      if (s) s.classList.add("sel");
+    }
+    if (hadFocus) { var f = nodeEl(hadFocus); if (f) f.focus({preventScroll: true}); }
+  }
+
+  // ── 확대 · 축소 · 이동 (viewBox 만) ──
+  function size() { return {w: wrap.clientWidth || 1, h: wrap.clientHeight || 1}; }
+  function applyVB() {
+    var c = size();
+    vb.h = vb.w * c.h / c.w;                      // 화면 비율과 같게 — meet 여백 없이
+    svg.setAttribute("viewBox", [vb.x, vb.y, vb.w, vb.h].map(function (v) { return v.toFixed(1); }).join(" "));
+    T.vb = {x: vb.x, y: vb.y, w: vb.w, h: vb.h};
+    T.scale = Math.round(c.w / vb.w * 100) / 100;
+  }
+  function fit() {
+    var c = size(), pad = 16, W = content.w + 2 * pad, H = content.h + 2 * pad;
+    var s = Math.min(c.w / W, c.h / H);
+    if (s < 0.55) s = Math.min(c.w / W, 1);        // 다 넣으면 글자가 너무 작다 — 폭에 맞추고 위에서부터 (휠 · 끌기로 이동)
+    else s = Math.min(s, 1.2);
+    vb.w = c.w / s; vb.x = content.x - pad; vb.y = content.y - pad;
+    applyVB();
+  }
+  function zoomAt(f, cx, cy) {
+    var c = size(), s = Math.max(0.15, Math.min(3, (c.w / vb.w) * f)), nw = c.w / s;
+    vb.x = cx - (cx - vb.x) * nw / vb.w; vb.y = cy - (cy - vb.y) * nw / vb.w; vb.w = nw;
+    applyVB();
+  }
+  function zoomCenter(f) { zoomAt(f, vb.x + vb.w / 2, vb.y + vb.w * size().h / size().w / 2); }
+  function toSvg(ev) {
+    var r = svg.getBoundingClientRect();
+    return {x: vb.x + (ev.clientX - r.left) / r.width * vb.w, y: vb.y + (ev.clientY - r.top) / r.height * vb.h};
+  }
+  function clampPan(nx, ny) {
+    var pad = 16;
+    var minX = content.x - pad, maxX = Math.max(minX, content.x + content.w + pad - vb.w);
+    var minY = content.y - pad, maxY = Math.max(minY, content.y + content.h + pad - vb.h);
+    return {x: Math.min(Math.max(nx, Math.min(minX, vb.x)), Math.max(maxX, vb.x)),
+            y: Math.min(Math.max(ny, Math.min(minY, vb.y)), Math.max(maxY, vb.y))};
+  }
+  function ensureVisible(b) {
+    if (!b) return;
+    if (b.x >= vb.x && b.y >= vb.y && b.x + b.w <= vb.x + vb.w && b.y + b.h <= vb.y + vb.h) return;
+    vb.x = b.x + b.w / 2 - vb.w / 2; vb.y = b.y + b.h / 2 - vb.h / 2;
+    applyVB();
+  }
+  document.getElementById("twin-zoom-in").addEventListener("click", function () { zoomCenter(1.25); });
+  document.getElementById("twin-zoom-out").addEventListener("click", function () { zoomCenter(0.8); });
+  document.getElementById("twin-fit").addEventListener("click", fit);
+  svg.addEventListener("wheel", function (e) {
+    if (e.ctrlKey || e.metaKey) {                  // Ctrl+휠 (트랙패드 집기 포함) — 포인터 자리 기준 확대 · 축소
+      e.preventDefault();
+      var p = toSvg(e);
+      zoomAt(Math.exp(-e.deltaY * 0.0025), p.x, p.y);
+      return;
+    }
+    var k = vb.w / size().w, n = clampPan(vb.x + e.deltaX * k, vb.y + e.deltaY * k);
+    if (Math.abs(n.x - vb.x) > 0.01 || Math.abs(n.y - vb.y) > 0.01) {   // 평면도 끝이면 페이지가 스크롤된다
+      e.preventDefault(); vb.x = n.x; vb.y = n.y; applyVB();
+    }
+  }, {passive: false});
+  var drag = null, suppressClick = false;
+  svg.addEventListener("pointerdown", function (e) {
+    if (e.button !== 0) return;
+    drag = {x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y, id: e.pointerId, moved: false};
+  });
+  svg.addEventListener("pointermove", function (e) {
+    if (!drag || e.pointerId !== drag.id) return;
+    var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 5) return;
+    if (!drag.moved) { drag.moved = true; svg.classList.add("dragging"); try { svg.setPointerCapture(e.pointerId); } catch (err) { /* 이미 놓음 */ } }
+    var k = vb.w / size().w;
+    vb.x = drag.vx - dx * k; vb.y = drag.vy - dy * k;
+    applyVB();
+  });
+  function endDrag(e) {
+    if (!drag || (e && e.pointerId !== drag.id)) return;
+    if (drag.moved) { suppressClick = true; setTimeout(function () { suppressClick = false; }, 0); }
+    svg.classList.remove("dragging");
+    drag = null;
+  }
+  svg.addEventListener("pointerup", endDrag);
+  svg.addEventListener("pointercancel", endDrag);
+  if (window.ResizeObserver) new ResizeObserver(function () { if (T.last) applyVB(); }).observe(wrap);
+
+  // ── 선택 · 이동 (누르기 = 패널 요약 · 두 번 / Enter = D-03 · Tab 순회 · Esc 해제) ──
+  function target(e) { return e.target.closest ? e.target.closest("g.machine, g.inlet") : null; }
+  function goDetail(key) { if (key && key.indexOf("U:") !== 0) location.href = "/agents/" + encodeURIComponent(key); }
+  svg.addEventListener("click", function (e) {
+    if (suppressClick) return;
+    var g = target(e);
+    if (g) select(g.getAttribute("data-key")); else clearSel();
+  });
+  svg.addEventListener("dblclick", function (e) { var g = target(e); if (g) goDetail(g.getAttribute("data-key")); });
+  svg.addEventListener("keydown", function (e) {
+    var g = target(e);
+    if (e.key === "Escape") { clearSel(); return; }
+    if (!g) return;
+    if (e.key === "Enter") { e.preventDefault(); goDetail(g.getAttribute("data-key")); }
+    else if (e.key === " ") { e.preventDefault(); select(g.getAttribute("data-key")); }
+  });
+  var focusTimer = null;
+  svg.addEventListener("focusin", function (e) {
+    var g = target(e);
+    if (!g) return;
+    var k = g.getAttribute("data-key");
+    ensureVisible(boxes[k]);
+    clearTimeout(focusTimer);
+    focusTimer = setTimeout(function () { if (document.activeElement === g || svg.contains(document.activeElement)) select(k); }, 250);
+  });
+
+  function setSel(html) {
+    selHTML = html;
+    var box = document.getElementById("twin-sel");
+    if (!box) return;
+    box.innerHTML = html; box.hidden = false;
+  }
+  function panelRefreshed() { if (selHTML) setSel(selHTML); }   // 패널 조각을 다시 받은 뒤 선택 요약을 다시 넣는다
+  function clearSel() {
+    selKey = null; selHTML = null; selTok += 1;
+    svg.querySelectorAll(".sel").forEach(function (x) { x.classList.remove("sel"); });
+    var box = document.getElementById("twin-sel");
+    if (box) { box.innerHTML = ""; box.hidden = true; }
+  }
+  function quick(m, ln) {
+    return "<h3 class='h3'>" + esc(ln.name) + " · " + esc(KIND_KO[m.kind] || m.kind) + "</h3>" +
+      "<p><a class='name' href='/agents/" + encodeURIComponent(m.key) + "'><b>" + esc(m.name) + "</b></a> " +
+      "<span class='badge st-" + esc(m.state) + "'>" + esc(STATE_KO[m.state] || m.state) + "</span> <code>" + esc(m.rule || "") + "</code></p>" +
+      "<dl class='kv'><dt>경과</dt><dd>" + esc(dur(elapsedNow(m))) + (m.wake_at ? " · 깰 시각 " + esc(hhmm(m.wake_at)) : "") + "</dd>" +
+      "<dt>지금 도구</dt><dd>" + (m.tool ? esc(m.tool) + " <span class='ev'>" + esc(m.target || "") + "</span>" : "없음") + "</dd>" +
+      "<dt>누적 출력</dt><dd>" + n0(m.out_total) + " · <span class='muted'>[추정] 추정 보정</span> " + n0(m.out_est_total) + "</dd>" +
+      "<dt>추정 보정 비용</dt><dd>" + esc(money(m.cost_est_usd)) + " <span class='muted'>[추정] API 정가 환산</span></dd>" +
+      "<dt>지금 분당</dt><dd>" + n0((m.spark || [0])[(m.spark || [0]).length - 1]) + " <span class='muted'>[추정] · 30 분 합 " +
+        n0((m.spark || []).reduce(function (a, v) { return a + v; }, 0)) + "</span></dd>" +
+      (m.folded ? "<dt>접힌 완료</dt><dd>+" + m.folded + " (T-05)</dd>" : "") + "</dl>";
+  }
+  function select(key) {
+    if (!key) return;
+    selKey = key; selTok += 1;
+    var tok = selTok;
+    svg.querySelectorAll(".sel").forEach(function (x) { x.classList.remove("sel"); });
+    var g = nodeEl(key);
+    if (g) g.classList.add("sel");
+    var info = byKey[key];
+    if (!info) { setSel("<p class='muted'>평면도에 없는 설비 — " + esc(key) + "</p>"); return; }
+    if (info.inlet) {
+      setSel("<h3 class='h3'>" + esc(info.ln.name) + " · 반입구</h3><p><b>" + esc(info.inlet.name) + "</b></p>" +
+        "<p class='ev'>부모가 이 범위 밖(다른 기간) · 순환 · 끝까지 못 찾은(L-05) 보조 설비가 이 아래 1 열에 선다. " +
+        "다른 라인의 부모는 라인 사이 배관으로만 잇는다 (D-25).</p><dl class='kv'><dt>접힌 완료</dt><dd>" + info.inlet.folded + "</dd></dl>");
+      return;
+    }
+    var m = info.m, base = quick(m, info.ln);
+    setSel(base + "<p class='muted'>판정 근거 · 부모 · 자식 불러오는 중…</p>");
+    fetch("/api/v1/agents/" + encodeURIComponent(key), {cache: "no-store"}).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status); return r.json();
+    }).then(function (a) {
+      if (tok !== selTok) return;
+      if (!a.found) { setSel(base + "<p class='warn'>" + esc(a.reason) + "</p>"); return; }
+      var u = a.usage;
+      setSel(base +
+        "<p class='ev'>근거: " + esc(a.state.evidence || "기록 없음") + "</p>" +
+        "<p class='ev'>지금 판정: " + esc(a.state.now.rule) + " — " + esc(a.state.now.evidence) + "</p>" +
+        "<dl class='kv'><dt>부모</dt><dd>" + (a.parent ? "<a href='/agents/" + encodeURIComponent(a.parent.agent_key) + "'>" +
+          esc(a.parent.name || a.parent.agent_key) + "</a>" : esc(a.link_note || "없음 (세션)")) + "</dd>" +
+        "<dt>자식</dt><dd>직계 " + u.children_direct + " · 전체 " + u.descendants_all + "</dd>" +
+        "<dt>자손 포함 출력</dt><dd>" + n0(u.with_descendants.output_tokens) + " · <span class='muted'>[추정]</span> " +
+          n0(u.with_descendants.output_est_total) + "</dd>" +
+        "<dt>자손 포함 비용</dt><dd>" + esc(money(u.with_descendants.cost_est_usd)) + " <span class='muted'>" + esc(u.cost_label) + "</span></dd>" +
+        "<dt>도구 호출</dt><dd>" + n0(u.tool_calls) + " · 작성 파일 " + n0(u.files_written) + "</dd></dl>" +
+        "<p><a href='/agents/" + encodeURIComponent(key) + "'>D-03 상세 열기 →</a></p>");
+    }).catch(function (err) {
+      if (tok === selTok) setSel(base + "<p class='warn'>요약을 받지 못했다: " + esc(err.message) + "</p>");
+    });
+  }
+
+  // ── 실시간 ──
+  var pendingEdges = [], loading = false, again = false, tNew = null, tUse = null;
+  function burst(path, rev) {
+    if (!path) return false;
+    if (reduced()) { T.flowsReduced += 1; return true; }
+    var b = el("path", {"class": "burst" + (rev ? " rev" : ""), d: path.getAttribute("d"), pathLength: 100}, path.parentNode);
+    var gone = function () { if (b.parentNode) b.parentNode.removeChild(b); };
+    b.addEventListener("animationend", gone, {once: true});
+    setTimeout(gone, 3000);
+    T.flows += 1;
+    return true;
+  }
+  function q(sel) { return svg.querySelector(sel); }
+  function attr(k, v) { return "[" + k + '="' + (window.CSS && CSS.escape ? CSS.escape(v) : v) + '"]'; }
+  function flowNow(e) {                            // 이미 그려진 관이 있으면 바로 1 회 흐름. 없으면 false (다시 받은 뒤 한 번 더)
+    if (!e || !e.src || !e.dst) return true;
+    if (e.kind === "message") {
+      var c = q("path.conveyor" + attr("data-src", e.src) + attr("data-dst", e.dst));
+      if (!c) return false;
+      if (reduced()) { T.flowsReduced += 1; return true; }
+      c.classList.remove("flash"); void c.getBBox(); c.classList.add("flash");
+      c.addEventListener("animationend", function () { c.classList.remove("flash"); }, {once: true});
+      T.flows += 1;
+      return true;
+    }
+    if (e.kind === "handback") {                   // 자식 → 부모 거꾸로 1 회 (그 뒤 상태 DONE 으로 흐려진다)
+      var hb = q('path.pipe[data-kind="handback"]' + attr("data-src", e.src) + attr("data-dst", e.dst));
+      if (hb) return burst(hb, false);
+      var sp = q("path.pipe" + attr("data-src", e.dst) + attr("data-dst", e.src));
+      return sp ? burst(sp, true) : false;
+    }
+    return burst(q("path.pipe" + attr("data-src", e.src) + attr("data-dst", e.dst)), false);   // spawn · workflow
+  }
+  function applyState(g, key, state, reason) {
+    var info = byKey[key], m = info && info.m;
+    if (m) {
+      m.state = state; m.rule = (reason || "").split(" ")[0] || m.rule;
+      m.since = new Date().toISOString(); m.elapsed_s = 0 - (Date.now() - fetchedAt) / 1000;
+      if (state !== "SLEEPING") m.wake_at = null;
+    }
+    g.setAttribute("class", g.getAttribute("class").replace(/\bst-[A-Z_]+\b/, "st-" + state));
+    g.setAttribute("data-state", state);
+    if (m) {
+      var st = g.querySelector('[data-role="state"]');
+      if (st) st.textContent = stateText(m);
+      g.setAttribute("aria-label", ariaOf(m));
+    }
+    svg.querySelectorAll("g.pipe-g" + attr("data-child", key)).forEach(function (p) {
+      p.setAttribute("class", p.getAttribute("class").replace(/\bst-[A-Z_]+\b/, "st-" + state));
+      var f = p.querySelector(".flow");
+      if (f) f.classList.toggle("on", state === "RUNNING");
+    });
+    T.stateLog.push({key: key, state: state, at: Date.now()});
+    if (T.stateLog.length > 50) T.stateLog.shift();
+  }
+  function fireNew() { tNew = null; load(); }
+  function fireUse() { tUse = null; load(); }
+  function soon() { if (!tNew) tNew = setTimeout(fireNew, 1000); }          // agent.new · edge.new · 모르는 키 — 1 초 묶음
+  function soonUsage() { if (!tUse) tUse = setTimeout(fireUse, 5000); }     // agent.usage — 5 초 묶음
+  openStream({
+    "agent.state": function (d) {
+      var t0 = performance.now(), g = machineEl(d.agent_key);
+      if (!g) { soon(); return; }                 // 평면도에 없는 설비(필터 밖 · 접힘 · 새것) — 다시 받기만
+      applyState(g, d.agent_key, d.state, d.reason);
+      requestAnimationFrame(function () { T.lastPaintMs = Math.round((performance.now() - t0) * 10) / 10; });
+      if (selKey === d.agent_key) select(selKey);
+      soonUsage();                                 // 경과 · 접힘 · 스파크는 5 초 묶음으로 맞춘다
+    },
+    "agent.new": function () { soon(); },
+    "edge.new": function (d) { if (!flowNow(d)) pendingEdges.push(d); soon(); },
+    "agent.usage": function () { soonUsage(); }
+  }, null);
+
+  function params() {
+    var p = new URLSearchParams();
+    if (sinceSel && sinceSel.value) p.set("since", sinceSel.value);
+    if (projSel && projSel.value) p.set("project", projSel.value);
+    return p.toString();
+  }
+  function load() {
+    if (loading) { again = true; return; }
+    loading = true; T.loads += 1;
+    fetch("/api/v1/twin?" + params(), {cache: "no-store"}).then(function (r) {
+      return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || ("HTTP " + r.status)); return j; });
+    }).then(function (j) {
+      errEl.textContent = "";
+      render(j);
+    }).catch(function (err) {
+      errEl.textContent = "평면도를 받지 못했다: " + err.message;
+    }).then(function () {
+      loading = false;
+      if (again) { again = false; load(); }
+    });
+  }
+  document.getElementById("twin-filter").addEventListener("change", function () {
+    vbInit = false;
+    try { history.replaceState(null, "", "/?" + params()); } catch (e) { /* 주소만 못 바꿈 */ }
+    load();
+  });
+
+  // 숨은 탭 = 입자 멈춤 · 다시 보이면 최신으로
+  function vis() { svg.classList.toggle("paused", document.hidden); if (!document.hidden && T.last) load(); }
+  document.addEventListener("visibilitychange", vis);
+  svg.classList.toggle("paused", document.hidden);
+  // 테마 바뀜 → 다시 칠함 (색은 토큰이라 CSS 가 따라오지만, 그림을 다시 만들어 측정 · 대비를 같이 맞춘다)
+  onThemeChange(function () { if (T.last) { draw(); applyVB(); if (selKey) { var s = nodeEl(selKey); if (s) s.classList.add("sel"); } } });
+  // 경과 글자는 5 초마다 (다시 받지 않고), 스파크 · 접힘은 60 초마다 다시 받는다
+  setInterval(function () {
+    if (document.hidden) return;
+    Object.keys(byKey).forEach(function (k) {
+      var m = byKey[k].m; if (!m) return;
+      var g = machineEl(k), st = g && g.querySelector('[data-role="state"]');
+      if (st) st.textContent = stateText(m);
+      if (g) g.setAttribute("aria-label", ariaOf(m));
+    });
+  }, 5000);
+  setInterval(function () { if (!document.hidden) load(); }, 60000);
+  load();
+})();
+</script>

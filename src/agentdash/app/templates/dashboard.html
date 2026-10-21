@@ -2,12 +2,41 @@
 {% block head %}
 {% include "_live.html" %}
 <style>
-  /* D-01 배치만 — 색 · 간격 · 글꼴은 base.html 토큰 · 공통 부품 (spec.md v0.3 §7.3). 상태 색 = .st-<STATE> 의 --c · --c-fg */
+  /* D-01 배치만 — 색 · 간격 · 글꼴은 base.html 토큰 · 공통 부품 (spec.md v0.3 §7.3). 상태 색 = .st-<STATE> 의 --c · --c-fg
+     v0.4: 평면도(≈ 70 %) + 패널(≈ 30 %), 1000 px 미만이면 평면도 아래로 패널. 평면도 그림 스타일은 _twin.html. */
+  main { max-width:1680px; }
+  .d01 { display:grid; gap:var(--sp-4); grid-template-columns:minmax(0, 1fr);
+         grid-template-areas:"band" "floor" "panel" "feed"; }
+  @media (min-width: 1000px) {
+    .d01 { grid-template-columns:minmax(0, 7fr) minmax(0, 3fr); grid-template-areas:"band band" "floor panel" "floor feed";
+           grid-template-rows:auto auto 1fr; }
+    #floor { position:sticky; top:var(--sp-3); }
+  }
+  .d01:not(:has(#budget-band)) { grid-template-areas:"floor" "panel" "feed"; }
+  @media (min-width: 1000px) { .d01:not(:has(#budget-band)) { grid-template-areas:"floor panel" "floor feed"; grid-template-rows:auto 1fr; } }
+  #d01 { display:contents; }                          /* 패널 조각(#d01)의 띠 · 패널이 바깥 격자의 칸이 된다 */
+  #budget-band { grid-area:band; }
+  #floor { grid-area:floor; align-self:start; }
+  .panel { grid-area:panel; }
+  .feed-card { grid-area:feed; align-self:start; }
+  .panel .grid.kpis { grid-template-columns:repeat(auto-fill, minmax(min(100%, 112px), 1fr)); gap:var(--sp-2); }
+  .panel .kpis .card.kpi { padding:var(--sp-2) var(--sp-3); }
+  .panel .kpis .n { font-size:20px; }
+  .h3 { font-size:13px; color:var(--muted); font-weight:600; margin:var(--sp-3) 0 var(--sp-2); }
+  #twin-sel:not([hidden]) + #live-list { display:none; }
+  .turns { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--sp-2); font-size:13px; }
+  .turn { border:1px solid var(--line); border-left:4px solid var(--c); border-radius:var(--radius-sm); padding:var(--sp-2) var(--sp-3);
+          display:flex; flex-direction:column; gap:2px; min-width:0; overflow-wrap:anywhere; }
+  .turn .t1 { display:flex; flex-wrap:wrap; align-items:center; gap:var(--sp-1) var(--sp-2); }
+  .turn .wait { margin-left:auto; font-variant-numeric:tabular-nums; font-weight:600; }
+  .turn a.name { font-weight:600; color:var(--fg); text-decoration:none; }
+  .kv { display:grid; grid-template-columns:max-content minmax(0, 1fr); gap:var(--sp-1) var(--sp-3); margin:var(--sp-3) 0 0; font-size:13px; }
+  .kv dt { color:var(--muted); } .kv dd { margin:0; overflow-wrap:anywhere; }
   .page-h { display:flex; flex-wrap:wrap; align-items:baseline; gap:var(--sp-1) var(--sp-3); margin:var(--sp-2) 0 var(--sp-5); }
   .page-h h1 { font-size:22px; margin:0; }
   .live-st { font-size:12px; color:var(--muted); }
-  #d01, .stack, .stack-sm { display:flex; flex-direction:column; min-width:0; }
-  #d01, .stack { gap:var(--sp-5); }
+  .stack, .stack-sm { display:flex; flex-direction:column; min-width:0; }
+  .stack { gap:var(--sp-4); }
   .stack-sm { gap:var(--sp-3); }
   .cols { display:grid; gap:var(--sp-5); grid-template-columns:minmax(0, 1fr); }
   @media (min-width: 1000px) { .cols { grid-template-columns:minmax(0, 2fr) minmax(0, 1fr); } }
@@ -50,9 +79,42 @@
 </style>
 {% endblock %}
 {% block body %}
-<div class="page-h"><h1>D-01 관제판</h1><span class="live-st" id="sse">실시간: 연결 전</span></div>
+<div class="page-h"><h1>D-01 공장 평면도</h1><span class="live-st" id="sse">실시간: 연결 전</span></div>
+<div class="d01">
 <div id="d01">{% include "_d01_body.html" %}</div>
-<section class="card" style="margin-top:var(--sp-5)">
+<section class="card" id="floor" aria-label="공장 평면도">
+  <div class="tw-bar">
+    <h2>공장 평면도 <span class="sub" id="twin-stat">불러오는 중…</span></h2>
+    <form class="tw-filter" id="twin-filter" onsubmit="return false">
+      <label>기간 <select id="twin-since" name="since">
+        {% for v, t in since_opts %}<option value="{{ v }}"{% if v == since %} selected{% endif %}>{{ t }}</option>{% endfor %}
+      </select></label>
+      <label>프로젝트 <select id="twin-project" name="project">
+        <option value="">전체</option>
+        {% for p in projects %}<option value="{{ p.key }}"{% if p.key == project %} selected{% endif %}>{{ p.label }}</option>{% endfor %}
+      </select></label>
+    </form>
+    <div class="tw-zoom" role="group" aria-label="확대 · 축소">
+      <button type="button" id="twin-zoom-out" aria-label="축소">−</button>
+      <button type="button" id="twin-zoom-in" aria-label="확대">+</button>
+      <button type="button" id="twin-fit">맞춤</button>
+    </div>
+  </div>
+  <p class="tw-legend" aria-label="범례">
+    {% for st in states %}<span class="tw-lg st-{{ st }}"><i></i>{{ state_ko.get(st, st) }}</span>{% endfor %}
+    <span class="tw-lg pipe-lg"><b></b>배관 = 띄움 · 반환</span><span class="tw-lg conv-lg"><b></b>컨베이어 = 메시지</span>
+  </p>
+  <div class="tw-wrap" id="twin-wrap">
+    <svg id="twin-svg" role="group" aria-label="공장 평면도 — 라인 = 프로젝트 · 설비 = 에이전트 · 배관 = 띄움/반환"
+         aria-describedby="twin-help" viewBox="0 0 1000 600" preserveAspectRatio="xMinYMin meet"></svg>
+  </div>
+  <p class="tw-help muted" id="twin-help">누르면 오른쪽 「선택한 설비」 · 두 번 누르거나 Enter 면 D-03 · Tab 으로 설비 순회 · 끌어서 이동 · Ctrl+휠 확대 · 휠 위아래 이동 · 패널 숫자는 필터와 무관한 전체</p>
+  <p class="tw-err" id="twin-err" role="alert"></p>
+  <div class="sr-only"><table id="twin-table"><caption>공장 평면도 설비 표 (화면 낭독기용)</caption>
+    <thead><tr><th>라인</th><th>설비</th><th>종류</th><th>상태</th><th>경과</th><th>지금 도구</th><th>누적 출력</th><th>추정 보정 비용</th><th>접힌 수</th></tr></thead>
+    <tbody></tbody></table></div>
+</section>
+<section class="card feed-card">
   <h2>최근 상태 변화</h2>
   <ul class="feed" id="feed">
     {% for f in feed %}
@@ -63,6 +125,7 @@
     {% endfor %}
   </ul>
 </section>
+</div>
 <script>
 (function () {
   var root = document.getElementById("d01"), feed = document.getElementById("feed"), timer = null;
@@ -72,7 +135,7 @@
   function refresh() {
     fetch("/?part=body", {headers: {accept: "text/html"}}).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status); return r.text();
-    }).then(function (h) { root.innerHTML = h; }).catch(function (err) {
+    }).then(function (h) { root.innerHTML = h; if (window.agentdashTwin) window.agentdashTwin.panelRefreshed(); }).catch(function (err) {
       document.getElementById("sse").textContent = "새로고침 실패: " + err.message;
     });
   }
@@ -90,4 +153,5 @@
   setInterval(refresh, 15000);   // 경과 · 기다린 시간 갱신
 })();
 </script>
+{% include "_twin.html" %}
 {% endblock %}

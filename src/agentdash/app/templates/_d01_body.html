@@ -1,4 +1,5 @@
-{# D-01 관제판 본문 — /?part=body 로 다시 받아 바꿔 끼운다. 배치 스타일은 dashboard.html head (색 · 간격 = base 토큰) #}
+{# D-01 공장 평면도 — 패널 (v0.3 관제판 항목 전부 + 「선택한 설비」). /?part=body 로 다시 받아 바꿔 끼운다 — 평면도 SVG 는 여기 없다.
+   배치 스타일은 dashboard.html head (색 · 간격 = base 토큰). 「선택한 설비」 내용은 _twin.html 이 채우고, 갱신 뒤 다시 넣는다. #}
 {% if budget %}
 <div id="budget-band" class="card band {{ budget.cls }}" role="status">
   {% if budget.error %}
@@ -11,7 +12,8 @@
 </div>
 {% endif %}
 
-<section aria-label="상태별" class="stack-sm">
+<aside class="panel stack" aria-label="관제 패널">
+<section aria-label="상태별" class="stack-sm" id="st-cards">
   <div class="grid kpis">
     {% for s in card_states %}
     <div class="card kpi st-{{ s }}" data-state="{{ s }}">
@@ -43,37 +45,33 @@
   </div>
 </section>
 
-<div class="cols">
-<div class="stack">
-  <section class="card">
+<section class="card" id="turns">
     <h2>내 차례 <span class="sub">권한 대기 먼저, 그다음 기다린 시간 긴 순</span></h2>
     {% if my_turn %}
-    <div class="tbl wide"><table>
-      <thead><tr><th>상태</th><th>프로젝트</th><th>이름</th><th>마지막 도구</th><th class="num">기다린 시간</th><th>복사</th></tr></thead>
-      <tbody>
+    <ol class="turns">
       {% for r in my_turn %}
-      <tr data-key="{{ r.agent_key }}">
-        <td><span class="badge st-{{ r.state }}">{{ state_ko.get(r.state, r.state) }}</span> <code>{{ r.state_reason }}</code></td>
-        <td>{{ r.project }}</td>
-        <td><a href="/agents/{{ r.agent_key }}">{{ r.name or r.agent_key }}</a></td>
-        <td>{% if r.last_tool %}{{ r.last_tool.tool }} <span class="ev">{{ r.last_tool.target }}</span>{% else %}<span class="muted">없음</span>{% endif %}</td>
-        <td class="num" title="기준: {{ r.wait_basis }}">{{ r.wait }}</td>
-        <td class="nowrap">
-          <button class="copy" type="button" data-copy="{{ r.cwd }}" {% if not r.cwd %}disabled title="cwd 없음"{% endif %}>cwd</button>
-          <button class="copy" type="button" data-copy="{{ r.name or r.agent_key }}">이름</button>
-        </td>
-      </tr>
+      <li class="turn st-{{ r.state }}" data-key="{{ r.agent_key }}">
+        <div class="t1"><span class="badge st-{{ r.state }}">{{ state_ko.get(r.state, r.state) }}</span> <code>{{ r.state_reason }}</code>
+          <span class="wait" title="기준: {{ r.wait_basis }}">{{ r.wait }}</span></div>
+        <div><a class="name" href="/agents/{{ r.agent_key }}">{{ r.name or r.agent_key }}</a> <span class="muted">{{ r.project }}</span></div>
+        <div class="ev">{% if r.last_tool %}{{ r.last_tool.tool }} {{ r.last_tool.target }}{% else %}마지막 도구 없음{% endif %}</div>
+        <div class="nowrap">
+          <button class="copy" type="button" data-copy="{{ r.cwd }}" {% if not r.cwd %}disabled title="cwd 없음"{% endif %}>cwd 복사</button>
+          <button class="copy" type="button" data-copy="{{ r.name or r.agent_key }}">이름 복사</button>
+        </div>
+      </li>
       {% endfor %}
-      </tbody>
-    </table></div>
+    </ol>
     {% else %}
     <p class="muted">기다리는 세션 없음 (WAITING_INPUT · WAITING_PERMISSION 0).{% if not hooks_seen %} 훅이 설치되지 않아 권한 대기는 입력 대기로 합쳐진다 (spec §9.3).{% endif %}</p>
     {% endif %}
   </section>
-
-  <section class="card">
-    <h2>살아 있는 에이전트 {{ live|length }}</h2>
-    {% if live %}
+  <section class="card" id="twin-sel-card">
+    <h2>선택한 설비 <span class="sub">평면도에서 누르면 요약 · 두 번 누르거나 Enter 면 D-03 · Esc 로 해제</span></h2>
+    <div id="twin-sel" hidden></div>
+    <div id="live-list">
+      <h3 class="h3">살아 있는 에이전트 {{ live|length }}</h3>
+      {% if live %}
     <div class="grid">
       {% for a in live %}
       <div class="agent st-{{ a.state }}{% if a.state_reason == 'R-12' %} slow{% endif %}" data-key="{{ a.agent_key }}">
@@ -89,10 +87,9 @@
     {% else %}
     <p class="muted">살아 있는 에이전트 없음.</p>
     {% endif %}
+    </div>
   </section>
-</div>
 
-<aside class="stack">
   <section class="card">
     <h2>오늘 <span class="sub">KST</span></h2>
     <div class="mini">
@@ -120,4 +117,3 @@
     <span class="n {{ 'warn' if sm.parse_errors else '' }}">{{ sm.parse_errors }} 건</span>
   </section>
 </aside>
-</div>

@@ -108,7 +108,8 @@ twin.scope_count(resp) -> int   # Σ 칸 + Σ machine.folded + Σ inlet.folded +
                          tool, target: ok IS NULL 인 마지막 tool_call (at, tool_use_id 최대) | null,
                          out_total = totals.output_tokens, out_est_total = totals.output_est_total,
                          cost_est_usd = totals.cost_est_usd (자기 몫, 단가 없으면 null),
-                         spark: usage.spark 30 칸, folded: 이 설비 안에 접힌 수(자손 포함), box: {x,y,w=BOX_W,h=BOX_H} }],
+                         spark: usage.spark 30 칸, folded: 이 설비 안에 접힌 수(자손 포함), box: {x,y,w=BOX_W,h=BOX_H},
+                         ★wake_at: SLEEPING 이면 마지막 state_log 근거의 ScheduleWakeup 시각 | null (웨이브 B, spec §7.4 「깰 시각」) }],
             pipes: [{ src, dst, kind: spawn|workflow|handback, at }]   # 같은 라인 안. src "U:<project_key>" = 반입구 → 자식
             ★inlet: { key: "U:<project_key>", name, folded, box } | null,
             ★folded_line: bool, ★hidden: n (접힌 라인이면 그 라인 범위 안 수, machines=[] · box.h = LINE_HEAD) }],
@@ -357,3 +358,52 @@ twin.scope_count(resp) -> int   # Σ 칸 + Σ machine.folded + Σ inlet.folded +
 - **R-2T-dev2-1 → 개발1 (check_twin)**: 위 §1 2차-T 공표를 쓴다 — 칸 + 접힘 = `twin.scope_count(resp)` 대 `resp["agents_in_scope"]` (독립으로 다시 세려면 범위 = 위 「범위」 정의) · 겹침 = `twin.overlaps` · 스파크 대조는 `machines[].spark`.
 - **R-2T-dev2-2 → 아키텍트 / 사람 (확인)**: 해석 T-tw-1 · T-tw-3 (spec §5.4 표 「미확인 반입구 — 맨 오른쪽」 vs T-02) — 맞지 않으면 decisions.md 에 결정을 달아 주면 바꾼다.
 
+
+## 10. 2차-T 웨이브 B — Task 6 D-01 공장 평면도 (2026-10-21, spec v0.4 §7 D-01 · §7.3 · §7.4)
+
+바꾼 파일: `templates/{dashboard,_d01_body}.html` · 새 `templates/_twin.html` · `routers/pages.py` (title 「공장 평면도」 · 기간 · 프로젝트 옵션) · `core/twin.py` (★`wake_at`) · `tests/test_twin.py` (+1 `test_sleeping_wake_at`, 키 집합에 `wake_at`) · 새 `tests/test_twin_page.py` (11). **`tests/test_dashboard.py` 수정 없음** (12 passed 그대로).
+
+화면: 공통 틀 안 2 열 격자 — 평면도 카드 7fr(≈ 70 %, 넓은 화면 sticky) · 패널 3fr, 1000 px 미만이면 평면도 → 패널 → 피드 1 열. 예산 띠는 맨 위 한 줄(없으면 행 자체 없음, `:has`).
+- 평면도: 라인 = 둥근 구역 카드(머리 = 이름 · 「가동 n · 대기 n」, 접힌 라인은 점선 「접힘 (T-06) · 설비 n」) · 설비 = 머리띠 있는 상자(왼쪽 위 표시등 · 이름 24 자 clipPath · 오른쪽 위 「!」/경보 삼각형/z · 상태줄(상태 · 경과 또는 깰 시각) · 종류 · 지금 도구 · 30 분 스파크 + 지금 분당 `[추정]` · 누적(기록 · 추정 · 비용) · 아래 꼬리표 「+N 완료」 · 바닥 볼트) · 반입구 = 점선 상자(부모 범위 밖 n · 미확인 n) · 배관 = 굵은 관(외피 + 속관, 둥근 꺾임) 위 입자(자식 RUNNING) · 컨베이어(message) = 점선, 굵기 = 횟수 · 워크플로 묶음 틀 = 점선 테두리 · 바닥 점 격자. 색은 토큰만(`.st-<STATE>` 의 --c/--c-fg), hex · rgb 0.
+- 좌표 = 응답 `box` 그대로 (T-07). 스크립트에 배치 상수 0 — 라인 머리 높이도 응답(첫 설비 y − 라인 y)에서 읽음.
+- 상호작용: 누르기 = 패널 「선택한 설비」(빠른 요약 즉시 + `/api/v1/agents/{key}` 근거 · 부모 · 자식 · 자손 포함 작업량, 선택 중엔 살아 있는 에이전트 목록 숨김, 패널 15 초 갱신 뒤 다시 넣음) · 두 번 누르기 / Enter = D-03 · Space 선택 · Esc 해제 · Tab 순회(포커스 설비가 화면 밖이면 그쪽으로 이동, 250 ms 뒤 선택) · 버튼 − + 맞춤 · Ctrl(⌘)+휠 포인터 기준 확대 · 휠 = 평면도 안 위아래 이동(끝이면 페이지 스크롤) · 끌기 이동. 맞춤 = 다 넣었을 때 배율 < 0.55 면 폭 맞춤(≤ 1) 위에서부터.
+- 숨김 표 `#twin-table` (`.sr-only` 감싼 div — 표를 직접 sr-only 로 하면 390 px 에서 가로 넘침 1067 px 였음, 고침).
+- 실시간: `openStream` 공유(탭당 EventSource 1) — `agent.state` 즉시 다시 칠함(클래스 · 상태줄 · aria · 자식 배관 입자) · 평면도에 없는 키 → `soon()` 1 초 묶음 · `agent.new`/`edge.new` 1 초 묶음 + 흐름 1 회(관이 있으면 바로, 없으면 다시 받은 뒤) · `agent.usage` 5 초 묶음 · 경과 글자 5 초 · 60 초 다시 받기 · 숨은 탭 = `.paused`(입자 정지) · 테마 바뀜 = 다시 그림(`redraws` +1).
+- E2E 전역: `window.agentdashTwin = {render, machineEl, redraws, flows, flowsReduced, flowMiss, appeared, renders, loads, lastPaintMs, stateLog, vb, scale, select, fit, reload}`.
+
+| 항목 | 실측 | 방법 |
+|---|---|---|
+| 정적 계약 (G-35) | `tests/test_twin_page.py` 11 passed — 평면도 + 패널 항목 전부 · 예산 띠 맨 위 · 빈 DB · reduced-motion 블록(.lamp .beacon .alarm .flow .burst .appear animation:none + transition:none) · §7.4 움직임 문자열 · 토큰만 · 외부 스크립트 0 · EventSource 1 · 접근성(role · tabindex · aria-label · Enter · dblclick · sr-only) · 전역 API · 모르는 키 → soon() · 1 초 · 5 초 묶음 · 배치 상수 0 | `uv run pytest -q tests/test_twin_page.py` |
+| G-34 회귀 | `tests/test_dashboard.py` 12 passed (수정 0) | `uv run pytest -q tests/test_dashboard.py` |
+| pytest 전체 | **419 passed** | `uv run pytest -q` |
+| 대비 | G-30 PASS 48 쌍 · 글자 최소 5.6:1 · 도형 3.3:1 | `uv run python src/agentdash/tools/check_contrast.py` |
+| make gate | **PASS 31 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 4** — G-15 송신 미검증(8095 사용 중, 정상) · G-33 · G-34 · G-35 개발 테스트 PASS · QA 표지 대기 | `AGENTDASH_DB=data/agentdash-v2a-verify.db make gate` |
+
+브라우저 (Chrome, 창 1400×653 고정 — 창 크기 조절 대신 같은 출처 iframe 390 / 1400):
+
+| 측정 | 결과 |
+|---|---|
+| 실제 기록 복사 DB (`data/agentdash-dev2-twin.db` = verify DB `sqlite3 backup` 사본 · `AGENTDASH_NO_WATCH=1` · 8097) | 라인 5 · 설비 12 · 반입구 3 · 배관 12 (spawn 9 · handback 3) · 접힌 완료 10 · 계산 1.6 ms · 평면도 카드 936 px / main 1385 px (≈ 68 %) |
+| 가로 스크롤 | 390 밝은 · 390 다크 · 1400 밝은 · 1400 다크 = 4/4 `scrollWidth == clientWidth` (375/375 · 1385/1385), 넘친 요소 0 (svg · 표 안 제외) |
+| 테마 전환 | 토글 → `data-theme=dark` · `redraws` +1 · 상자 면 `--surface` 다크 값 · 표시등 `--st-running` 다크 값 |
+| 가짜 루트 (`data/dev2-twin-fake/` · DB `data/agentdash-dev2-twin-fake.db` 새로 · 감시기 켬 · 살아 있는 `sleep` pid S1) | |
+| spawn → 보이기 | 세션 기록 + 서브에이전트 2 파일 쓰기 → 두 설비 DOM 등장 **1.22 초** (세션 RUNNING 은 0.22 초) · 새 설비 나타남 2 · spawn 흐름 2 · 흐름 놓침 0 |
+| 훅 → 표시등 | `POST /hooks/event` permission_prompt → `data-state=WAITING_PERMISSION` **23 ms** · 다시 칠하기 프레임 5.6 ms · 경광등 · 「!」 표시 |
+| handback | task-notification completed 덧붙임 → 역흐름 1 회(250 ms 시점 burst 1 · flows 2→3) · worker 1 DONE **154 ms** · 흐림 opacity 0.5 · handback 배관 1 |
+| 키보드 | 맞춤 버튼 → Tab → 세션 → 서브 1 → 서브 2 순 · 포커스 테두리 3.4 px · 포커스 250 ms 뒤 패널 요약 · Enter → `/agents/A%3Aa0000000000000001` (D-03) |
+| reduced-motion (에뮬레이션 대신: 그 @media 블록 규칙을 조건 없이 주입 + `matchMedia` reduce 참) | 움직임 twin 애니메이션 5 → **0** · 전이 0 · 그 뒤 WAITING 경광등 · handback 도 0 (burst 요소 0 · flowsReduced 1) |
+| 콘솔 오류 | 0 (새로고침 뒤 · 클릭 · 이벤트) |
+| 숨은 탭 입자 멈춤 | 정적 계약만 (`visibilitychange` → `.paused` → `animation-play-state: paused`) — 확장 도구로 탭을 숨기지 못해 실측 못 함 |
+| 정리 | 띄운 PID 만 kill (서버 2 · sleep 1) · 8097 LISTEN 0 · 탭 닫음 · `~/.claude/settings.json` mtime 1792131308 · sha1 `8641eb22e8f5` 그대로 |
+
+스크린샷 (커밋 안 함): `outputs/e2e/dev2-twin/` 6 장 — real-light-1400 · real-dark-1400-selected · real-dark-1400-stale-inlet · real-dark-390-iframe · fake-dark-spawn-flow · fake-dark-waiting-handback-done-selected.
+
+### 해석 · 남은 것
+- 가짜 루트에서 세션 행은 S1(`sessions/<pid>.json`)만으로 먼저 생긴다(STALE) — 「새 세션 + 서브 2 → ≤ 5 초」 중 세션은 기록 쓰기 전부터 평면도에 있었다. 서브 2 는 1.22 초.
+- 실제 24h 평면도는 라인이 세로로 쌓여(서버 배치) 넓은 화면에서 오른쪽이 빈다 — 배치는 T-04 대로 두고 브라우저에서 바꾸지 않았다(T-07).
+- SLEEPING 깰 시각은 `wake_at`(state_log 근거) — 근거에 시각이 없으면 경과를 보인다.
+
+### 3 요청 (웨이브 B)
+- **R-2T-dev2-3 → 아키텍트**: `base.html` 머리글 링크 「D-01 관제판」 → 「D-01 공장 평면도」 (spec v0.4 D-01 이름, 화면 제목 · h1 은 바꿨음).
+- **R-2T-dev2-4 → QA2 (G-33 · G-35)**: 측정 손잡이 = `window.agentdashTwin` (`machineEl` · `flows` · `flowsReduced` · `redraws` · `lastPaintMs` · `stateLog[{key,state,at}]`). 가짜 루트 도우미 꼴은 위 표(세션 jsonl + `subagents/agent-*.{meta.json,jsonl}` · 훅 curl · task-notification 덧붙임).
+- **R-2T-dev2-5 → 개발1 (참고)**: twin 응답에 ★`wake_at` 이 늘었다 — check_twin 의 키 비교가 있으면 맞춰 달라 (지금 G-32 PASS).
