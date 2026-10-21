@@ -176,6 +176,24 @@
     if (m.state === "STALE" && m.last_ago_s != null) return "기록 " + dur(agoNow(m.last_ago_s)) + " 전";
     return dur(agoNow(m.elapsed_s));
   }
+  // 「지금 도구」 (DEF-QA2-404) — 끝난 설비는 비운다(서버도 null). 상자 너비를 넘으면 SVG 글자 길이를 재서 말줄임
+  function toolText(m) {
+    if (FINAL[m.state]) return "";
+    return m.tool ? m.tool + (m.target ? " " + m.target : "") : "지금 도구 없음";
+  }
+  function fitText(t, maxW) {
+    var full = t.textContent, len;
+    if (full.length > 80) { full = full.slice(0, 80); t.textContent = full + "…"; }   // 글자 수 상한 (재기 전에)
+    try { len = t.getComputedTextLength(); } catch (e) { return; }                      // 그려지지 않은 SVG — 상한만
+    if (!len || len <= maxW) return;
+    var lo = 0, hi = full.length;
+    while (lo < hi) {
+      var mid = (lo + hi + 1) >> 1;
+      t.textContent = full.slice(0, mid) + "…";
+      if (t.getComputedTextLength() <= maxW) lo = mid; else hi = mid - 1;
+    }
+    t.textContent = full.slice(0, lo) + "…";
+  }
   function stateText(m) {
     var ko = STATE_KO[m.state] || m.state;
     if (m.state === "SLEEPING" && m.wake_at) return ko + " · 깰 " + hhmm(m.wake_at);
@@ -183,7 +201,7 @@
   }
   function ariaOf(m) {
     return m.name + ", " + (STATE_KO[m.state] || m.state) + ", 경과 " + timeText(m) +
-      (m.tool ? ", 도구 " + m.tool : "") + (m.folded ? ", 접힌 완료 " + m.folded : "");
+      (m.tool && !FINAL[m.state] ? ", 도구 " + m.tool : "") + (m.folded ? ", 접힌 완료 " + m.folded : "");
   }
   function machineEl(key) {
     return svg.querySelector('g.machine[data-key="' + (window.CSS && CSS.escape ? CSS.escape(key) : key) + '"]');
@@ -381,7 +399,9 @@
     var body = el("g", {"clip-path": cb}, mc);
     txt({"class": "m-st", x: 10, y: 39}, stateText(m), body).setAttribute("data-role", "state");
     txt({"class": "m-kind", x: w - 10, y: 39, "text-anchor": "end"}, KIND_KO[m.kind] || m.kind, body);
-    txt({"class": m.tool ? "m-tool" : "m-kind", x: 10, y: 53}, m.tool ? m.tool + (m.target ? " " + m.target : "") : "지금 도구 없음", body);
+    var tl = txt({"class": m.tool ? "m-tool" : "m-kind", x: 10, y: 53}, toolText(m), body);
+    tl.setAttribute("data-role", "tool");
+    fitText(tl, w - 20);
     // 스파크 (30 분 · 분당 추정 보정 출력) + 지금 분당
     var sp = m.spark || [], x0 = 10, x1 = w - 64, yb = 72, hgt = 13;
     el("line", {"class": "spark-base", x1: x0, x2: x1, y1: yb + 0.5, y2: yb + 0.5}, body);
@@ -702,7 +722,7 @@
       m.state = state; m.rule = (reason || "").split(" ")[0] || m.rule;
       var zero = 0 - (Date.now() - fetchedAt) / 1000;         // agoNow() 로 읽으면 지금 = 0
       m.since = new Date().toISOString(); m.elapsed_s = zero;
-      if (FINAL[state]) m.ended_ago_s = zero; else m.ended_ago_s = null;
+      if (FINAL[state]) { m.ended_ago_s = zero; m.tool = null; m.target = null; } else m.ended_ago_s = null;
       if (state !== "STALE") m.last_ago_s = zero;            // 멈춤 의심은 기록이 끊겨서 — 마지막 기록 시각은 그대로
       if (state !== "SLEEPING") m.wake_at = null;
     }
@@ -711,6 +731,8 @@
     if (m) {
       var st = g.querySelector('[data-role="state"]');
       if (st) st.textContent = stateText(m);
+      var tl = g.querySelector('[data-role="tool"]');
+      if (tl) { tl.textContent = toolText(m); fitText(tl, m.box.w - 20); }
       g.setAttribute("aria-label", ariaOf(m));
     }
     svg.querySelectorAll("g.pipe-g" + attr("data-child", key)).forEach(function (p) {

@@ -190,3 +190,14 @@ def test_elapsed_text_by_state():
     assert "ended_ago_s" in body and "last_ago_s" in body and "elapsed_s" in body and '" 전"' in body
     assert "FINAL[m.state]" in body and '"STALE"' in body
     assert s.count("timeText(m)") >= 3                                              # 상태줄 · aria · 표
+
+
+def test_tool_line_ellipsis_and_final_empty():
+    """DEF-QA2-404: 「지금 도구」 는 상자 너비에 맞춰 말줄임(…) — SVG 글자 길이를 재서 자른다(+ 글자 수 상한).
+    끝난 설비(DONE · FAILED)는 비운다 (서버도 tool/target = null)."""
+    s = src("_twin.html")
+    m = re.search(r"function fitText\(t, maxW\) \{[\s\S]*?\n  \}", s)
+    assert m and "getComputedTextLength" in m.group(0) and "…" in m.group(0)
+    assert re.search(r'data-role", "tool"', s) or "data-role\", \"tool\"" in s or '"data-role": "tool"' in s
+    assert re.search(r"fitText\([^)]*w - 20\)", s)
+    assert re.search(r"function toolText\(m\) \{[\s\S]{0,200}?FINAL\[m\.state\][\s\S]{0,40}?\"\"", s)

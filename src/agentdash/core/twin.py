@@ -16,6 +16,7 @@ T-06: 그 뒤에도 칸 > limit 이면 T-01 순서 뒤 라인부터 `folded_line
 누적 · 비용 = usage.totals(con, key) 자기 몫과 같은 SQL 합, 스파크 = usage.spark (개발1, progress-dev1 §1).
 설비 시간 키 (DEF-QA2-401): elapsed_s = now − state_since (지금 상태가 이어진 시간 — 백필 직후엔 백필 시각부터),
   ended_ago_s = now − ended_at (DONE · FAILED 만, 아니면 null), last_ago_s = now − last_event_at (마지막 기록부터).
+  끝난 설비(DONE · FAILED)는 tool · target = null (「지금 도구」 없음, DEF-QA2-404).
 본문은 싣지 않는다 — 이름 앞 24 자 · 키 · 상태 · 규칙 코드 · 도구 이름 · 대상(저장값 ≤ 300) · 숫자뿐.
 """
 
@@ -344,7 +345,7 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
             max_col = max(max_col, c)
             o, oe, cost = tot.get(k, (0, 0, None))
             final = a["state"] in FINAL
-            tl = tools.get(k)
+            tl = None if final else tools.get(k)            # 끝난 설비는 「지금 도구」 없음 (DEF-QA2-404)
             since_dt = _parse(a["state_since"])
             ended_dt = _parse(a["ended_at"]) if final else None
             last_dt = _parse(a["last_event_at"])

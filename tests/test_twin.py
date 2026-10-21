@@ -775,7 +775,7 @@ def test_twin_api_width(client):
         assert "width" in r.json()["error"]
 
 
-# ── DEF-QA2-401 경과 의미 ─────────────────────────────────────────────────
+# ── DEF-QA2-401 경과 의미 · DEF-QA2-404 끝난 설비의 지금 도구 ──────────────────
 def test_elapsed_meaning_after_backfill(db):
     """백필 직후(state_since = 백필 시각 1 분 전 전부 같음)에도 끝난 설비는 ended_at 기준, 멈춤 의심은 마지막 기록 기준이 다르다.
     elapsed_s = now − state_since (상태 지속) · ended_ago_s = now − ended_at (DONE/FAILED 만) · last_ago_s = now − last_event_at."""
@@ -796,3 +796,15 @@ def test_elapsed_meaning_after_backfill(db):
     m = machines(build(db))
     assert m["A:fut"]["ended_ago_s"] == 0 and m["A:fut"]["last_ago_s"] == 0
 
+
+def test_final_machine_has_no_current_tool(db):
+    s = Synth(db)
+    s.agent("S:s0", "SESSION")
+    s.agent("A:done", parent="S:s0", state="DONE", rule="R-08", last=3)
+    s.agent("A:run", parent="S:s0")
+    s.tool("A:done", "t1", 4, "SubagentHandback", "x", ok=None)               # 결과 없는 마지막 도구가 남아 있어도
+    s.tool("A:run", "t2", 1, "Bash", "uv run pytest", ok=None)
+    db.commit()
+    m = machines(build(db))
+    assert (m["A:done"]["tool"], m["A:done"]["target"]) == (None, None)
+    assert (m["A:run"]["tool"], m["A:run"]["target"]) == ("Bash", "uv run pytest")
