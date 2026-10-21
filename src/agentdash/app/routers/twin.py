@@ -1,18 +1,27 @@
-"""D-01 공장 평면도 API — `GET /api/v1/twin?since=&project=` (spec.md v0.4 §5.4 · §8).
+"""D-01 공장 평면도 API — `GET /api/v1/twin?since=&project=` (spec.md v0.4 §5.4 · §8). 담당 개발2.
 
-소유: **개발2** (goal.md §3 · 계획 Task 3 · 4). 아키텍트는 Phase 0 에 자리만 만들었다 —
-개발2 가 `core/twin.build(...)` 를 연결하면서 아래 placeholder 를 지운다(`check_routes` 가 남은 placeholder 를 센다).
+    /api/v1/twin?since=24h|7d|30m|all|<ISO>&project=<project_key 또는 라인 이름 일부>
+
+데이터 · 좌표는 `core/twin.build` 가 결정적으로 계산한다(T-07). 잘못된 since 는 422 + 이유 (조용히 기본값으로 바꾸지 않는다).
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
-from agentdash.app import placeholders
+from agentdash.core import twin as T
+from agentdash.db import conn
 
 router = APIRouter()
 
 
 @router.get("/api/v1/twin")
-def twin_api(since: str | None = None, project: str | None = None) -> dict:
-    return placeholders.api("개발2", lines=[], links=[], folded_lines=0)
+def twin_api(since: str | None = None, project: str | None = None):
+    con = conn.connect()
+    try:
+        return T.build(con, since=since, project=project)
+    except T.TwinError as e:
+        return JSONResponse({"error": str(e)}, status_code=422)
+    finally:
+        con.close()

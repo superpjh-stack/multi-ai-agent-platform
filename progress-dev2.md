@@ -85,6 +85,40 @@ Accept: text/event-stream (또는 ?follow=1) 이면 붙잡고 실시간, 그 밖
 - `scripts/hooks_install.py --settings <경로> [--uninstall | --check] [--yes]` — `--settings` 필수(기본값 없음). 실제 `claude_home/settings.json` 에는 `--yes` 거부(종료코드 2) · pytest 중 거부. 덧붙인 항목 = `{"hooks":[{"type":"command","command":"bash '<저장소>/scripts/hook_send.sh'","timeout":5}]}` (matcher 없음).
 - `make hooks-install | hooks-uninstall | hooks-check` — 대상 = `SETTINGS=` 또는 `settings.claude_home/settings.json`. **사람만 실행.**
 
+### 2차-T 공표 (2026-10-21 · Task 3 · 4) — `agentdash.core.twin` · `GET /api/v1/twin` — **개발1 check_twin 은 이대로 쓴다**
+
+```python
+from agentdash.core import twin
+twin.BOX_W = 208 · BOX_H = 92 · GAP_X = 56 · GAP_Y = 16 · LINE_HEAD = 36 · LINE_PAD = 16 · LINE_GAP = 24
+twin.FOLD_AFTER_SEC = 1800 (T-05) · MACHINE_LIMIT = 300 (T-06) · NAME_MAX = 24 · INLET_NAME = "부모 미확인"
+twin.TwinError = graph.GraphError                        # 잘못된 since → API 422 {"error"}
+twin.build(con, *, since: str | None = None, project: str | None = None, now: datetime | None = None,
+           limit: int = MACHINE_LIMIT) -> dict           # now 없으면 twin._now() (UTC). 설비마다 쿼리 안 함
+twin.overlaps(resp) -> int      # 설비 상자(반입구 포함) 쌍 겹침 + 라인 상자 쌍 겹침. 닿기만 하면 0
+twin.scope_count(resp) -> int   # Σ 칸 + Σ machine.folded + Σ inlet.folded + Σ line.hidden  (V-17: == resp["agents_in_scope"])
+```
+
+응답 (spec §8 키 그대로 + 덧붙인 키 ★):
+```
+{ generated_at: "YYYY-MM-DDTHH:MM:SS" (UTC),
+  lines: [{ key: project_key, name: 라인 이름(project_label ≤ 60), live: 살아 있는 수(범위 안, 접힌 것 포함),
+            counts: {STATE: n} (범위 안 전부), box: {x,y,w,h} 정수,
+            machines: [{ key, kind, name(≤ 24), parent: agent.parent_key 그대로(다른 라인 · 범위 밖일 수 있음),
+                         state, rule: state_reason, since: state_since | null, elapsed_s: max(0, now − since) | null,
+                         tool, target: ok IS NULL 인 마지막 tool_call (at, tool_use_id 최대) | null,
+                         out_total = totals.output_tokens, out_est_total = totals.output_est_total,
+                         cost_est_usd = totals.cost_est_usd (자기 몫, 단가 없으면 null),
+                         spark: usage.spark 30 칸, folded: 이 설비 안에 접힌 수(자손 포함), box: {x,y,w=BOX_W,h=BOX_H} }],
+            pipes: [{ src, dst, kind: spawn|workflow|handback, at }]   # 같은 라인 안. src "U:<project_key>" = 반입구 → 자식
+            ★inlet: { key: "U:<project_key>", name, folded, box } | null,
+            ★folded_line: bool, ★hidden: n (접힌 라인이면 그 라인 범위 안 수, machines=[] · box.h = LINE_HEAD) }],
+  links: [{ src, dst, ★kind: message|spawn|workflow|handback, count }]  # message 전부(같은 라인 · 다른 라인 · X:외부) + 라인 간 spawn/workflow/handback
+  folded_lines: n, ★agents_in_scope: n, ★filters: {since, since_arg, project}, ★elapsed_ms: 계산 시간 }
+```
+- 좌표: 설비 x = LINE_PAD + 열 × (BOX_W + GAP_X), y = 라인 y + LINE_HEAD + 행 × (BOX_H + GAP_Y). 라인 h = LINE_HEAD + 행 수 × (BOX_H + GAP_Y) − GAP_Y + LINE_PAD, 다음 라인 y += h + LINE_GAP. 열 = `(box.x − LINE_PAD) // (BOX_W + GAP_X)`.
+- 범위: 살아 있는 것 + `max(last_event_at, started_at) ≥ since`(기본 24h) · 프로젝트 = project_key 같음 또는 라인 이름에 포함 (D-02 와 같음). **조상은 끌어오지 않는다** — 부모가 범위 밖 · 다른 라인 · 순환이면 반입구 행(0 열) 옆 1 열에 뿌리로. 다른 라인 부모(범위 안)는 links `spawn` 만(반입구 배관 없음).
+- T-05: DONE/FAILED · ended_at < now − 30 분 · **자손 전부 DONE/FAILED** 일 때만 접는다(살아 있는 자손을 숨기지 않는다 — 해석). 뿌리(세션)는 접지 않는다. 반입구 아래 뿌리는 반입구 `folded` 로.
+
 ## 2. 진행 (웨이브 A, 2026-10-17)
 
 | 항목 | 실측 | 검증 방법 |
@@ -302,3 +336,24 @@ Accept: text/event-stream (또는 ?follow=1) 이면 붙잡고 실시간, 그 밖
 - **R-2B-dev2-1 → 아키텍트**: `tests/test_design.py::test_no_dev_style_includes` 의 **xfail 해제** (개발1 · 개발2 둘 다 `_dev*_style` include 0 — 지금 XPASS(strict) 로 G-14 · G-30 이 FAIL). 해제하면 base 의 1차 별칭(`--warn --card --soft --st-RUNNING …`)도 개발2 화면은 더 쓰지 않는다(D-01~D-03 은 새 토큰만).
 - **R-2B-dev2-2 → 아키텍트 (선택)**: base.html 다크 블록에 `color-scheme: dark` (밝은 쪽 `light`) — 다크에서 표 · 피드 안 스크롤 막대와 select 가 밝게 그려진다(스크린샷 `d01-dark-390-table.jpg`). 화면에서 고칠 수 없는 브라우저 기본 부품이라 토큰 쪽 일.
 - **R-2B-dev2-3 → QA2 (G-29 · G-30)**: 화면 스크립트는 `agentdashAlerts.subscribe` 로 SSE 를 같이 쓴다 — 탭당 연결 1 은 `agentdashAlerts.subscribers()` · 서버 ESTABLISHED 로 잴 수 있다. D-02 테마 전환 다시 그림 = `window.__graphThemeRedraws`.
+
+## 9. 2차-T 웨이브 A (2026-10-21, spec v0.4 §5.4 · §8 · 계획 Task 3 · 4)
+
+| 항목 | 실측 | 명령 |
+|---|---|---|
+| Task 3 `core/twin.py` (G-31) | `tests/test_twin.py` 20 passed — T-01~T-07 각 ≥ 1 (T-05 3 · T-04 2) · Review Focus 5 (`test_cross_line_parent` · `test_parent_cycle_terminates` · `test_root_never_folded` · `test_name_clip_24` · `test_elapsed_clamped`) · 설비 값 = `usage.totals` · `usage.spark`(개발1 실제, 5f916b1) · 합성 300 설비(라인 7 · 0~4 열) 겹침 0 · ≤ 300 ms | `uv run pytest -q tests/test_twin.py` |
+| Task 4 `/api/v1/twin` | 4 passed — 빈 DB 200 (`_placeholder` 없음 · lines [] ) · build 와 같음 · 잘못된 since 422 · 모든 문자열 ≤ 300 | 같은 파일 |
+| G-17 | PASS — 화면 7 + API 14 = 21 HTTP 200 · placeholder 0 | `uv run python src/agentdash/tools/check_routes.py` |
+| pytest 전체 | **404 passed** | `uv run pytest -q` |
+| 실제 DB (`data/agentdash-v2a-verify.db`, 읽기만, now = 실행 시각) | 24h: 라인 5 · 설비 11 · 접힘 10 · 접힌 라인 0 · 반입구 3 · 배관 10 · links 0 · 겹침 0 · 범위 21 = 칸+접힘 21 · **0.9 ms** / 7d: 라인 10 · 설비 23 · 접힘 32 · 겹침 0 · 55 = 55 · 1.0 ms / all: 라인 32 · 설비 83 · 접힘 239 · 접힌 라인 0 · links 4 · 겹침 0 · 322 = 322 · **3.4 ms** (3 회 중 최소) | scratchpad `twin_measure.py` — `twin.build` · `twin.overlaps` · `twin.scope_count` |
+| 24h 반입구 3 의 원인 | 5 설비 전부 STALE 서브에이전트, 부모가 DONE 이고 24h 밖(10-12 · 10-09 · 09-29) — 부모 미확인(NULL) 0. `parent` 키에는 실제 부모가 남는다 | 같은 DB `SELECT kind,state,last_event_at FROM agent WHERE agent_key=<parent>` |
+
+### 해석 (spec 에 없는 부분 — 바꾸려면 §3 로)
+- **T-tw-1** 범위 밖 부모 → 반입구 아래 (조상 끌어오지 않음). V-17 「칸 + 접힘 = 범위 안 에이전트」 를 그대로 맞추려고. D-02 는 조상을 `ctx` 로 끌어온다 — 화면에서 반입구 이름이 「부모 미확인」 이라 범위 밖 부모와 구별이 안 됨 → Task 6 에서 `parent` 가 있으면 「부모 범위 밖」 으로 표기할 예정.
+- **T-tw-2** T-05 는 자손 전부 끝났을 때만 접는다 (spec 「자손도 함께 접힌다」 를 살아 있는 자손까지 숨기지 않는 쪽으로).
+- **T-tw-3** WORKFLOW 노드도 설비 한 칸 (묶음 틀은 Task 6 그리기 몫) · 미확인 반입구는 0 열 첫 반입구 행 (spec 표 「맨 오른쪽」 과 T-02 「반입구 아래 1 열」 중 T-02 를 따름).
+
+### 3 요청 (2차-T)
+- **R-2T-dev2-1 → 개발1 (check_twin)**: 위 §1 2차-T 공표를 쓴다 — 칸 + 접힘 = `twin.scope_count(resp)` 대 `resp["agents_in_scope"]` (독립으로 다시 세려면 범위 = 위 「범위」 정의) · 겹침 = `twin.overlaps` · 스파크 대조는 `machines[].spark`.
+- **R-2T-dev2-2 → 아키텍트 / 사람 (확인)**: 해석 T-tw-1 · T-tw-3 (spec §5.4 표 「미확인 반입구 — 맨 오른쪽」 vs T-02) — 맞지 않으면 decisions.md 에 결정을 달아 주면 바꾼다.
+
