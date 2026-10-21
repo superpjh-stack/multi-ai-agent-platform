@@ -1,7 +1,7 @@
 # 멀티 에이전트 대시보드 — 명령 (CLAUDE.md 「명령」 · spec.md §1.3). 전부 `uv run …` (시스템 python 을 쓰지 않는다).
 # 원천(~/.claude · 다른 에이전트 폴더)은 읽기만 한다. DB 는 AGENTDASH_DB (기본 config/settings.yaml 의 data/agentdash.db,
 # 개발마다 AGENTDASH_DB=data/agentdash-dev{N}.db). 포트 8095 (개발 중 AGENTDASH_PORT=8096 · 8097). 127.0.0.1 만.
-.PHONY: setup backfill run gate test hooks-install hooks-uninstall hooks-check pricing-check reprice export \
+.PHONY: setup backfill reestimate run gate test hooks-install hooks-uninstall hooks-check pricing-check reprice export \
         fixtures check-fixtures check-routes check-readonly check-bind check-no-payload check-hooks \
         check-decisions check-contrast check-twin
 
@@ -16,6 +16,9 @@ setup:            ## uv sync · DB 생성 · schema.sql 적용 (G-01)
 
 backfill:         ## 과거 기록 전체 읽기 [SINCE=2026-08-01] — 개발1 (collect/). DB 는 AGENTDASH_DB
 	uv run python -m agentdash.collect.backfill $(if $(SINCE),--since $(SINCE),)
+
+reestimate:       ## D-24 보관 기록 유지 · 현재 원천의 추정값만 보완 (변경 전 자동 DB 백업)
+	uv run python -m agentdash.collect.reestimate
 
 run:              ## 감시기 + 웹 (127.0.0.1:8095) — 빈 DB 면 기동 때 백필, 그 뒤 감시기가 증분으로 이어 읽는다
 	uv run python -m agentdash.app

@@ -52,6 +52,8 @@ def test_common_classes_and_header():
     for st in STATES:
         assert f".st-{st}" in s, st
     assert 'id="theme-btn"' in s and 'id="alerts-btn"' in s
+    assert '<a class="brand" href="/">멀티 에이전트 플랫폼 대시보드</a>' in s
+    assert s.index('class="brand"') < s.index('<nav>')
     assert '"/insights"' in s and "D-07 비용 · 효율" in s
     assert '{% include "_alerts.html" ignore missing %}' in s
 

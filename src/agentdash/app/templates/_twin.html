@@ -517,24 +517,23 @@
   }
 
   // ── 확대 · 축소 · 이동 (viewBox 만) ──
-  function size() { return {w: wrap.clientWidth || 1, h: wrap.clientHeight || 1}; }
+  function size() {
+    var r = svg.getBoundingClientRect();          // 소수점 높이를 유지해 SVG meet 축소로 12px 밑으로 내려가지 않게
+    return {w: r.width || 1, h: r.height || 1};
+  }
   function applyVB() {
     var c = size();
     vb.h = vb.w * c.h / c.w;                      // 화면 비율과 같게 — meet 여백 없이
-    svg.setAttribute("viewBox", [vb.x, vb.y, vb.w, vb.h].map(function (v) { return v.toFixed(1); }).join(" "));
+    svg.setAttribute("viewBox", [vb.x, vb.y, vb.w, vb.h].join(" "));
     T.vb = {x: vb.x, y: vb.y, w: vb.w, h: vb.h};
     T.scale = Math.round(c.w / vb.w * 100) / 100;
   }
-  // 좁은 화면 맞춤 배율 하한 (D-34 · DEF-QA2-503) — 상자 이름 글자(.m-name 12 px) × 배율 ≥ 10 px.
-  // 좁은 화면 = 서버 격자가 1 열(T-08 — 라인 둘이 나란히 안 들어감). 넘친 부분은 카드 안에서 끌기 · 휠로 이동(viewBox 만).
-  var MIN_TEXT_PX = 10, NAME_PX = 12, FIT_MIN = MIN_TEXT_PX / NAME_PX;
-  function narrow() { var g = T.last && T.last.grid; return !!(g && g.cols <= 1); }
+  // 첫 표시 · 맞춤은 모든 화면에서 가장 작은 SVG 글자(종류 · 접힘 10 px)도 12 px 이상.
+  // D-35 사용자 승인: 전체를 억지로 축소하지 않고 넘치는 부분은 카드 안에서 이동한다.
+  var MIN_TEXT_PX = 12, SMALLEST_TEXT_PX = 10, FIT_MIN = MIN_TEXT_PX / SMALLEST_TEXT_PX, FIT_PAD = 16;
   function fit() {
-    var c = size(), pad = 16, W = content.w + 2 * pad, H = content.h + 2 * pad;
-    var s = Math.min(c.w / W, c.h / H);
-    if (s < 0.55) s = Math.min(c.w / W, 1);        // 다 넣으면 글자가 너무 작다 — 폭에 맞추고 위에서부터 (휠 · 끌기로 이동)
-    else s = Math.min(s, 1.2);
-    if (narrow() && s < FIT_MIN) s = FIT_MIN;      // 좁은 화면 — 읽히는 크기로 두고 위 · 왼쪽부터 (넓은 화면 D-31 은 그대로)
+    var c = size(), pad = FIT_PAD, W = content.w + 2 * pad, H = content.h + 2 * pad;
+    var s = Math.max(FIT_MIN, Math.min(c.w / W, c.h / H, 1.2));
     vb.w = c.w / s; vb.x = content.x - pad; vb.y = content.y - pad;
     applyVB();
   }
@@ -598,10 +597,12 @@
   }
   svg.addEventListener("pointerup", endDrag);
   svg.addEventListener("pointercancel", endDrag);
-  // T-08 격자 너비 — 서버가 라인 격자를 이 너비에 맞춰 짠다(브라우저는 열을 계산하지 않는다). 평면도 카드 실제 너비 ÷ GRID_SCALE
-  // (맞춤이 폭 맞춤으로 떨어질 때의 배율 — 글자가 읽히는 크기에서 카드 폭을 채우게). 카드 크기가 바뀌면 1 초 묶음으로 다시 받는다.
-  var GRID_SCALE = 0.8, sentW = null, tResize = null;
-  function gridWidth() { return Math.max(1, Math.round((wrap.clientWidth || 1) / GRID_SCALE)); }
+  // T-08: 읽기 배율에서 카드에 들어가는 너비(안쪽 여백 제외)를 서버에 전달한다.
+  // 열과 좌표는 서버가 계산한다. 카드 크기가 바뀌면 1 초 묶음으로 다시 받는다.
+  var sentW = null, tResize = null;
+  function gridWidth() {
+    return Math.max(1, Math.floor((wrap.clientWidth || 1) / FIT_MIN - 2 * FIT_PAD));
+  }
   if (window.ResizeObserver) new ResizeObserver(function () {
     if (T.last) applyVB();
     if (sentW !== null && gridWidth() !== sentW) {

@@ -49,7 +49,7 @@ def _media_block(css: str, query: str) -> str:
 def test_d01_has_floor_and_panel(db):
     seed_d01(db)
     t = client().get("/").text
-    assert "<title>공장 평면도" in t and "D-01 공장 평면도" in t
+    assert "<title>에이전트 모니터링 · 멀티 에이전트 플랫폼 대시보드" in t and "D-01 에이전트 모니터링" in t
     assert 'id="twin-svg"' in t and 'id="twin-table"' in t
     for ctl in ('id="twin-zoom-in"', 'id="twin-zoom-out"', 'id="twin-fit"', 'id="twin-since"', 'id="twin-project"'):
         assert ctl in t, ctl                                                  # 확대 · 축소 · 맞춤 · 필터 (spec D-01)
@@ -265,33 +265,81 @@ def test_final_without_ended_at_uses_last_record():
     assert out == ["기록 1시간 56분 전", "기록 2분 전", "28분 전", "1분 8초", "1분 8초"]
 
 
-def test_narrow_fit_min_scale():
-    """DEF-QA2-503 / D-34: 첫 표시 · 「맞춤」 배율 하한 = 상자 이름 글자(.m-name 12 px) × 배율 ≥ 10 px.
-    좁은 화면(서버 격자 1 열)에서만 하한을 걸고 위 · 왼쪽부터 보이며 넘친 부분은 카드 안에서 이동(viewBox — 페이지 스크롤 아님).
-    넓은 화면(2 열 이상)의 D-31 폭 맞춤은 그대로."""
+@pytest.mark.parametrize("card_w,card_h,content_w,content_h,cols", [
+    (307, 340, 504, 1500, 1),
+    (866, 700, 1152, 1400, 2),
+    (866, 700, 504, 1500, 1),
+    (2000, 700, 1152, 1400, 3),
+    (307, 340, 1, 1, 1),
+])
+def test_fit_keeps_all_svg_text_at_least_12px(card_w, card_h, content_w, content_h, cols):
+    """사용자 승인: 첫 표시/맞춤은 화면 폭·열 수에 관계없이 가장 작은 글자도 12px.
+    서버 좌표는 그대로 두고 카드 내부에서 이동한다. 기존 10px 이름 하한을 대체한다."""
     s = src("_twin.html")
-    assert re.search(r"var MIN_TEXT_PX = 10, NAME_PX = 12,", s)
-    assert re.search(r"#twin-svg \.m-name \{ font-size:12px;", s)          # NAME_PX 가 CSS 와 같다
-    assert re.search(r"FIT_MIN = MIN_TEXT_PX / NAME_PX", s)
-    f = _js_fn(s, "fit")
-    assert "narrow()" in f and re.search(r"s < FIT_MIN\) s = FIT_MIN", f)
-    nf = _js_fn(s, "narrow")
-    assert "grid" in nf and "cols" in nf
-    assert "overflow:hidden" in re.search(r"\.tw-wrap \{[^}]*\}", s).group(0)   # 넘침은 카드 안에서만
-    # 동작 — 390 px 급 카드(307 px) · 1 열 · 504 px 라인: 배율 ≥ FIT_MIN, 2 열 넓은 화면은 폭 맞춤 그대로
+    constants = re.search(r"var MIN_TEXT_PX = 12, SMALLEST_TEXT_PX = 10,[^;]*;", s)
+    assert constants
+    assert "overflow:hidden" in re.search(r"\.tw-wrap \{[^}]*\}", s).group(0)
     js = "\n".join([
-        "var GRID_SCALE = 0.8;",
-        re.search(r"var MIN_TEXT_PX = 10, NAME_PX = 12,[^;]*;", s).group(0),
-        "var vb = {}, content, T = {}, C;",
+        constants.group(0),
+        f"var vb = {{}}, content = {{x: 0, y: 0, w: {content_w}, h: {content_h}}};",
+        f"var T = {{last: {{grid: {{cols: {cols}}}}}}}, C = {{w: {card_w}, h: {card_h}}};",
         "function size() { return C; }",
         "function applyVB() { T.scale = C.w / vb.w; }",
-        nf, f,
-        "C = {w: 307, h: 340}; content = {x: 0, y: 0, w: 504, h: 1500}; T.last = {grid: {cols: 1}}; fit(); var a = T.scale, ay = vb.y;",
-        "C = {w: 866, h: 700}; content = {x: 0, y: 0, w: 1152, h: 1400}; T.last = {grid: {cols: 2}}; fit(); var b = T.scale;",
-        "console.log(JSON.stringify([a, ay, b]));",
+        _js_fn(s, "fit"),
+        "fit(); console.log(JSON.stringify([T.scale, vb.x, vb.y]));",
     ])
     import json
-    a, ay, b = json.loads(_node(js))
-    assert a * 12 >= 10 - 1e-9 and a < 0.9, a
-    assert ay == -16
-    assert abs(b - 866 / (1152 + 32)) < 1e-6, b                              # D-31 그대로 (하한 안 걸림)
+    scale, x, y = json.loads(_node(js))
+    for size in re.findall(r"#twin-svg[^{}]+\{[^}]*?font-size:\s*(\d+)px", s):
+        assert int(size) * scale >= 12 - 1e-9, (size, scale)
+    assert (x, y) == (-16, -16)
+
+
+def test_grid_width_reserves_readable_scale_and_padding():
+    """읽기 배율과 여백을 반영한 너비를 전달하고 격자 계산은 서버에 맡긴다."""
+    s = src("_twin.html")
+    constants = re.search(r"var MIN_TEXT_PX = 12, SMALLEST_TEXT_PX = 10,[^;]*;", s)
+    assert constants
+    js = "\n".join([
+        constants.group(0), "var wrap = {};", _js_fn(s, "gridWidth"),
+        "console.log(JSON.stringify([307,866,2000,0].map(function (w) { wrap.clientWidth = w; return gridWidth(); })));",
+    ])
+    import json
+    widths = json.loads(_node(js))
+    for card, width in zip([307, 866, 2000], widths):
+        assert (width + 32) * 1.2 <= card + 1e-9
+        assert (width + 33) * 1.2 > card
+    assert widths[-1] == 1
+
+
+def test_manual_zoom_can_zoom_out_and_fit_restores_readable_size():
+    s = src("_twin.html")
+    constants = re.search(r"var MIN_TEXT_PX = 12, SMALLEST_TEXT_PX = 10,[^;]*;", s)
+    assert constants
+    js = "\n".join([
+        constants.group(0),
+        "var T = {}, C = {w: 307, h: 340}, vb = {}, content = {x:0, y:0, w:504, h:1500};",
+        "function size() { return C; } function applyVB() { T.scale = C.w / vb.w; }",
+        _js_fn(s, "fit"), _js_fn(s, "zoomAt"),
+        "fit(); zoomAt(0.8, 0, 0); var manual = T.scale; fit();",
+        "console.log(JSON.stringify([manual, T.scale]));",
+    ])
+    import json
+    manual, fitted = json.loads(_node(js))
+    assert manual < 1.2 and fitted * 10 >= 12 - 1e-9
+
+
+def test_fractional_svg_height_does_not_shrink_text_below_minimum():
+    """62vh/72vh는 소수점 px: clientHeight 정수 반올림 때문에 meet 배율이 작아지지 않아야 한다."""
+    s = src("_twin.html")
+    js = "\n".join([
+        re.search(r"var MIN_TEXT_PX = 12, SMALLEST_TEXT_PX = 10,[^;]*;", s).group(0),
+        "var vb = {}, T = {}, content = {x:0, y:0, w:1152, h:1400}, attr;",
+        "var svg = {getBoundingClientRect: function () { return {width:900, height:477.953125}; },",
+        "setAttribute: function (k,v) { attr = v; }};",
+        "var wrap = {clientWidth:900, clientHeight:478};",
+        _js_fn(s, "size"), _js_fn(s, "applyVB"), _js_fn(s, "fit"),
+        "fit(); var b = attr.split(' ').map(Number);",
+        "console.log(Math.min(900/b[2], 477.953125/b[3]) * 10);",
+    ])
+    assert float(_node(js)) >= 12 - 1e-9

@@ -79,12 +79,12 @@
 </style>
 {% endblock %}
 {% block body %}
-<div class="page-h"><h1>D-01 공장 평면도</h1><span class="live-st" id="sse">실시간: 연결 전</span></div>
+<div class="page-h"><h1>D-01 에이전트 모니터링</h1><span class="live-st" id="sse">실시간: 연결 전</span></div>
 <div class="d01">
 <div id="d01">{% include "_d01_body.html" %}</div>
-<section class="card" id="floor" aria-label="공장 평면도">
+<section class="card" id="floor" aria-label="에이전트 모니터링">
   <div class="tw-bar">
-    <h2>공장 평면도 <span class="sub" id="twin-stat">불러오는 중…</span></h2>
+    <h2>에이전트 모니터링 <span class="sub" id="twin-stat">불러오는 중…</span></h2>
     <form class="tw-filter" id="twin-filter" onsubmit="return false">
       <label>기간 <select id="twin-since" name="since">
         {% for v, t in since_opts %}<option value="{{ v }}"{% if v == since %} selected{% endif %}>{{ t }}</option>{% endfor %}
@@ -105,12 +105,12 @@
     <span class="tw-lg pipe-lg"><b></b>배관 = 띄움 · 반환</span><span class="tw-lg conv-lg"><b></b>컨베이어 = 메시지</span>
   </p>
   <div class="tw-wrap" id="twin-wrap">
-    <svg id="twin-svg" role="group" aria-label="공장 평면도 — 라인 = 프로젝트 · 설비 = 에이전트 · 배관 = 띄움/반환"
+    <svg id="twin-svg" role="group" aria-label="에이전트 모니터링 — 라인 = 프로젝트 · 설비 = 에이전트 · 배관 = 띄움/반환"
          aria-describedby="twin-help" viewBox="0 0 1000 600" preserveAspectRatio="xMinYMin meet"></svg>
   </div>
-  <p class="tw-help muted" id="twin-help">누르면 오른쪽 「선택한 설비」 · 두 번 누르거나 Enter 면 D-03 · Tab 으로 설비 순회 · 끌어서 이동 · Ctrl+휠 확대 · 휠 위아래 이동 · 패널 숫자는 필터와 무관한 전체</p>
+  <p class="tw-help muted" id="twin-help">맞춤은 글자 최소 12px · 넘치는 부분은 끌어서 이동 · 누르면 오른쪽 「선택한 설비」 · 두 번 누르거나 Enter 면 D-03 · Tab 으로 설비 순회 · Ctrl+휠 확대 · 휠 위아래 이동 · 패널 숫자는 필터와 무관한 전체</p>
   <p class="tw-err" id="twin-err" role="alert"></p>
-  <div class="sr-only"><table id="twin-table"><caption>공장 평면도 설비 표 (화면 낭독기용)</caption>
+  <div class="sr-only"><table id="twin-table"><caption>에이전트 모니터링 표 (화면 낭독기용)</caption>
     <thead><tr><th>라인</th><th>설비</th><th>종류</th><th>상태</th><th>경과</th><th>지금 도구</th><th>누적 출력</th><th>추정 보정 비용</th><th>접힌 수</th></tr></thead>
     <tbody></tbody></table></div>
 </section>

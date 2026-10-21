@@ -88,7 +88,7 @@ def dashboard(request: Request, part: str | None = None, since: str | None = Non
         if part == "body":
             return render(request, "_d01_body.html", ctx)
         since_opts = TWIN_SINCE if since in (None, "") or since in dict(TWIN_SINCE) else ((since, since[:40]),) + TWIN_SINCE
-        ctx.update(title="공장 평면도", active="/", feed=Q.feed(con, 40), projects=_projects(con, project),
+        ctx.update(title="에이전트 모니터링", active="/", feed=Q.feed(con, 40), projects=_projects(con, project),
                    project=project or "", since=since or "24h", since_opts=since_opts, states=S.STATES)
         return render(request, "dashboard.html", ctx)
     finally:

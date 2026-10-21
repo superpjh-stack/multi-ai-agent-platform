@@ -2,6 +2,97 @@
 
 > 실측값 + 검증 명령만 적는다. 본문은 붙여 넣지 않는다(숫자 · 경로만). 상태 파일 형식은 `goal.md` §4.1.
 
+## 화면 명칭·시스템 제목 변경 — 2026-10-21 (사용자 요청)
+
+- 공통 상단 첫 줄 왼쪽: **멀티 에이전트 플랫폼 대시보드**. 데스크톱 32px · 390px 화면 24px, 왼쪽 여백 16px. 메뉴 위에 배치하고 좁은 화면에서 줄바꿈 허용.
+- D-01 메뉴/페이지 제목/모니터링 영역/접근성 이름: **에이전트 모니터링**. 브라우저 제목도 새 시스템 이름 사용.
+- 검증: `uv run pytest tests/test_design.py tests/test_twin_page.py tests/test_dashboard.py tests/test_routes.py -q` **45 passed** · `git diff --check` PASS. 1400/390 화면 가로 넘침 0 (1385/1385 · 375/375).
+- 운영 반영: 승인된 `local.agentdash.dashboard` 서비스만 `launchctl kickstart -k gui/501/local.agentdash.dashboard`로 재시작. 8095 브라우저 새 제목·실시간 연결 확인, viewport 초기화, 사용자 탭 유지.
+- 스크린샷: `outputs/e2e/title-20261021/{desktop,mobile}.png` (git 제외). 데이터 모델·수집·관계·배치 변경 없음.
+
+## 운영 전환 완료 — 2026-10-21 (사용자 「승인함」, D-37)
+
+| 항목 | 실측 | 검증 |
+|---|---|---|
+| 설치 | `~/Library/LaunchAgents/local.agentdash.dashboard.plist` · 준비 파일과 동일 · 문법 OK | plistlib 비교 · `plutil -lint` |
+| 서비스 | `gui/501/local.agentdash.dashboard` **running** · 관리 PID 3421 · Python 3438 · runs 1 · last exit never | `launchctl print gui/501/local.agentdash.dashboard` |
+| 운영 설정 | 기존 `data/agentdash.db` · 127.0.0.1:8095 · uv frozen/offline · RunAtLoad/KeepAlive true · 로그 data/ | 설치 설정/launchctl 출력/기동 로그 |
+| HTTP/화면 | HTTP **200** · Chrome 기존 8095 탭 새로고침 · 「실시간: 연결됨」 · 콘솔 오류 **0** | curl · 브라우저 DOM · dev logs |
+| 데이터 | 사용량 **30,404** · 추정 비용 NULL **0** · parse_error **0** · integrity **ok**. 최신 원천 시각 10:20:45Z → 점검 10:20:56Z (19:20 KST) | SQLite `mode=ro` 검사 |
+| 화면 저장 | `outputs/e2e/operations-20261021/production-8095.png` (git 제외) | 브라우저 캡처 |
+
+설치 직후 상태 확인 스크립트에서 HTTP 모듈 변수 이름 충돌이 있었지만 서비스 등록 자체는 완료됐으며, 별도 curl/launchctl/브라우저로 정상 기동을 확인했다. 실제 로그아웃/재로그인 시험은 하지 않았으며 자동 실행 등록을 확인했다. 운영 서비스와 사용자 브라우저 탭은 유지한다. 아래 설치 승인 대기는 이 완료 기록으로 대체한다.
+
+## 운영 전환 준비 — 2026-10-21 (실제 설치·8095 기동 승인 대기)
+
+| 항목 | 실측 | 검증 |
+|---|---|---|
+| 운영 DB | 기존 `data/agentdash.db` 유지. 첫 동기화 사용량 28,566→30,040 · SESSION 83 · SUBAGENT 287 · WORKFLOW_AGENT 6 · WORKFLOW 1 · parse_error 0 · integrity ok · foreign_key 위반 0 | `backfill.run(since=settings.get().backfill_since)` · SQLite 검사 |
+| 보존 | 동기화 전 에이전트 344/344 · 요청 28,566/28,566 유지. G-04 보관 SESSION 8 · SUBAGENT 19, 빠짐/남음 0 | 백업/현재 DB 키 집합 독립 비교 · G-04 |
+| 동기화 전 백업 | `data/agentdash.before-sync-20261021T090949059669Z.db` | SQLite backup API |
+| 보관 비용 칸 | 첫 운영 DB 게이트 G-24 FAIL (NULL 계약 위반 2,694). 사본 검증 후 기존 `usage.reprice` 적용: 기록 비용/단가 버전 변경 0 · 추정 비용 칸 보완 2,694 · 남은 비용 NULL 0. 출력 추정값은 복원하지 않음 | 메모리 사본/운영 DB 전후 기록 비용 비교 · `check_usage_est.py` PASS |
+| 비용 보완 전 백업 | `data/agentdash.before-reprice-20261021T092252220128Z.db` | SQLite backup API |
+| 운영 DB 전체 게이트 | **PASS 35 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0**, 18:27 KST · strict exit 0. 읽기 전용 pytest **474 passed** · 원천 트리 변경 0. QA 필수 항목은 기존 보고서 포함 | `uv run python src/agentdash/tools/gate.py --strict` (기본 운영 DB) |
+| 운영 명령 실기동 | `uv run --frozen --offline python -m agentdash.app` · 기본 운영 DB · 임시 8096 · PID 66692. 브라우저 「실시간: 연결됨」 · 콘솔 오류 0 | 실제 기동 · Chrome D-01 |
+| 자동 실행 준비 | `data/local.agentdash.dashboard.plist` · 운영 DB 절대 경로 · 8095 · 로그인 시작/종료 시 재시작 · 로그 data/ · 실제 설치 없음 | `plistlib` 재읽기 동일 · `plutil -lint` OK |
+| 운영 절차 | `docs/operations.md`: 수동 기동·중지·재시작·자동 실행 설치·검사 명령 | 문서 확인 · `git diff --check` |
+| 정리 | 직접 띄운 8096 PID 66692 종료 · exit 0, 검증 탭 닫음. 8095 HTTP 연결 거부 상태를 확인했고 새로 기동하지 않음 | 실행 세션 종료 · 사전 curl exit 7 |
+
+남은 단계는 준비된 plist의 사용자 LaunchAgent 설치와 8095 운영 기동에 대한 명시적 승인이다. `CLAUDE.md`의 에이전트 8096/8097 제한과 기존 LaunchAgent 사람 전용 지침에 따라 이 작업만 대기한다. 운영 DB와 실행 명령 검증은 완료했다.
+
+## D-35 평면도 가독성 완료 — 2026-10-21 (사용자 「12 오케」)
+
+| 항목 | 실측 | 검증 |
+|---|---|---|
+| 표시 기준 | 첫 표시/맞춤: 모든 화면의 최소 실효 글자 **12px**, 배율 1.2. 이름 14.4px · 상태/도구/누적 13.2px · 종류/접힘 12px. 수동 축소 허용, 맞춤 시 복원 | `_twin.html` · `dashboard.html` · `decisions.md` D-35 |
+| 격자 | 전달 width = `floor(카드 너비 / 1.2 - 32)`, 최소 1. 서버 좌표 그대로, 카드 내부 이동 유지 | `test_grid_width_reserves_readable_scale_and_padding` |
+| 회귀 | 화면 테스트 **25 passed**, 기존 관제판 포함 **37 passed**. 전체 **474 passed** (읽기 전용 가짜 루트 · 트리 변경 0 포함) | `uv run pytest tests/test_twin_page.py tests/test_dashboard.py -q` · `make gate` G-14 |
+| 브라우저 | Chrome 390×844 · 1400×900, 밝은/어두운 테마. 최소 실효 글자 12px (부동소수점 오차 < 1e-9). 가로 scrollWidth/clientWidth 375/375 · 1385/1385. 앱 콘솔 오류 0 | SVG viewBox/실제 표시 크기/계산된 font-size 독립 측정 |
+| 조작 | 390px 수동 축소 후 맞춤 배율 1.2 복원. 카드 휠 이동 viewBox y -16→1390.67, 페이지 scrollX/Y 0 | 브라우저 버튼·휠 직접 조작 |
+| 소수점 보정 | 1400×653에서 종전 clientHeight 반올림 사용 시 11.99865px → 실제 SVG 경계 크기 사용 후 12px | 브라우저 실측 · `test_fractional_svg_height_does_not_shrink_text_below_minimum` |
+| 수용 게이트 | 최종 **PASS 35 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0**, 17:48 KST. 앞선 17:43 측정은 34 PASS/1 FAIL이었고 임시 감시 서버 종료 후 재측정에서 재현되지 않음(첫 실패 원인 미확정). QA 필수 항목은 기존 보고서도 포함 | `AGENTDASH_DB=data/agentdash-review-20261021.db make gate` |
+| 스크린샷 | `outputs/e2e/readability-20261021/{light,dark}-{390,1400}.png` 4장 (git 제외) | CUA 브라우저 캡처 |
+| 정리 | 임시 서버 PID 57329 종료 · exit 0. 브라우저 viewport 초기화 · 생성한 검증 탭 닫음 | 실행 세션 종료 · 브라우저 정리 |
+
+종전 D-31/D-34 배율 해석은 D-35로 대체했다. 정본·데이터 모델·서버 배치 규칙·실제 훅·예산 변경 없음. 다음 순서는 **운영 실행 DB와 서버 실행 방식 정리**다.
+
+## D-24 보완 완료 — 2026-10-21 (사용자 설계 승인 · Codex)
+
+| 항목 | 실측 | 검증 |
+|---|---|---|
+| 구현 | `make reestimate` · `collect/reestimate.py` · 메모리 재수집 → 기존 요청의 추정 두 칸만 갱신 · 자동 백업 · 일 집계와 트랜잭션 적용 | `tests/test_reestimate.py` |
+| 신규 회귀 | **11 passed**: 보관 보존 · 기록값 유지 · 재실행 동일성 · 포크 소유권 · 읽기 전용 원천 · 단가 없음 · 새/불일치 요청 건너뜀 · 파싱/백업/집계 실패 · 원천 DB 경로/하드 링크 거부 | `uv run pytest tests/test_reestimate.py -q` |
+| 전체 회귀 | **467 passed**, 22.03 s (기존 456 + 신규 11) | `uv run pytest -q` |
+| 수용 게이트 | **PASS 35 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0**, 17:26 KST (QA 필수 항목은 기존 보고서 포함) | `AGENTDASH_DB=data/agentdash-review-20261021.db make gate` |
+| 기본 DB 적용 | 기존 사용량 **28,566건 유지** · 추정값 갱신 **25,494건** · 기록 일치 25,872 · 원천 미확인 2,694 · 기록 불일치 0 · 추정 비용 NULL **28,188 → 2,694** | `make reestimate` |
+| 백업 | 적용 전 SQLite 스냅샷 `data/agentdash.reestimate-20261021T082354683403Z.db` | SQLite backup API |
+| 실제 DB 독립 비교 | 백업 ↔ 적용 후 기록 열 전부 동일 · 기타 9 테이블 동일 (에이전트/관계/상태/오프셋 포함) · 기록 비용 합 동일 | SQLite `mode=ro` 전체 행 비교 |
+| 기본 DB 재실행 | 갱신 **0** · 백업 추가 없음 · 테이블 전체 행 동일 · 남은 추정 비용 NULL 2,694 | `reestimate.run()` + 읽기 전용 비교 |
+
+원천 미확인 2,694건의 추정값은 복원하지 못했으며 기존 행/숫자를 보존했다. 원천에만 있는 새 요청은 이 명령에서 넣지 않는다(기본 DB 적용 시 1,270건, 원천은 계속 증가). 새 기록 수집은 기존 백필/감시기 몫이다. 예산·실제 훅·운영 서버 설정·정본 변경 없음.
+
+다음 작업: **D-31 · D-34 평면도 가독성** 검토 후 설계 확정 → 운영 실행 DB/서버 재기동 정리. D-24의 종전 설계 확인 대기는 아래 재개 점검 당시 기록이며 위 완료 내역으로 대체한다.
+
+## 재개 점검 — 2026-10-21 (Codex)
+
+| 항목 | 실측 | 검증 |
+|---|---|---|
+| 전체 테스트 | 샌드박스: 449 PASS · 3 FAIL · 4 ERROR (로컬 bind 거부 · 감시기 미반영). 제한 밖 재실행: **456 passed**, 21.46 s | `uv run pytest -q` |
+| 새 검증 DB | `data/agentdash-review-20261021.db` · 최초 백필 10.8 s · SESSION 75 · SUBAGENT 254 · WORKFLOW_AGENT 6 · WORKFLOW 1 · parse_error 0 | `uv run python -m agentdash.collect.backfill --db data/agentdash-review-20261021.db` |
+| 수용 게이트 | **PASS 35 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 0** (17:03 KST). QA 필수 항목은 기존 리포트 재사용; 이번 회차 브라우저 E2E 전체 재측정은 아님 | `AGENTDASH_DB=data/agentdash-review-20261021.db make gate` |
+| 트윈 검증 | 15 설비 · 7 라인 · 범위 35/35 · 누적/스파크/시간/격자 불일치 0 · 겹침 0 · TEXT>300 0 · 1.7 ms | 위 명령 G-32 |
+| 기존 서비스 | 8095 기존 탭에 갱신 실패 표시 · HTTP 연결 거부 (응답 000, exit 7) | `curl --max-time 3 -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8095/` |
+| 임시 화면 | 검증 DB · 8096 · PID 51929 기동. 브라우저 D-01 「실시간: 연결됨」 · 라인 7 · 설비 17 · 접힘 20 · 범위 37 (감시 중 수량 변동) 확인 | `AGENTDASH_DB=data/agentdash-review-20261021.db AGENTDASH_PORT=8096 uv run python -m agentdash.app` · Chrome D-01 관찰 |
+| 임시 서버 정리 | 직접 띄운 실행 세션에 Ctrl+C · exit 0. 기존 8095 서버 및 기본 DB 변경 없음 | 실행 세션 종료 결과 |
+| D-24 현황 | 기본 DB usage_event 28,566 · cost_est_usd NULL 28,188. 검증 DB 27,022 · NULL 0 (측정 시각별 수량 변동). output_est NULL 자체는 비의심 요청에 정상 허용 | 각 DB SQLite `mode=ro`: `SELECT COUNT(*), SUM(output_est IS NULL), SUM(cost_est_usd IS NULL) FROM usage_event` |
+
+### 다음 작업 순서
+
+1. **D-24 설계 확인 대기:** 보관 데이터를 유지하면서 현재 원천을 재처리하는 `make reestimate` 추가 제안. 아직 구현·기본 DB 변경 없음. 삭제 원천 보존·중복 방지·추정 재계산·재실행 동일성 검증 필요.
+2. **D-31 · D-34 가독성:** 넓은 화면의 작은 글자와 맞춤 배율을 사람과 확인한 뒤 수정 범위 결정.
+3. **운영 재기동:** 기본 8095 서비스 실행 DB와 실행 방법 정리. 상시 실행 설정·실제 훅 설치는 기존 사람 전용 규칙 유지.
+4. **사람 결정:** D-23 · D-25~27 · D-32~34 가설 해소, 실제 예산 금액·OS 알림 확인. 기존 정본은 변경하지 않음.
+
 ## 2차-T 최종 보고 — 2026-10-21 · 루프 종료 (`goal.md` §4.4 EXIT 3 조건 충족)
 
 | EXIT 조건 | 실측 | 검증 |

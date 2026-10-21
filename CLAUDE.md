@@ -32,6 +32,10 @@
 
 ## 명령
 
+운영 DB·수동 실행·로그인 자동 실행·중지/재시작 절차는 `docs/operations.md` 참고. D-37 사용자 승인으로 `local.agentdash.dashboard` LaunchAgent를 설치했고 8095 운영 중이다(`data/agentdash.db`). 이 서비스는 회전 끝에 종료하지 않는다. 개발/검증은 계속 8096/8097만 사용하며 다른 서버는 종료하지 않는다.
+
+`make reestimate` (D-24, 사용자 승인): 현재 원천을 메모리 DB 에 처음부터 읽어 기존 요청의 추정 두 칸만 보완한다. `AGENTDASH_DB` 로 대상 기존 DB 선택. 변경 전 같은 폴더에 `<이름>.reestimate-<UTC>.db` SQLite 백업을 만든다. 기록값 · 보관 행 · 오프셋 · 관계 · 상태는 유지하고 일 집계만 다시 만든다. 원천 미확인 · 기록 불일치 행은 건너뛰고 건수와 남은 추정 비용 NULL 수를 표시한다. 새 요청 수집은 기존 `backfill`/감시기 몫이며, 원천이 없는 기록의 추정값을 복원했다고 간주하지 않는다. 파싱 오류 · 백업 실패 · 집계 실패 시 적용하지 않는다.
+
 `make setup`(uv sync · DB · schema) · `backfill` · `run` · **`gate`**(G-01~G-35 판정표) · `test` · `hooks-install` · `hooks-uninstall` · `hooks-check` · `pricing-check` · `reprice` · `export` · `fixtures`(픽스처 재생성 + 검사) · `check-fixtures` · `check-no-payload` · `check-readonly` · `check-hooks` · `check-bind` · `check-routes` · `check-decisions`(G-23) · `check-contrast`(G-30) · `check-twin`(G-32 · V-17 — 개발1, 없으면 종료코드 2).
 미구현 타깃은 `미구현 — 담당 개발N` 을 찍고 **종료코드 2** 로 실패한다. 검사 도구는 `src/agentdash/tools/`(`uv run python src/agentdash/tools/<도구>.py`), 출력 행 형식은 `G-nn  항목  PASS|FAIL|WARN|BLOCKED|미검증  실측` — `gate.py` 가 이 행을 읽는다. 검사기가 없으면 그 게이트는 FAIL(개발 몫) 또는 미검증(QA · 사람 몫).
 
