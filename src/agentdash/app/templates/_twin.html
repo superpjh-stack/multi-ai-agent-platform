@@ -393,7 +393,8 @@
     el("circle", {"class": "beacon", cx: 14, cy: 12, r: 9}, mc);
     var cn = clipFor(d, clips, "tw-cn-" + w, 24, 0, w - 24 - 26, 24);
     var cb = clipFor(d, clips, "tw-cb-" + w + "-" + h, 6, 24, w - 12, h - 24);
-    txt({"class": "m-name", x: 26, y: 16, "clip-path": cn}, m.name, mc);
+    var nm = txt({"class": "m-name", x: 26, y: 16, "clip-path": cn}, m.name, mc);
+    fitText(nm, w - 52);                           // 이름 줄도 「…」 (DEF-QA2-501) — x 26 ~ 오른쪽 배지 자리(w − 26)
     // 오른쪽 위 배지: 대기 「!」 · 멈춤 의심 경보 삼각형 · 잠듦 z
     var bang = el("g", {"class": "bang"}, mc);
     el("circle", {cx: w - 13, cy: 12, r: 7.5}, bang);

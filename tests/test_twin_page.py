@@ -213,3 +213,85 @@ def test_done_transition_reverse_flow_once():
     assert re.search(r'd\.state === "DONE"[\s\S]{0,300}revFlow\(d\.agent_key', h)
     fl = re.search(r"function flowNow\(e\) \{[\s\S]*?\n  \}", s).group(0)
     assert re.search(r'e\.kind === "handback"[\s\S]{0,80}revFlow\(e\.src, e\.dst\)', fl)
+
+
+def test_name_line_ellipsis():
+    """DEF-QA2-501: 설비 이름 줄도 도구 줄(DEF-QA2-404)처럼 SVG 글자 길이를 재서 머리띠 폭(오른쪽 배지 자리 빼고)에 맞춰
+    「…」 로 자른다 — clipPath 로 글자 중간이 잘리지 않게. 서버 24 자 자르기(NAME_MAX)는 그대로."""
+    from agentdash.core import twin
+    assert twin.NAME_MAX == 24
+    s = src("_twin.html")
+    dm = re.search(r"function drawMachine\(m, ln, layer, d, clips\) \{[\s\S]*?\n  \}", s).group(0)
+    m = re.search(r'var (\w+) = txt\(\{"class": "m-name"[^;]*\}, m\.name, mc\);', dm)
+    assert m, "이름 줄이 변수로 잡히지 않음"
+    assert re.search(r"fitText\(" + m.group(1) + r", w - 52\)", dm), "이름 줄 말줄임 없음 (x 26 ~ 배지 자리 w − 26)"
+
+
+def _js_fn(s: str, name: str) -> str:
+    m = re.search(r"  function " + name + r"\([^)]*\) \{[\s\S]*?\n  \}", s)
+    assert m, name
+    return m.group(0)
+
+
+def _node(js: str) -> str:
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 없음")
+    r = subprocess.run([node, "-e", js], capture_output=True, text=True, timeout=10)
+    assert r.returncode == 0, r.stderr
+    return r.stdout.strip()
+
+
+def test_final_without_ended_at_uses_last_record():
+    """DEF-QA2-502 / D-33: DONE · FAILED 이고 ended_at 이 없으면(ended_ago_s = null) 상태 지속(백필 시각부터)이 아니라
+    마지막 기록부터 「기록 n 전」 — 상태줄은 「끝남 · 기록 1시간 56분 전」. ended_at 이 있으면 그대로 「n 전」."""
+    s = src("_twin.html")
+    js = "\n".join([
+        "var FINAL = {DONE: 1, FAILED: 1}, fetchedAt = Date.now();",
+        _js_fn(s, "dur"), _js_fn(s, "agoNow"), _js_fn(s, "timeText"),
+        "var out = [",
+        "  timeText({state: 'DONE', ended_ago_s: null, last_ago_s: 6960, elapsed_s: 68}),",
+        "  timeText({state: 'FAILED', ended_ago_s: null, last_ago_s: 120, elapsed_s: 5}),",
+        "  timeText({state: 'DONE', ended_ago_s: 1680, last_ago_s: 1680, elapsed_s: 68}),",
+        "  timeText({state: 'DONE', ended_ago_s: null, last_ago_s: null, elapsed_s: 68}),",
+        "  timeText({state: 'RUNNING', ended_ago_s: null, last_ago_s: 3, elapsed_s: 68}),",
+        "];",
+        "console.log(JSON.stringify(out));",
+    ])
+    import json
+    out = json.loads(_node(js))
+    assert out == ["기록 1시간 56분 전", "기록 2분 전", "28분 전", "1분 8초", "1분 8초"]
+
+
+def test_narrow_fit_min_scale():
+    """DEF-QA2-503 / D-34: 첫 표시 · 「맞춤」 배율 하한 = 상자 이름 글자(.m-name 12 px) × 배율 ≥ 10 px.
+    좁은 화면(서버 격자 1 열)에서만 하한을 걸고 위 · 왼쪽부터 보이며 넘친 부분은 카드 안에서 이동(viewBox — 페이지 스크롤 아님).
+    넓은 화면(2 열 이상)의 D-31 폭 맞춤은 그대로."""
+    s = src("_twin.html")
+    assert re.search(r"var MIN_TEXT_PX = 10, NAME_PX = 12,", s)
+    assert re.search(r"#twin-svg \.m-name \{ font-size:12px;", s)          # NAME_PX 가 CSS 와 같다
+    assert re.search(r"FIT_MIN = MIN_TEXT_PX / NAME_PX", s)
+    f = _js_fn(s, "fit")
+    assert "narrow()" in f and re.search(r"s < FIT_MIN\) s = FIT_MIN", f)
+    nf = _js_fn(s, "narrow")
+    assert "grid" in nf and "cols" in nf
+    assert "overflow:hidden" in re.search(r"\.tw-wrap \{[^}]*\}", s).group(0)   # 넘침은 카드 안에서만
+    # 동작 — 390 px 급 카드(307 px) · 1 열 · 504 px 라인: 배율 ≥ FIT_MIN, 2 열 넓은 화면은 폭 맞춤 그대로
+    js = "\n".join([
+        "var GRID_SCALE = 0.8;",
+        re.search(r"var MIN_TEXT_PX = 10, NAME_PX = 12,[^;]*;", s).group(0),
+        "var vb = {}, content, T = {}, C;",
+        "function size() { return C; }",
+        "function applyVB() { T.scale = C.w / vb.w; }",
+        nf, f,
+        "C = {w: 307, h: 340}; content = {x: 0, y: 0, w: 504, h: 1500}; T.last = {grid: {cols: 1}}; fit(); var a = T.scale, ay = vb.y;",
+        "C = {w: 866, h: 700}; content = {x: 0, y: 0, w: 1152, h: 1400}; T.last = {grid: {cols: 2}}; fit(); var b = T.scale;",
+        "console.log(JSON.stringify([a, ay, b]));",
+    ])
+    import json
+    a, ay, b = json.loads(_node(js))
+    assert a * 12 >= 10 - 1e-9 and a < 0.9, a
+    assert ay == -16
+    assert abs(b - 866 / (1152 + 32)) < 1e-6, b                              # D-31 그대로 (하한 안 걸림)
