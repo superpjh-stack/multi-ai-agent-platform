@@ -302,7 +302,8 @@ def test_machine_values(db):
     assert (m["S:s0"]["tool"], m["S:s0"]["target"]) == (None, None)
     c = m["A:c"]
     assert set(c) == {"key", "kind", "name", "parent", "state", "rule", "since", "elapsed_s", "tool", "target",
-                      "out_total", "out_est_total", "cost_est_usd", "spark", "folded", "box", "wake_at"}
+                      "out_total", "out_est_total", "cost_est_usd", "spark", "folded", "box", "wake_at",
+                      "ended_ago_s", "last_ago_s"}
     assert c["parent"] == "S:s0" and c["kind"] == "SUBAGENT" and c["rule"] == "R-02a"
     assert c["box"] == {"x": c["box"]["x"], "y": c["box"]["y"], "w": T.BOX_W, "h": T.BOX_H}
     assert set(r) >= {"generated_at", "lines", "links", "folded_lines", "elapsed_ms"}
@@ -772,3 +773,26 @@ def test_twin_api_width(client):
         r = client.get("/api/v1/twin", params={"width": bad})
         assert r.status_code == 422, bad
         assert "width" in r.json()["error"]
+
+
+# ── DEF-QA2-401 경과 의미 ─────────────────────────────────────────────────
+def test_elapsed_meaning_after_backfill(db):
+    """백필 직후(state_since = 백필 시각 1 분 전 전부 같음)에도 끝난 설비는 ended_at 기준, 멈춤 의심은 마지막 기록 기준이 다르다.
+    elapsed_s = now − state_since (상태 지속) · ended_ago_s = now − ended_at (DONE/FAILED 만) · last_ago_s = now − last_event_at."""
+    s = Synth(db)
+    bf = iso(ago(1))
+    s.agent("S:s0", "SESSION", state_since=bf, last=0.5)
+    s.agent("A:d10", parent="S:s0", state="DONE", rule="R-08", last=10, state_since=bf)
+    s.agent("A:d20", parent="S:s0", state="FAILED", rule="R-10", last=20, state_since=bf)
+    s.agent("S:st", "SESSION", proj="-p-b", state="STALE", rule="R-11", last=60 * 20, state_since=bf)
+    db.commit()
+    m = machines(build(db))
+    assert {x["elapsed_s"] for x in m.values()} == {60}                       # 상태 지속은 모두 같다 (백필 시각)
+    assert m["A:d10"]["ended_ago_s"] == 600 and m["A:d20"]["ended_ago_s"] == 1200
+    assert m["S:s0"]["ended_ago_s"] is None and m["S:st"]["ended_ago_s"] is None
+    assert m["S:st"]["last_ago_s"] == 60 * 60 * 20 and m["S:s0"]["last_ago_s"] == 30
+    s.agent("A:fut", parent="S:s0", state="DONE", rule="R-08", last=-5)        # 미래 시각 → 0 으로
+    db.commit()
+    m = machines(build(db))
+    assert m["A:fut"]["ended_ago_s"] == 0 and m["A:fut"]["last_ago_s"] == 0
+

@@ -169,14 +169,20 @@
     var t = new Date(iso);
     return isNaN(t) ? iso : t.toLocaleTimeString("ko-KR", {hour: "2-digit", minute: "2-digit", hour12: false});
   }
-  function elapsedNow(m) { return m.elapsed_s == null ? null : m.elapsed_s + (Date.now() - fetchedAt) / 1000; }
+  function agoNow(v) { return v == null ? null : v + (Date.now() - fetchedAt) / 1000; }   // 응답 뒤 흐른 시간을 더한다
+  // 경과 글자 (DEF-QA2-401) — 끝난 설비: ended_at 로부터 n 전 · 멈춤 의심: 마지막 기록부터 n 전 · 그 밖: 상태 지속(state_since)
+  function timeText(m) {
+    if (FINAL[m.state] && m.ended_ago_s != null) return dur(agoNow(m.ended_ago_s)) + " 전";
+    if (m.state === "STALE" && m.last_ago_s != null) return "기록 " + dur(agoNow(m.last_ago_s)) + " 전";
+    return dur(agoNow(m.elapsed_s));
+  }
   function stateText(m) {
     var ko = STATE_KO[m.state] || m.state;
     if (m.state === "SLEEPING" && m.wake_at) return ko + " · 깰 " + hhmm(m.wake_at);
-    return ko + " · " + dur(elapsedNow(m));
+    return ko + " · " + timeText(m);
   }
   function ariaOf(m) {
-    return m.name + ", " + (STATE_KO[m.state] || m.state) + ", 경과 " + dur(elapsedNow(m)) +
+    return m.name + ", " + (STATE_KO[m.state] || m.state) + ", 경과 " + timeText(m) +
       (m.tool ? ", 도구 " + m.tool : "") + (m.folded ? ", 접힌 완료 " + m.folded : "");
   }
   function machineEl(key) {
@@ -431,7 +437,7 @@
       }
       ln.machines.forEach(function (m) {
         rows.push("<tr><td>" + esc(ln.name) + "</td><td>" + esc(m.name) + "</td><td>" + esc(KIND_KO[m.kind] || m.kind) +
-          "</td><td>" + esc(STATE_KO[m.state] || m.state) + " " + esc(m.rule || "") + "</td><td>" + esc(dur(m.elapsed_s)) +
+          "</td><td>" + esc(STATE_KO[m.state] || m.state) + " " + esc(m.rule || "") + "</td><td>" + esc(timeText(m)) +
           "</td><td>" + esc(m.tool ? m.tool + " " + (m.target || "") : "없음") + "</td><td>" + n0(m.out_total) +
           " (추정 " + n0(m.out_est_total) + ")</td><td>" + esc(money(m.cost_est_usd)) + "</td><td>" + (m.folded || 0) + "</td></tr>");
       });
@@ -610,7 +616,7 @@
     return "<h3 class='h3'>" + esc(ln.name) + " · " + esc(KIND_KO[m.kind] || m.kind) + "</h3>" +
       "<p><a class='name' href='/agents/" + encodeURIComponent(m.key) + "'><b>" + esc(m.name) + "</b></a> " +
       "<span class='badge st-" + esc(m.state) + "'>" + esc(STATE_KO[m.state] || m.state) + "</span> <code>" + esc(m.rule || "") + "</code></p>" +
-      "<dl class='kv'><dt>경과</dt><dd>" + esc(dur(elapsedNow(m))) + (m.wake_at ? " · 깰 시각 " + esc(hhmm(m.wake_at)) : "") + "</dd>" +
+      "<dl class='kv'><dt>경과</dt><dd>" + esc(timeText(m)) + (m.wake_at ? " · 깰 시각 " + esc(hhmm(m.wake_at)) : "") + "</dd>" +
       "<dt>지금 도구</dt><dd>" + (m.tool ? esc(m.tool) + " <span class='ev'>" + esc(m.target || "") + "</span>" : "없음") + "</dd>" +
       "<dt>누적 출력</dt><dd>" + n0(m.out_total) + " · <span class='muted'>[추정] 추정 보정</span> " + n0(m.out_est_total) + "</dd>" +
       "<dt>추정 보정 비용</dt><dd>" + esc(money(m.cost_est_usd)) + " <span class='muted'>[추정] API 정가 환산</span></dd>" +
@@ -694,7 +700,10 @@
     var info = byKey[key], m = info && info.m;
     if (m) {
       m.state = state; m.rule = (reason || "").split(" ")[0] || m.rule;
-      m.since = new Date().toISOString(); m.elapsed_s = 0 - (Date.now() - fetchedAt) / 1000;
+      var zero = 0 - (Date.now() - fetchedAt) / 1000;         // agoNow() 로 읽으면 지금 = 0
+      m.since = new Date().toISOString(); m.elapsed_s = zero;
+      if (FINAL[state]) m.ended_ago_s = zero; else m.ended_ago_s = null;
+      if (state !== "STALE") m.last_ago_s = zero;            // 멈춤 의심은 기록이 끊겨서 — 마지막 기록 시각은 그대로
       if (state !== "SLEEPING") m.wake_at = null;
     }
     g.setAttribute("class", g.getAttribute("class").replace(/\bst-[A-Z_]+\b/, "st-" + state));

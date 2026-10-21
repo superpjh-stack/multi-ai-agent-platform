@@ -178,3 +178,15 @@ def test_grid_width_sent_and_resize_refetch():
     assert "wrap.clientWidth" in s
     m = re.search(r"new ResizeObserver\(function \(\) \{[\s\S]{0,600}?\}\)\.observe\(wrap\)", s)
     assert m and re.search(r"setTimeout\([\s\S]*?\}, 1000\)", m.group(0)) and "load()" in m.group(0)
+
+
+def test_elapsed_text_by_state():
+    """DEF-QA2-401: 살아 있는 설비 = 상태 지속(elapsed_s) · 끝난 설비 = 「끝남 · ended_at 로부터 n 전」(ended_ago_s) ·
+    멈춤 의심 = 마지막 기록부터(last_ago_s). 상태줄 · aria · 숨김 표가 같은 글자를 쓴다."""
+    s = src("_twin.html")
+    m = re.search(r"function timeText\(m\) \{[\s\S]*?\n  \}", s)
+    assert m, "timeText 없음"
+    body = m.group(0)
+    assert "ended_ago_s" in body and "last_ago_s" in body and "elapsed_s" in body and '" 전"' in body
+    assert "FINAL[m.state]" in body and '"STALE"' in body
+    assert s.count("timeText(m)") >= 3                                              # 상태줄 · aria · 표

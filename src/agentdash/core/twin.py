@@ -14,6 +14,8 @@ T-05 접기: DONE · FAILED · ended_at 이 now − FOLD_AFTER_SEC 보다 이전
   `folded` 에 더한다 (반입구 아래 뿌리면 반입구 `folded`). 뿌리(세션)는 접지 않는다. 살아 있는 자손이 있으면 접지 않는다.
 T-06: 그 뒤에도 칸 > limit 이면 T-01 순서 뒤 라인부터 `folded_line = True` · `machines = []` · `hidden = n` 머리 한 줄.
 누적 · 비용 = usage.totals(con, key) 자기 몫과 같은 SQL 합, 스파크 = usage.spark (개발1, progress-dev1 §1).
+설비 시간 키 (DEF-QA2-401): elapsed_s = now − state_since (지금 상태가 이어진 시간 — 백필 직후엔 백필 시각부터),
+  ended_ago_s = now − ended_at (DONE · FAILED 만, 아니면 null), last_ago_s = now − last_event_at (마지막 기록부터).
 본문은 싣지 않는다 — 이름 앞 24 자 · 키 · 상태 · 규칙 코드 · 도구 이름 · 대상(저장값 ≤ 300) · 숫자뿐.
 """
 
@@ -61,6 +63,11 @@ def _parse(ts: str | None) -> datetime | None:
     except ValueError:
         return None
     return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
+
+
+def _ago(now: datetime, t: datetime | None) -> int | None:
+    """now − t 초 (미래면 0, 시각 없으면 None)."""
+    return max(0, int((now - t).total_seconds())) if t else None
 
 
 def _name(a: dict) -> str:
@@ -336,12 +343,15 @@ def build(con, *, since: str | None = None, project: str | None = None, now: dat
             a = agents[k]
             max_col = max(max_col, c)
             o, oe, cost = tot.get(k, (0, 0, None))
+            final = a["state"] in FINAL
             tl = tools.get(k)
             since_dt = _parse(a["state_since"])
+            ended_dt = _parse(a["ended_at"]) if final else None
+            last_dt = _parse(a["last_event_at"])
             mach.append({
                 "key": k, "kind": a["kind"], "name": _name(a), "parent": a["parent_key"], "state": a["state"],
                 "rule": a["state_reason"], "since": a["state_since"] or None,
-                "elapsed_s": max(0, int((now - since_dt).total_seconds())) if since_dt else None,
+                "elapsed_s": _ago(now, since_dt), "ended_ago_s": _ago(now, ended_dt), "last_ago_s": _ago(now, last_dt),
                 "tool": tl[2] if tl else None, "target": tl[3] if tl else None,
                 "out_total": o, "out_est_total": oe, "cost_est_usd": cost,
                 "spark": sparks.get(k, [0] * usage.SPARK_MINUTES), "folded": p["folded"].get(k, 0),
