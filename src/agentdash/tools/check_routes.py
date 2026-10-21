@@ -1,9 +1,9 @@
 #!/usr/bin/env python
-"""G-17 check_routes — 화면 6 + API 10 (spec.md §7 · §8) 전부 HTTP 200, 빈 DB 에서도.
+"""G-17 check_routes — 화면 7 + API 13 (spec.md v0.3 §7 · §8) 전부 HTTP 200, 빈 DB 에서도.
 
     uv run python src/agentdash/tools/check_routes.py
 
-  · 목록은 spec.md 에서 읽는다: `### D-0n 이름 `/경로`` 6 개 · `| `GET|POST /경로` |` 10 개. 개수가 6 · 10 이 아니면 FAIL.
+  · 목록은 spec.md 에서 읽는다: `### D-0n 이름 `/경로`` 7 개 · `| `GET|POST /경로` |` 13 개. 개수가 7 · 13 이 아니면 FAIL.
   · 앱에 그 메서드 · 경로가 등록돼 있어야 한다(경로 변수는 `{key}` → 표본 `S:fixture`).
   · 임시 빈 DB(schema 11 테이블, 행 0)를 AGENTDASH_DB 로 주고 TestClient 로 부른다 — 서버를 띄우지 않는다.
   · placeholder 수(HTML `data-placeholder` · JSON `_placeholder` · SSE 본문)를 실측에 적는다. placeholder 도 200 이면 PASS
@@ -26,11 +26,12 @@ warnings.filterwarnings("ignore")
 
 SPEC = ROOT / "spec.md"
 SAMPLE = {"key": "S:fixture"}
+N_PAGES, N_APIS = 7, 13                  # spec.md v0.3 (goal.md §9)
 
 
 def spec_routes() -> tuple[list[tuple[str, str, str]], list[tuple[str, str]]]:
     text = SPEC.read_text(encoding="utf-8")
-    pages = [(m.group(1), m.group(2), m.group(3)) for m in re.finditer(r"^### (D-0[1-6]) (.+?) `(/[^`]*)`", text, re.M)]
+    pages = [(m.group(1), m.group(2), m.group(3)) for m in re.finditer(r"^### (D-0[1-7]) (.+?) `(/[^`]*)`", text, re.M)]
     apis = [(m.group(1), m.group(2).split("?")[0]) for m in re.finditer(r"^\| `(GET|POST) (/[^`]*)`", text, re.M)]
     return pages, apis
 
@@ -81,10 +82,10 @@ def main() -> int:
         if "data-placeholder" in body or "_placeholder" in body:
             placeholders += 1
     count_bad = []
-    if len(pages) != 6:
-        count_bad.append(f"spec 화면 {len(pages)} ≠ 6")
-    if len(apis) != 10:
-        count_bad.append(f"spec API {len(apis)} ≠ 10")
+    if len(pages) != N_PAGES:
+        count_bad.append(f"spec 화면 {len(pages)} ≠ {N_PAGES}")
+    if len(apis) != N_APIS:
+        count_bad.append(f"spec API {len(apis)} ≠ {N_APIS}")
     bad = count_bad + bad
     for b in bad:
         print("  위반", b)

@@ -155,3 +155,20 @@ def test_qa_required_gate_reads_latest_round(qa_root):
 
 def test_gates_table_uses_qa_auto():
     assert all(name == "" for _, _, _, means in gate.GATES for k, name in means if k == "qa")
+
+
+def test_gates_cover_g01_to_g30():
+    """2차-A — GATES 는 G-01..G-30 연속 30 행, G-17 은 화면 7 · API 13 (goal.md §2)."""
+    ids = [g for g, _, _, _ in gate.GATES]
+    assert ids == [f"G-{i:02d}" for i in range(1, 31)]
+    items = {g: (item, means) for g, item, _, means in gate.GATES}
+    assert "화면 7 · API 13" in items["G-17"][0]
+    assert items["G-23"][1] == [("tool", "check_decisions")]
+    assert items["G-24"][1] == [("test", "test_usage_est.py"), ("tool", "check_usage_est")]
+    assert items["G-25"][1] == [("test", "test_settings.py")]
+    assert items["G-26"][1] == [("test", "test_budget.py"), ("tool", "check_budget")]
+    assert items["G-27"][1] == [("tool", "check_trend")]
+    assert items["G-28"][1] == [("tool", "check_efficiency")]
+    assert items["G-29"][1] == [("test", "test_alerts.py"), ("qa", "")]
+    assert items["G-30"][1] == [("tool", "check_contrast"), ("test", "test_design.py"), ("qa", "")]
+    assert "outputs/e2e/alerts*.md" in gate.QA_GLOBS and "outputs/e2e/design*.md" in gate.QA_GLOBS

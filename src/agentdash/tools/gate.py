@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""수용 게이트 판정표 — `make gate` (goal.md §2 G-01~G-22).
+"""수용 게이트 판정표 — `make gate` (goal.md §2 G-01~G-30 — 1차 G-01~G-22 는 goal-v1.md).
 
     uv run python src/agentdash/tools/gate.py            # 판정표 (종료코드 0)
     uv run python src/agentdash/tools/gate.py --strict   # PASS 아닌 행이 있으면 종료코드 1
@@ -42,7 +42,7 @@ _QA_MARK = re.compile(r"^\s*<!--\s*gate:(G-\d{2})\s*-->\s*$")
 QA_FORMAT_NOTE = "— QA 재검증 필요(리포트 형식)"
 
 #: QA 리포트 묶음 (DEF-QA1-103) — ROOT 기준 glob. 회차 = 파일 이름 끝 `-rN` (없으면 0).
-QA_GLOBS = ("outputs/qa*-*.md", "outputs/e2e/self-observe*.md")
+QA_GLOBS = ("outputs/qa*-*.md", "outputs/e2e/self-observe*.md", "outputs/e2e/alerts*.md", "outputs/e2e/design*.md")
 _ROUND = re.compile(r"^(?P<base>.+?)(?:-r(?P<n>\d+))?\.md$")
 
 #: (게이트, 항목, 담당, 판정 수단). 수단 = ("tool", 이름) | ("test", 파일) | ("qa", "" = QA 판정 필수 · 또는 리포트 경로)
@@ -66,7 +66,7 @@ GATES: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("G-15", "훅 설치 안전 — 가짜 settings (V-10)", "개발2", [("tool", "check_hooks"),
                                                           ("test", "test_hooks_install.py")]),
     ("G-16", "로컬 전용 — 127.0.0.1 · 외부 전송 0 (V-06)", "아키텍트", [("tool", "check_bind")]),
-    ("G-17", "화면 6 · API 10 — HTTP 200", "개발1·2", [("tool", "check_routes")]),
+    ("G-17", "화면 7 · API 13 — HTTP 200", "개발1·2", [("tool", "check_routes")]),
     ("G-18", "구성도 — 300 노드 ≤ 300 ms · 접기 · 보기 3", "개발2", [("test", "test_graph.py"),
                                                                 ("qa", "")]),
     ("G-19", "진척 판정 — P-01~P-07 · 고려솔더 (V-11)", "개발1", [("tool", "check_pipeline"),
@@ -74,6 +74,17 @@ GATES: list[tuple[str, str, str, list[tuple[str, str]]]] = [
     ("G-20", "비용 화면 — [추정] 표기 · 단가 없음 · reprice", "개발1", [("test", "test_usage_page.py")]),
     ("G-21", "브라우저 — 콘솔 오류 0 · 390px", "QA2", [("qa", "")]),
     ("G-22", "자기 관찰 — 루프 서브에이전트 RUNNING → DONE", "QA2", [("qa", "")]),
+    # ── 2차-A (goal.md §2.2 · 계획 docs/superpowers/plans/2026-10-20-agentdash-v2a.md) ──
+    ("G-23", "결정 반영 — D-07·08·13·14·17·18·19 확정", "아키텍트·개발2", [("tool", "check_decisions")]),
+    ("G-24", "추정 열 — output_est · cost_est_usd (V-12)", "개발1", [("test", "test_usage_est.py"),
+                                                              ("tool", "check_usage_est")]),
+    ("G-25", "하드 링크 DB 거부 (DEF-QA1-201 · V-05)", "아키텍트", [("test", "test_settings.py")]),
+    ("G-26", "예산 — 80/100 % · KST 일/월 (V-13)", "개발1", [("test", "test_budget.py"), ("tool", "check_budget")]),
+    ("G-27", "추세 — 일·주·월 합 (V-14)", "개발1", [("tool", "check_trend")]),
+    ("G-28", "캐시 적중률 — 표본 10 손계산 (V-15)", "개발1", [("tool", "check_efficiency")]),
+    ("G-29", "알림 — WAITING 전이 1 회", "개발2·QA2", [("test", "test_alerts.py"), ("qa", "")]),
+    ("G-30", "디자인 — 두 테마 대비 · 390px (V-16)", "아키텍트·개발1·2·QA2", [("tool", "check_contrast"),
+                                                                          ("test", "test_design.py"), ("qa", "")]),
 ]
 
 
