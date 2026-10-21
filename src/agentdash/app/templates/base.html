@@ -110,7 +110,7 @@
 <body>
 <header class="top">
 <nav>
-  {% for href, name in [("/", "D-01 관제판"), ("/graph", "D-02 구성도"), ("/usage", "D-04 작업량"), ("/timeline", "D-05 타임라인"), ("/pipeline", "D-06 파이프라인"), ("/insights", "D-07 비용 · 효율")] %}
+  {% for href, name in [("/", "D-01 공장 평면도"), ("/graph", "D-02 구성도"), ("/usage", "D-04 작업량"), ("/timeline", "D-05 타임라인"), ("/pipeline", "D-06 파이프라인"), ("/insights", "D-07 비용 · 효율")] %}
   <a href="{{ href }}"{% if href == active %} class="on"{% endif %}>{{ name }}</a>
   {% endfor %}
 </nav>
