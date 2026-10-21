@@ -169,9 +169,30 @@ table(...)                            # 행 · total · trend(일) 에 output_es
 # agentdash.core.model.UsageEvent  + output_est: int|None · cost_est_usd: float|None
 ```
 
-- 화면 문구 (spec 그대로): 금액 옆 `[추정] API 정가 환산` (`usage.ESTIMATE_LABEL`) · unset 칸 `한도 미설정` · 단가 없음 `단가 없음 N 건`. D-01 띠 예: 「오늘 전체 82 % · Standard MES 이번 달 104 %」 → `/insights` 링크. 띠 색: warn = `st-WAITING_INPUT`(주황) 계열 · over = `st-FAILED`(빨강) — 계획 Task 11 기준.
+- 화면 문구 (spec 그대로): 금액 옆 `[추정] API 정가 환산` (`usage.ESTIMATE_LABEL`) · unset 칸 `한도 미설정` · 단가 없음 `단가 없음 N 건`. D-01 띠 예: 「오늘 전체 82 % · Standard MES 이번 달 104 %」 → `/insights` 링크. over = `st-FAILED` (계획 Task 11). D-07 게이지는 ok `st-DONE` · warn `st-WAITING_INPUT` · over `st-FAILED` · unset/no_records `st-STALE` 를 쓴다 (`routers/insights.LEVEL_CLASS`) — D-01 띠도 같게 쓰면 맞는다.
 - 수집기 누적기 키는 계획의 `(agent_key, request_id)` 에 **DB 파일을 더한** `(DB, agent_key) → {requestId: [max_output, json_len, est_chars]}` (테스트 · 도구가 한 프로세스에서 DB 를 여럿 연다). 다른 프로세스가 이어 읽으면 그 기록 앞부분 길이를 다시 잰다.
 - 증분 수집(`ingest_all` · 감시기 묶음)이 바뀐 키의 `usage_daily` 를 다시 만든다 (`ingest_all(daily=True)` 기본, backfill 만 False 후 전체 재생성).
+
+## 2A. 2차-A 진행 — Task 5~8 · D-22 (2026-10-21 10:17, DB `data/agentdash-dev1.db` 새로 백필)
+
+커밋: T5 `f207e98` · T6 `9e0922b` · T7 `e2358c4` · 공표 `eea9f69` · T8 `0ff1ffc` · D-22 `6b24506` (로컬만).
+
+| 항목 | 실측 | 검증 명령 |
+|---|---|---|
+| 새 백필 | `rm -f data/agentdash-dev1.db*` → setup · backfill 4.3 s · 원천 파일 559 · agent 73 / 235 / 6 / 1 · usage_event 25,722 · usage_daily 352 · parse_error 0 | `AGENTDASH_DB=data/agentdash-dev1.db make setup backfill` |
+| G-24 추정 열 (V-12) | **의심 DB 48.9 % (12,581/25,722) · 원천 48.9 % (12,581/25,722) · 차 0.00 %p · 위반 0** (참고 QA1 파일별 48.4 % — 포크 사본 중복 280 포함) · `tests/test_usage_est.py` 15 | `AGENTDASH_DB=data/agentdash-dev1.db uv run python src/agentdash/tools/check_usage_est.py` |
+| G-26 예산 (V-13) | 칸 78 (설정 2 + 기록 프로젝트 38 × 2, 한도 없는 칸으로 대조) · 최대 차 $0.000000 · 단계 unset 2 (실제 budget.yaml = null) · `tests/test_budget.py` 16 | `… check_budget.py` |
+| G-27 추세 (V-14) | 2026-08-01~10-21 · grain 3 × group 2 · 묶음 237 불일치 0 · usage_daily = usage_event (기록 $3,666.88 · 추정 보정 $3,795.53 · 출력 기록 17,422,091 · 추정 21,611,996) | `… check_trend.py` |
+| G-28 캐시 적중률 (V-15) | 표본 10 (project 3 · session 3 · agent 4, 시드 20261021) · 최대 차 0 · 정렬 위반 0 | `… check_efficiency.py` |
+| G-04 회귀 (D-22) | dev1 DB 73/73 · 235/235 · 6/6 · 보관 0 → PASS. **기본 DB** 세션 73 · DB 81 · 빠짐 0 · 남음 0 · **원천 삭제 보관 8**, 서브에이전트 235 · 254 · **보관 19** → PASS | `… check_counts.py` · `AGENTDASH_DB=data/agentdash.db …` |
+| G-07 회귀 (D-22) | 후보 71 (dev1: 제외 0 · 기본 DB: 토큰 있는 세션 79 중 전부 지움 8 제외) · 표본 10/10 PASS (두 DB 같은 표본) · `# 표본 선정` 줄 | `… check_usage_sum.py` |
+| G-17 | 화면 7 + API 13 = 20/20 HTTP 200 · **placeholder 0** | `uv run python src/agentdash/tools/check_routes.py` |
+| 전체 테스트 | **370 passed · 1 xfailed** (개발2 진행분 포함) | `uv run pytest -q` |
+| make gate (dev1 DB) | **PASS 28 · FAIL 0 · WARN 0 · BLOCKED 0 · 미검증 2** (G-29 · G-30 = QA 표지 대기) | `AGENTDASH_DB=data/agentdash-dev1.db make gate` |
+
+- 계획과 다른 점 (근거): ① `_req_acc` 키에 DB 파일을 더했다 — 한 프로세스가 DB 를 여럿 열면(테스트 · 도구) 길이가 섞인다. ② 다른 프로세스가 기록을 이어 읽으면 누적기가 비어 있으므로 그 기록 앞부분(0 ~ offset)을 다시 재서 채운다 — 실측에서 백필 뒤 check 도구 동기화가 쓰고 있던 요청 1 건의 추정을 낮춘 것을 잡았다(`test_split_across_processes_same_as_single_pass`). ③ check_usage_est 모집단 = 세션 안 requestId 한 번(check_usage_sum 과 같은 독립 규칙) — QA1 파일별 정의는 포크 사본 280 요청을 두 번 세어 0.53 %p 벌어진다(참고로 같이 찍음). ④ 증분 수집 · 감시기가 바뀐 키의 usage_daily 를 다시 만든다 (전에는 백필 · reprice 때만 — 추세가 usage_daily 를 읽으므로).
+- D-04 표기: 「기록상 과소 (D-17)」 → 「추정 보정 (D-17)」 · 표 · 카드 · CSV 에 기록 · 추정 두 열. D-03(개발2) 은 아직 1차 키를 읽어 `totals()` 의 `undercount*` 키를 남겼다 (§3 R-2A-1).
+- 원천 무접촉: 원천은 'rb' 읽기 · `os.path.exists` 만. 가짜 루트 파일 삭제는 tmp 의 테스트 루트에서만. `check_readonly` PASS (정적 · 읽기 전용 pytest 370 · DB 씨앗 49/49). 실제 `~/.claude/settings.json` 손대지 않음 · 서버 띄우지 않음.
 
 ## 2. 진행 — 웨이브 A 실측 (2026-10-17 16:38, DB `data/agentdash-dev1.db`)
 
@@ -250,6 +271,10 @@ table(...)                            # 행 · total · trend(일) 에 output_es
 - 원천 무변경: `~/.claude/settings.json` mtime 1792131308 (2026-10-16 15:15) 그대로 · `~/.claude` · `~/Desktop/AI Coding` 의 이 폴더 밖에 `*agentdash*` · `newdir*` · `agentdash-probe` 0. 서버는 띄우지 않았다(8096 LISTEN 0). 커밋하지 않았다.
 
 ## 3. 요청 (다른 사람에게)
+
+- **2차-A R-2A-1 (개발2)**: D-03 (`agent.html` · `routers/agents.py`) 의 「기록상 과소 (D-17)」 를 D-17 확정 표기로 — `usage.totals()` 의 `output_est_total` · `cost_est_usd` · `est_note`(= 「추정 보정 (D-17)」) 를 기록 칸 옆에 `[추정]` 으로 (spec §6.2 「기록」 과 「추정 보정 (D-17)」 나란히). 바꾸면 `tests/test_dashboard.py::test_d03_undercount_note_d17` 도 갱신하고 알려 달라 — 그때 개발1 이 `totals()` 의 `undercount*` 키 · `LEGACY_UNDERCOUNT_NOTE` 를 지운다.
+- **2차-A R-2A-2 (아키텍트) — T8 끝**: `routers/insights.py` 가 생겼다(`router = APIRouter()`, `/insights` · `/api/v1/{budget,trend,efficiency}`). `main.py` 의 `_insights_router` 분기 · `placeholders.INSIGHTS_STUB` 를 지우고 `insights` 를 `ROUTERS` 로 옮겨 달라. 지금도 check_routes placeholder 0.
+- **2차-A R-2A-3 (아키텍트)**: CLAUDE.md 소유 표에 개발1 새 테스트 `tests/test_check_counts.py` (G-04 · G-07 D-22 시나리오) 를 더해 달라. `insights.html` 은 `_dev1_style` 을 include 하지 않는다(base 토큰 · 클래스만).
 
 - 개발2 → 반영함: R1 `linker.on_line` 을 ingest 가 줄마다 부른다 · Workflow `tool_call.target` = runId. (progress-dev2.md 가 아직 없어 linker.py 주석의 R1 · §3 요청을 보고 반영)
 - 아키텍트: 없음. (gate.py 수정 요청 없음 — 도구 · 테스트 이름은 gate.py 그대로)
