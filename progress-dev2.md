@@ -456,3 +456,32 @@ graph.project_match(필터, project_key, 라인 이름) -> bool                 
 ### 3 요청 (웨이브 D)
 - **R-2T-dev2-6 → 개발1 (check_twin)**: `direct_scope` 의 프로젝트 필터가 에이전트마다 `project_label(pk, pp)` 로 거른다 — 트윈은 이제 라인 단위(`graph.project_names` + `graph.project_match`). `--project` 를 줄 때만 범위 수가 어긋난다(기본 · `--since all` 은 PASS). 바꾸지 않았다.
 - **R-2T-dev2-7 → QA1 · QA2 재검증**: DEF-QA1-401~403 · DEF-QA2-401~404. QA2 는 가짜 루트에서 「다시 깨운 서브에이전트의 두 번째 반환」 역흐름 1 회(+ 첫 반환 중복 0)를 실측해 달라 — 이번엔 정적 계약만.
+
+## 12. 2차-T 웨이브 D2 — QA2 r6 경미 결함 (2026-10-21, spec v0.4.1 · D-33 · D-34)
+
+| 결함 | 커밋 | 테스트 (`tests/test_twin_page.py`) |
+|---|---|---|
+| DEF-QA2-501 이름 줄 말줄임 | `b92a624` (실패 테스트 3 같이) | `test_name_line_ellipsis` — 이름 줄 `fitText(nm, w - 52)` (x 26 ~ 배지 자리 w − 26) · 서버 `NAME_MAX` 24 유지 |
+| DEF-QA2-502 / D-33 ended_at 없는 끝난 설비 | `50e60ec` | `test_final_without_ended_at_uses_last_record` — node 로 `timeText` 실행: DONE · ended 없음 · last 6960 s → 「기록 1시간 56분 전」 · FAILED 동일 · ended 있음 → 「28분 전」 · 둘 다 없음 → 상태 지속. API 는 그대로(`ended_ago_s` null) |
+| DEF-QA2-503 / D-34 좁은 화면 맞춤 하한 | `80c910d` | `test_narrow_fit_min_scale` — `MIN_TEXT_PX = 10, NAME_PX = 12`(CSS `.m-name` 12 px 대조) · `FIT_MIN = 10/12` · `narrow()` = 서버 격자 `cols ≤ 1` · node 로 `fit` 실행: 307 px 카드 · 1 열 → 배율 0.833 · 위 −16 / 866 px · 2 열 → 866/1184 (D-31 그대로) |
+
+| 항목 | 실측 | 명령 |
+|---|---|---|
+| pytest 전체 | **456 passed** | `uv run pytest -q` |
+| 대비 | G-30 PASS 48 쌍 · 글자 5.6:1 · 도형 3.3:1 | `check_contrast.py` |
+| check_twin | 24h PASS 설비 14 · 라인 6 · 30=30=30 · 격자 cols 2 rows 3 · 겹침 0 · 1.7 ms / all PASS 설비 86 · 라인 32 · 331=331=331 · 4.7 ms | `AGENTDASH_DB=data/agentdash-v2a-verify.db uv run python src/agentdash/tools/check_twin.py [--since all]` |
+| 브라우저 390 iframe (8097 · verify 사본 `data/agentdash-dev2-twin-d2.db` · 감시기 끔) 밝은 · 다크 | 카드 307 → width 384 · **cols 1** · 맞춤 배율 **0.833** (전 0.57) · 실효 글자 이름 **10.0 px** · 상태줄 · 도구 · 누적 · 분당 9.2 px · 종류 8.3 px · 페이지 가로 스크롤 0 · 휠 세로 300 / 가로 200 → viewBox y −16→344 · x −16→224 (카드 안 이동) | 같은 화면 JS 측정 |
+| 브라우저 1400 iframe 밝은 · 다크 | 카드 900 → width 1125 · **cols 2 · rows 3** · 맞춤 0.76 (D-31 그대로, 하한 안 걸림) · 가로 스크롤 0 | 〃 |
+| 이름 말줄임 (두 폭 · 두 테마) | 설비 14 중 「…」 4 · 이름이 배지 자리 넘친 것 0 | 〃 |
+| D-33 | `S:fc3908a3`(00 PM Agent) DONE · ended null · last 8071 s → 「끝남 · 기록 2시간 14분 전」 | 〃 |
+| 오류 | `#twin-err` 빈칸 · 다시 받기 1 회 | 〃 |
+| 정리 | 띄운 PID 만 kill (uv 35810 · python 35813) · 8097 LISTEN 0 · 8095 (사람) 그대로 · 탭 닫음 | `lsof -iTCP:8097` |
+
+스크린샷 `outputs/e2e/dev2-twin-d2/` 4 장 (커밋 안 함): 390-light-fit · 390-dark-fit · 1400-light-fit · 1400-dark-pan-d33.
+
+### 해석 (사람 확인 — D-34)
+- 「상자 글자 ≥ 10 px」 를 **이름 줄(12 px, 상자에서 가장 큰 글자)** 기준으로 잡았다 → 배율 10/12 = 0.833 (D-34 「≈ 0.85」 와 맞음). 상태줄(11 px) 은 9.2 px, 종류(10 px) 은 8.3 px. 상태줄까지 10 px 로 하려면 하한 10/11 = 0.91 — 390 px 에서 1 열 라인(240)이 218 px 로 들어가지만 504 px 라인은 458 px 로 가로 이동이 더 늘어난다.
+- 「좁은 화면」 = 서버 격자 1 열(라인 둘이 나란히 안 들어감). 넓은 화면(2 열 이상)은 D-31 폭 맞춤 그대로. 좁은 화면의 넘침은 세로 · 가로 모두 카드 안 viewBox 이동(spec §7.3).
+
+### 3 요청 (웨이브 D2)
+- **R-2T-dev2-8 → QA2 재검증**: DEF-QA2-501~503 (390 · 1400 · 두 테마). 사람: D-34 기준 글자(이름 12 px vs 상태줄 11 px) 확인.
